@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2003/06/01 19:36:34  emile
+// - Switch/Fix added for Vmlt
+//
 // Revision 1.8  2003/06/01 14:08:06  emile
 // - Same as previous log entry: CVS and BCB got confused => saved old files.
 //
@@ -411,6 +414,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    ShowDataGraphs->GraphTimer->Enabled    = true; // Start Graph Update timer
    ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
    PID_RB->Enabled                        = true; // Enable PID Controller Radio-buttons
+   time_switch                            = 0;    // Time switch disabled at power-up
 } // Main_Initialisation()
 
 //---------------------------------------------------------------------------
@@ -492,6 +496,7 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
    TRegistry *Reg = new TRegistry();
    TPID_Settings *ptmp;
    int i;
+   char tmp[255]; // temp. array
 
    ptmp = new TPID_Settings(this);
 
@@ -513,6 +518,7 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->Offs_Edit->Text = AnsiString(i);
          i = Reg->ReadInteger("Mash_Control"); // Read Mash Control from registry
          ptmp->RG1->ItemIndex = i;
+         ptmp->RG2->ItemIndex = time_switch;   // Value of time-switch [off, on]
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
@@ -535,6 +541,14 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteInteger("TOffset",i);  // Set to value from form
             pid_pars.mash_control = ptmp->RG1->ItemIndex;
             Reg->WriteInteger("Mash_Control",pid_pars.mash_control);
+            time_switch = ptmp->RG2->ItemIndex; // 0 = off, 1 = on
+            if (time_switch)
+            {
+               strcpy(tmp,ptmp->Date_Edit->Text.c_str());
+               strcat(tmp," ");
+               strcpy(tmp,ptmp->Time_Edit->Text.c_str());
+               dt_time_switch = StrToDateTime(tmp);
+            } // if
          } // if
          delete ptmp;
          ptmp = 0; // NULL the pointer
@@ -842,6 +856,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    int        value = 0x00;  // init. byte to write to DIG_IO_LSB_BASE
    int        err = 0;       // error return value
    char       tmp_str[80];   // temp string for calculations
+   TDateTime  td_now;        // holds current date and time
 
    switch (tmr.isrstate)
    {
@@ -962,12 +977,21 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        sprintf(tmp_str,"%4.1f",Vmlt);             // Display MA filter output on screen
        Val_Volume->Caption = tmp_str;             // AD4 = Pressure Transducer
    } // if
-   //--------------------------------------------------------------------
-   // Second time-slice: -
-   //--------------------------------------------------------------------
+   //-----------------------------------------------------------------------
+   // Second time-slice: Time switch controller. Enable PI controller
+   //                    if current date & time matches the date & time set.
+   //-----------------------------------------------------------------------
    else if (tmr.pid_tmr == 2)
    {
-      // Empty
+      // Only useful if PID controller is disabled AND time_switch is enabled
+      if ((PID_RB->ItemIndex != 1) && (time_switch == 1))
+      {
+         td_now = Now(); // Get Current Date and Time
+         if ((td_now >= dt_time_switch) && (td_now < dt_time_switch + ONE_MINUTE))
+         {
+            PID_RB->ItemIndex = 1; // Enable PID Controller
+         }
+      } // if
    } // else
    //----------------------------------------------------------------------
    // Third time-slice: Output values to I2C LED Displays every TS seconds.

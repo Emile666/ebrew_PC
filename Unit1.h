@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2003/06/01 19:36:34  emile
+// - Switch/Fix added for Vmlt
+//
 // Revision 1.7  2003/06/01 14:08:06  emile
 // - Same as previous log entry: CVS and BCB got confused => saved old files.
 //
@@ -70,6 +73,8 @@
 #define LOGFILE "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
 #define REGKEY    "ebrew"
+// 1 minute = 1/(60*24) part of one day, see TDateTime for details
+#define ONE_MINUTE (6.94444E-04)
 
 typedef struct _swfx_struct
 {
@@ -177,6 +182,8 @@ public:		// User declarations
         unsigned int    std_out;    // position of valves
                                     // Bit 0 = Pump, Bit 1..7 = V1..V7
                                     // Bit 8..15: 0 = Auto, 1 = Manual Override
+        unsigned int    time_switch;// 1: PID is controlled by a time-switch
+        TDateTime       dt_time_switch; // object holding date and time
         __fastcall TMainForm(TComponent* Owner);
 };
 //---------------------------------------------------------------------------

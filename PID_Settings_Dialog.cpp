@@ -5,6 +5,11 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2002/12/30 13:33:44  emile
+// - Headers with CVS tags added to every source file
+// - Restore Settings function is added
+// - "ebrew" registry key now in a define REGKEY
+//
 // ==========================================================================
 
 //----------------------------------------------------------------------------
@@ -21,3 +26,23 @@ __fastcall TPID_Settings::TPID_Settings(TComponent *Owner)
 {
 }
 //----------------------------------------------------------------------------
+
+void __fastcall TPID_Settings::RG2Click(TObject *Sender)
+{
+   if (RG2->ItemIndex == 1) // On
+   {
+      Date_Edit->Enabled  = true;
+      Date_Label->Enabled = true;
+      Time_Edit->Enabled  = true;
+      Time_Label->Enabled = true;
+   }
+   else
+   {
+      Date_Edit->Enabled  = false;
+      Date_Label->Enabled = false;
+      Time_Edit->Enabled  = false;
+      Time_Label->Enabled = false;
+   } // else
+}
+//---------------------------------------------------------------------------
+
