@@ -1,6 +1,6 @@
 // ==================================================================
 // Functienaam : -
-// Filenaam    : i2c_dll
+// Filenaam    : $Id$
 // Auteur      : E. van de Logt
 // Datum       : 01-07-2002
 // Versie      : V1.03
@@ -23,6 +23,7 @@
 //                        - DAC enabled (dac added to adda_t struct,
 //                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
 //                        - PortTalk interface added (nt_in(), nt_out())
+// $Log$
 // ==================================================================
 #include <stdio.h>
 #include <windows.h>
