@@ -9,6 +9,12 @@
 //           the I2C Hardware.
 // ----------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2004/02/22 10:03:46  emile
+// - Added various CVS keywords to file-headers
+// - ADS7828 code and defines replaced by LM92_3
+// - Added clock_reg_val variable to i2c_init to allow for clock rate adjustments.
+//   (this is not finished yet).
+//
 // Date    Author Version Description
 // ----------------------------------------------------------------------
 // 11-11-02 LGT    V1.04  - MAX6626 constants replaced by LM76 constants
@@ -28,6 +34,7 @@
 #ifndef _I2C_DLL_H
 #define _I2C_DLL_H
 
+//---------------------
 // I2C2 Error Messages
 //---------------------
 #define I2C_NOERR       (0)
@@ -44,9 +51,11 @@
 #define I2C_PT_MSG     "PortTalk Error"
 #define I2C_LM92_MSG   "LM92 Read Error"
 
+//-----------------------------------------------------------------
 // The LM92 sign bit is normally bit 12. The value read from the
 // LM92 is SHL3. Therefore the sign bit is at bit 15
 // Same for the Full Scale value, normally 2^12 SHL3 = 2^15.
+//-----------------------------------------------------------------
 #define LM92_SIGNb     (0x8000)
 #define LM92_FS        (32768)
 #define LM92_ERR       (99.99)
@@ -63,7 +72,7 @@
 
 #define VREF_INIT         (930.0)
 
-//------------------------------
+//---------------------------------------
 // Base addresses of I2C Devices
 //
 // LCD Display        : PCF 8574
@@ -71,7 +80,7 @@
 // LED1..LED4 Displays: SAA 1064
 // AD/DA Converter    : PCF 8591 / LM92
 // EEPROM memory      : FM24C08
-//------------------------------
+//---------------------------------------
 #define LCD_BASE         (0x40)
 #define DIG_IO_LSB_BASE  (0x42)
 #define DIG_IO_MSB_BASE  (0x44)

@@ -1,13 +1,44 @@
-// ==================================================================
+// ============================================================================
 // Filename : $Id$
 // Author   : E. van de Logt
 // Date     : $Date$
 // Revision : $Revision$
-// ------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Purpose  : I2C DLL, which can be used by both Visual C++ and Visual
 //            Basic. It is meant to directly access the I2C Hardware.
-// ------------------------------------------------------------------
+//
+//            The I2C DLL routines are meant for a PCF8584 I2C bus
+//            controller chip. Two variations are possible here:
+//            1) The PCF8584 is mounted on a ISA printed circuit board
+//            2) The PCF8584 is mounted on a PCB connected to the parallel
+//               port.
+//            This is controlled by setting the proper variable in the
+//            i2c_init() routine.
+//
+//            It is also possible to use the I2C DLL on various Windows
+//            platform. Two variations again:
+//            1) Win 3.1, 95, 98, ME
+//            2) Win 2000, NT, XP
+//            Again this is controlled by setting the proper variable in
+//            the i2c_init() routine.
+//            For option 2, the PortTalk DLL from www.beyondlogic.org is
+//            used to directly access the parallel port. You should install
+//            PortTalk first before using the routines in this DLL.
+//
+//            The I2C DLL supports the following I2C devices:
+//            - PCF 8584 I2C bus controller
+//            - PCF 8571 I2C 8-bit IO chip
+//            - PCF 8591 I2C 8-bit AD-DA converter
+//            - LM92 I2C 12 + 1 (sign) bit temperature sensor
+//            - LM76 I2C 10 + 1 (sign) bit temperature sensor (identical to LM92)
+//            - FM24C08 2048 * 8 bit EEPROM (routines not tested yet!)
+//
+//           The DLL is built with Borland C++ Builder 4.0.
+// ----------------------------------------------------------------------------
 // $Log$
+// Revision 1.13  2004/02/22 10:16:02  emile
+// - i2c_start(): clock_reg_S2 is used instead of hard-coded 0x1A value.
+//
 // Revision 1.12  2004/02/22 10:03:46  emile
 // - Added various CVS keywords to file-headers
 // - ADS7828 code and defines replaced by LM92_3
@@ -65,8 +96,6 @@
 // Revision 1.2  2002/09/18 17:05:35  emile
 // Added cvs tags
 //
-// Date    Author Version & Description
-// ------------------------------------------------------------------
 // 14-09-02 LGT    V1.03  - VREF_INIT from 900 -> 930
 //                        - DAC enabled (dac added to adda_t struct,
 //                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
@@ -77,8 +106,8 @@
 //			  - TO_VAL: 500 -> 50
 // 01-07-02 LGT    V1.01: init_adc()/read_adc(): 4 channels working
 //                        set_led(): visibility [1..7] parameter added
-// 14-06-02 LGT    V1.00: First version for Ronald Rakke
-// ==================================================================
+// 14-06-02 LGT    V1.00: First version for Ronald Rakké
+// ============================================================================
 #include <stdio.h>
 #include <windows.h>
 #include "pt_ioctl.c"
@@ -94,7 +123,7 @@
 #include <time.h>
 
 //---------------------------------------------------------------------------
-USERES("i2c_dll.res");
+//USERES("i2c_dll.res");
 //---------------------------------------------------------------------------
 #pragma argsused
 
@@ -116,8 +145,9 @@ USERES("i2c_dll.res");
 #define SW (0x04)
 #define A0 (0x08)
 
-// Control/Status Register S1
-//---------------------------
+//-------------------------------------------------------------
+// Control/Status Register S1 of the PCF8584 I2C Bus controller
+//-------------------------------------------------------------
 #define PINb (0x80)
 #define STSb (0x20)
 #define BERb (0x10)
@@ -128,6 +158,24 @@ USERES("i2c_dll.res");
 
 #define  RWb (0x01)
 
+//---------------------------------------------------------------------------
+// The PCF8584 uses register S2 to set the proper SCL frequency. It contains
+// bytes S4,S3,S2 (control CLK frequency) and S1, S0 (control fscl).
+// This results in the following modes (assume CLK = 12 MHz):
+//
+// Div_by     Reg_S2     fscl(kHz)     Div_by     Reg_S2     fscl(kHz)
+//   8192   11111 (0x1F)   1.46           512   10110 (0x16)  22.44
+//   5120   11011 (0x1B)   2.34           384   10010 (0x12)  31.25
+//   4096   10111 (0x17)   2.93           256   00010 (0x02)  46.88
+//   3072   10011 (0x13)   3.91           160   11001 (0x19)  75.00
+//   2048   00011 (0x03)   5.86           128   10101 (0x15)  93.75
+//   1024   11110 (0x1E)  11.72            96   10001 (0x11) 125.00
+//    640   11010 (0x1A)  18.75
+//---------------------------------------------------------------------------
+byte fscl_values[] = {0x1F, 0x1B, 0x17, 0x13, 0x03, 0x1E, 0x1A,
+                      0x16, 0x12, 0x02, 0x19, 0x15, 0x11};
+
+//---------------------------------------------------------
 // Time-out value for wait_byte() routine, in pauze() ticks
 //---------------------------------------------------------
 #define TO_VAL (100)
@@ -208,6 +256,16 @@ static byte led_ctrl_byte[] = {0x00,0x17,0x27,0x37,0x47,0x57,0x67,0x77};
 #define LED_DUMMY (0x00)
 #define LED_BUF   (9)
 
+//-------------------------------------------------------------------------
+// Values needed to decode a decimal number into a byte for the LED Display
+// b0..b6: segment a..g        a
+// b7    : decimal point      f b
+//                             g
+//                            e c
+//                             d .
+//-------------------------------------------------------------------------
+static int led_decode[] = {0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
+
 //-------------------------------------------------------------------
 // The ADDA control byte for the PCF 8591
 //
@@ -229,23 +287,14 @@ static byte led_ctrl_byte[] = {0x00,0x17,0x27,0x37,0x47,0x57,0x67,0x77};
 #define ADDA_CONTROL_BYTE (0x44)
 #define ADDA_BUF          (0x05)
 
-// -------------------------- external section ----------------------
-static int lcd_lines_printed = 0; // #lines printed to LCD Display
 
-//-------------------------------------------------------------------------
-// Values needed to decode a decimal number into a byte for the LED Display
-// b0..b6: segment a..g        a
-// b7    : decimal point      f b
-//                             g
-//                            e c
-//                             d .
-//-------------------------------------------------------------------------
-static int led_decode[] = {0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
-
+//---------------------------
+// Internal i2c_dll variables
+//---------------------------
 static byte last_start;   // TRUE = Last action on bus was start
 static byte ic_adr;       // Currently addressed IC and R/W_ bit
 
-static byte win_nt;       // TRUE = Windows NT, 2000, XP
+static byte win_nt;       // TRUE = Windows NT, 2000, XP; FALSE = Win 95,98,ME
 static byte i2c_method;   // [ISA_CARD, LPT_CARD]
 static byte clock_reg_S2; // Init. value for S2 clock register of PCF8584
 static int  S023;         // Registers S0, S2 and S3 of PCF8584
@@ -258,6 +307,10 @@ static byte dataH;        // High nibble read from multiplexer
 static byte dataL;        // Low nibble read from multiplexer
 char   *i2c_dll_revision = "$Revision$";
 
+//----------------------------------------------------------------------------
+// Start of i2c_dll routines
+//----------------------------------------------------------------------------
+
 unsigned char inportb(unsigned short port)
 /*------------------------------------------------------------------
   Purpose  : Implements the DOS Borland C function inportb(). This
@@ -268,7 +321,7 @@ unsigned char inportb(unsigned short port)
 {
    if (win_nt)
    {
-      return nt_in(port);
+      return nt_in(port); // Call the PortTalk input routine
    }
    else
    {
@@ -290,7 +343,7 @@ void outportb(unsigned short port, unsigned char val)
 {
    if (win_nt)
    {
-      nt_out(port, val);
+      nt_out(port, val);  // Call the PortTalk output routine
    }
    else
    {
@@ -521,6 +574,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
   Variables: address      : the IO base address for the PCF8584
              win_ver      : TRUE = Windows NT, 2000 or XP platform
              clock_reg_val: value for the clock register S2 of the PCF8584.
+                            Should be one of the values from fscl_values[].
                             This byte controls the SCL frequency:
                              clock prescaler             SCL frequency
                             S24 S23 S22 Ratio            S21 S20 Ratio
@@ -940,7 +994,6 @@ extern "C" __declspec(dllexport) void __stdcall check_i2c_hw(int *HW_present)
    if (i2c_address(LCD_BASE) == I2C_NOERR)
    {
       *HW_present |= LCD_OK;
-      // InitLCD(); // Init. the LCD Display
    }
    if (i2c_address(DIG_IO_LSB_BASE) == I2C_NOERR)
    {

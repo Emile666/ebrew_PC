@@ -18,7 +18,7 @@ VERSION = BCB.04.04
 # ---------------------------------------------------------------------------
 PROJECT = i2c_dll.dll
 OBJFILES = i2c_dll.obj
-RESFILES = i2c_dll.res
+RESFILES =
 RESDEPEN = $(RESFILES)
 LIBFILES =
 IDLFILES =
