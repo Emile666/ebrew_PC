@@ -5,6 +5,11 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2003/06/01 13:37:42  emile
+// - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
+// - Switch/fix for std state added for easier testing
+// - Vmash value added to 'Options|Sparge & STD Settings' dialog screen.
+//
 // Revision 1.2  2002/12/30 13:33:44  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -50,6 +55,8 @@ __published:	// IDE-managed Components
         void __fastcall Tad1_MEditClick(TObject *Sender);
         void __fastcall CB_Tad2Click(TObject *Sender);
         void __fastcall Tad2_MEditDblClick(TObject *Sender);
+        void __fastcall CB_stdClick(TObject *Sender);
+        void __fastcall STD_MEditClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TFix_Params(TComponent* Owner);

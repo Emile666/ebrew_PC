@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2003/06/01 11:53:48  emile
+// - tset has been renamed in tset_hlt for more clearance
+// - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
+//        This is now 'thlt >= tset_hlt', because timer0 only starts with water
+//        in the MLT => this caused a dead-lock.
+// - 6 defines have been made adjustable via 'Options|Sparge & STD Settings'.
+//   These defines were TMLT_HLIMIT, TMLT_LLIMIT, TIMEOUT_1SEC, VMLT_EMPTY,
+//   TIMEOUT3 and TIMEOUT4.
+//
 // Revision 1.5  2003/01/05 14:31:22  emile
 // - Bug-fix: Pressing the top-right Close button of EBrew now activates the
 //   MenuFileExitClick method. This was not the case yet, which resulted in
@@ -69,6 +78,8 @@ typedef struct _swfx_struct
    double tad1_fx;  // Fix value for Tad1 [E-1 Celsius]
    bool   tad2_sw;  // Switch value for Tad2
    double tad2_fx;  // Fix value for Tad2 [E-1 Celsius]
+   bool   std_sw;   // Switch value for STD state
+   int    std_fx;   // Fix value for STD state
 } swfx_struct;
 
 //---------------------------------------------------------------------------

@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2003/06/01 13:37:42  emile
+// - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
+// - Switch/fix for std state added for easier testing
+// - Vmash value added to 'Options|Sparge & STD Settings' dialog screen.
+//
 // Revision 1.6  2003/06/01 11:53:48  emile
 // - tset has been renamed in tset_hlt for more clearance
 // - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
@@ -651,6 +656,11 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
    {
       ptmp->Tad2_MEdit->Text = AnsiString(swfx.tad2_fx); // Set fix value
    } // if
+   ptmp->CB_std->Checked = swfx.std_sw; // Set Checkbox for Tad1
+   if (swfx.std_sw)
+   {
+      ptmp->STD_MEdit->Text = AnsiString(swfx.std_fx); // Set fix value
+   } // if
 
    if (ptmp->ShowModal() == 0x1) // mrOK
    {
@@ -679,6 +689,17 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
       {
          // Max. value for Tad2 = ADDA_VREF E-1 °C
          swfx.tad2_fx = ptmp->Tad2_MEdit->Text.ToDouble();
+      } // if
+      // Get STD state
+      swfx.std_sw = ptmp->CB_std->Checked;
+      if (swfx.std_sw)
+      {
+         // Value must be between 0 and 12
+         swfx.std_fx = ptmp->STD_MEdit->Text.ToInt();
+         if (swfx.std_fx < 0 || swfx.std_fx > S12_CHILL)
+         {
+            swfx.std_fx = 0; // reset to a save value
+         }
       } // if
    } // if
    delete ptmp;
@@ -998,9 +1019,18 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //--------------------------------------------------------------------------
    else if (tmr.pid_tmr % 20 == 5)
    {
+      int std_tmp;
+      if (swfx.std_sw)
+      {
+         std_tmp = swfx.std_fx;
+      }
+      else
+      {
+         std_tmp = -1;
+      }
       /* Tmlt = AD2, Thlt = AD1 */
       update_std(Vmlt,padc.ad2,padc.ad1,tset_hlt,&std_out,
-                 ms,ms_idx,ms_tot,&sp,&std,PID_RB->ItemIndex);
+                 ms,ms_idx,ms_tot,&sp,&std,PID_RB->ItemIndex,std_tmp);
       switch (std.ebrew_std)
       {
          case  0: Std_State->Caption = "00. Initialisation"       ; break;
@@ -1272,6 +1302,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);     // TIMEOUT_xSEC [sec]
         ptmp->Eto3->Text        = AnsiString(sp.to3);         // TIMEOUT3 [sec]
         ptmp->Eto4->Text        = AnsiString(sp.to4);         // TIMEOUT4 [sec]
+        ptmp->EVmash->Text      = AnsiString(std.vmash);      // Vmash [L]
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
@@ -1287,8 +1318,8 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("TO_XSEC",   ptmp->Eto_xsec->Text.ToInt());    // TIMEOUT_xSEC [sec]
            Reg->WriteInteger("TO3",       ptmp->Eto3->Text.ToInt());        // TIMEOUT3 [sec]
            Reg->WriteInteger("TO4",       ptmp->Eto4->Text.ToInt());        // TIMEOUT4 [sec]
-
            Init_Sparge_Settings(); // Init. struct with sparge settings with new values
+           std.vmash = ptmp->EVmash->Text.ToDouble(); // Special case: Vmash value
         } // if
         delete ptmp;
         ptmp = 0; // NULL the pointer

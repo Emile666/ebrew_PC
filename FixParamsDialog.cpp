@@ -5,6 +5,11 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2002/12/30 13:33:44  emile
+// - Headers with CVS tags added to every source file
+// - Restore Settings function is added
+// - "ebrew" registry key now in a define REGKEY
+//
 // ==========================================================================
 
 //---------------------------------------------------------------------------
@@ -51,7 +56,6 @@ void __fastcall TFix_Params::CB_Tad1Click(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 
-
 void __fastcall TFix_Params::Tad1_MEditClick(TObject *Sender)
 {
    Tad1_MEdit->SelectAll();
@@ -70,5 +74,16 @@ void __fastcall TFix_Params::Tad2_MEditDblClick(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 
+void __fastcall TFix_Params::CB_stdClick(TObject *Sender)
+{
+   STD_MEdit->Enabled = CB_std->Checked;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TFix_Params::STD_MEditClick(TObject *Sender)
+{
+   STD_MEdit->SelectAll();
+}
+//---------------------------------------------------------------------------
 
 
