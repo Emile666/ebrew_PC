@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.20  2004/01/31 16:01:05  emile
+// - Init. HW High/Low limit temp. changed to 70/50 C respectively.
+// - Added code for calculation/simulation of Vhlt and Vboil
+// - Hardware dialog updated: 3 new controls added for Vhlt and Vboil simulation
+// - Registry key no longer in ebrew but in Software\\ebrew
+// - First attempt to catch CVS version ID in source code
+//
 // Revision 1.19  2004/01/25 22:00:50  emile
 // - Major update of main form. Added thermometer and tank controls from the
 //   TMS Instrumentation Workshop (TIW) package.
@@ -139,7 +146,6 @@
 #pragma link "VrPowerMeter"
 #pragma resource "*.dfm"
 
-char *const ebrew_revision = "$Revision$";
 TMainForm *MainForm;
 //---------------------------------------------------------------------------
 void __fastcall TMainForm::Restore_Settings(void)
@@ -317,6 +323,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          padc.dac   = Reg->ReadInteger("DAC");   // Read DAC Value
 
          ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
+         tm_triac->SetPoint->Value = ttriac_hlim;
          ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
 
          volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
@@ -493,6 +500,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
   Returns  : None
   ------------------------------------------------------------------*/
 {
+   ebrew_revision   = "$Revision$";
    ShowDataGraphs   = new TShowDataGraphs(this);   // create modeless Dialog
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
@@ -956,6 +964,7 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
 
             ttriac_hlim = ptmp->Thlim_edit->Text.ToInt();
             Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
+            tm_triac->SetPoint->Value = ttriac_hlim;
             ttriac_llim = ptmp->Tllim_edit->Text.ToInt();
             Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
             volumes.Vhlt_start = ptmp->Vhlt_init_Edit->Text.ToInt();
@@ -1148,16 +1157,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           padc.ad1 = (double)swfx.tad1_fx;
        } // if
-       sprintf(tmp_str,"%4.2f",padc.ad1);  // Display AD1 value to screen
-       Val_temp->Caption = tmp_str;
-       tm_hlt->Value->Value = padc.ad1; // update HLT thermometer object
+       sprintf(tmp_str,"%4.2f",padc.ad1); // Display AD1 value to screen
+       Val_Thlt->Caption    = tmp_str;
+       tm_hlt->Value->Value = padc.ad1;   // update HLT thermometer object
 
        if (swfx.tad2_sw)
        {
           padc.ad2 = (double)swfx.tad2_fx;
        } // if
-       sprintf(tmp_str,"%4.2f",padc.ad2);  // Display AD2 value to screen
-       Val_Tmlt->Caption = tmp_str;
+       sprintf(tmp_str,"%4.2f",padc.ad2); // Display AD2 value to screen
+       Val_Tmlt->Caption    = tmp_str;
        tm_mlt->Value->Value = padc.ad2;   // update MLT thermometer object
 
        //---------------------------------------------------
@@ -1194,9 +1203,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           volumes.Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
        }
-       sprintf(tmp_str,"%4.1f",volumes.Vmlt);  // Display MA filter output on screen
-       Val_Volume->Caption = tmp_str;          // AD4 = Pressure Transducer
-       Tank_MLT->Position  = volumes.Vmlt;
+       sprintf(tmp_str,"%4.1f",volumes.Vmlt); // Display MA filter output on screen
+       Vol_MLT->Caption   = tmp_str;          // AD4 = Pressure Transducer
+       Tank_MLT->Position = volumes.Vmlt;
    } // if
    //-----------------------------------------------------------------------
    // Second time-slice: Time switch controller. Enable PI controller
@@ -1238,14 +1247,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          tset_mlt = update_tset(&tset_hlt,padc.ad2,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       } // else
+      sprintf(tmp_str,"%4.1f",tset_mlt);
+      Val_Tset_mlt->Caption   = tmp_str;
       tm_mlt->SetPoint->Value = tset_mlt; // Update MLT thermometer object
+
       if (swfx.tset_sw)
       {
          tset_hlt = swfx.tset_fx; // fix tset
       } // if
-      // Update display with HLT values
       sprintf(tmp_str,"%4.1f",tset_hlt);
-      Val_tset->Caption = tmp_str;
+      Val_Tset_hlt->Caption = tmp_str;
       tm_hlt->SetPoint->Value = tset_hlt; // update HLT thermometer object
    } // else if
    //-----------------------------------------------------------------------
@@ -1299,7 +1310,12 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       // Now update tank objects (volumes). MLT is already done (time-slice 1)
       //----------------------------------------------------------------------
       Tank_HLT->Position  = volumes.Vhlt;
+      sprintf(tmp_str,"%4.1f",volumes.Vhlt);
+      Vol_HLT->Caption = tmp_str;
+
       Tank_Boil->Position = volumes.Vboil;
+      sprintf(tmp_str,"%4.1f",volumes.Vboil);
+      Vol_Boil->Caption = tmp_str;
 
       //-----------------------------------------------------------------
       // Now output all valve bits to DIG_IO_MSB_BASE (if it is present).

@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.16  2004/01/31 16:01:05  emile
+// - Init. HW High/Low limit temp. changed to 70/50 C respectively.
+// - Added code for calculation/simulation of Vhlt and Vboil
+// - Hardware dialog updated: 3 new controls added for Vhlt and Vboil simulation
+// - Registry key no longer in ebrew but in Software\\ebrew
+// - First attempt to catch CVS version ID in source code
+//
 // Revision 1.15  2004/01/25 22:00:51  emile
 // - Major update of main form. Added thermometer and tank controls from the
 //   TMS Instrumentation Workshop (TIW) package.
@@ -174,6 +181,7 @@ class TMainForm : public TForm
 {
 __published:	// IDE-managed Components
         TMainMenu *MainMenu;
+        TPopupMenu *PopupMenu1;
         TMenuItem *Edit1;
         TMenuItem *View1;
         TMenuItem *MenuOptions;
@@ -192,31 +200,33 @@ __published:	// IDE-managed Components
         TMenuItem *PrintSetup1;
         TMenuItem *Print1;
         TMenuItem *MenuEditFixParameters;
-        TLabel *Val_temp;
-        TLabel *Val_tset;
+        TLabel *Val_Thlt;
+        TLabel *Val_Tset_hlt;
         TLabel *Val_Tmlt;
+        TLabel *Val_Tset_mlt;
+        TLabel *Vol_HLT;
+        TLabel *Vol_Boil;
+        TLabel *Vol_MLT;
+        TLabel *P0;
+        TLabel *V1;
+        TLabel *V2;
+        TLabel *V3;
+        TLabel *V4;
+        TLabel *V5;
+        TLabel *V6;
+        TLabel *V7;
+        TLabel *Std_State;
         TRadioGroup *PID_RB;
         TAnimTimer *T50msec;
         TMenuItem *MenuViewMash_progress;
         TMenuItem *MenuOptionsI2CSettings;
-        TLabel *Val_Volume;
         TMenuItem *SpargeSettings1;
         TImage *Image1;
-        TLabel *V5;
-        TPopupMenu *PopupMenu1;
         TMenuItem *Auto1;
         TMenuItem *OFF1;
         TMenuItem *ON1;
-        TLabel *V4;
-        TLabel *V2;
-        TLabel *V1;
-        TLabel *V6;
-        TLabel *V3;
-        TLabel *V7;
-        TLabel *Std_State;
         TMenuItem *N2;
         TMenuItem *ReadLogFile1;
-        TLabel *P0;
         TvrThermoMeter *tm_mlt;
         TVrTank *Tank_MLT;
         TvrThermoMeter *tm_hlt;
@@ -275,8 +285,9 @@ public:		// User declarations
                                     // Bit 0 = Pump, Bit 1..7 = V1..V7
                                     // Bit 8..15: 0 = Auto, 1 = Manual Override
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
-        TDateTime       dt_time_switch; // object holding date and time
-        volume_struct   volumes;    // Struct for Volumes
+        TDateTime       dt_time_switch;  // object holding date and time
+        volume_struct   volumes;         // Struct for Volumes
+        char            *ebrew_revision; // contains CVS revision number
         __fastcall TMainForm(TComponent* Owner);
 };
 //---------------------------------------------------------------------------
