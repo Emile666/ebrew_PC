@@ -42,14 +42,14 @@ SYSDEFINES = NO_STRICT;USEPACKAGES
 CFLAG1 = -Ii2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl \
   -Od -w -Ve -r- -a8 -4 -k -y -v -vi- -c -b- -w-par -w-inl -Vx -tW -tWM \
   -D$(SYSDEFINES);$(USERDEFINES)
-PFLAGS = -Ui2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\program files\borland\cbuilder4\Lib";"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\lib\obj;$(BCB)\lib;$(DEBUGLIBPATH) \
+PFLAGS = -U"..\..\program files\borland\cbuilder4\Lib";i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\program files\borland\cbuilder4\Lib";"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\lib\obj;$(BCB)\lib;$(DEBUGLIBPATH) \
   -Ii2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl \
   -N2O -N0O -$YD -$W -$O- -v -JPHNE -M
 RFLAGS = -ii2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl
 AFLAGS = /ii2c_dll /i..\..\..\Programming\bc\c\PSP\REUSE /i.. \
   /i"..\..\..\Program Files\Borland\CBuilder4\Projects" /i$(BCB)\include \
   /i$(BCB)\include\vcl /mx /w2 /zi
-LFLAGS = -Li2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\program files\borland\cbuilder4\Lib";"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\lib\obj;$(BCB)\lib;$(DEBUGLIBPATH) \
+LFLAGS = -L"..\..\program files\borland\cbuilder4\Lib";i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\program files\borland\cbuilder4\Lib";"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\lib\obj;$(BCB)\lib;$(DEBUGLIBPATH) \
   -aa -Tpe -s -Gn -v
 # ---------------------------------------------------------------------------
 ALLOBJ = c0w32.obj $(PACKAGES) sysinit.obj $(OBJFILES)
