@@ -38,11 +38,13 @@
 #define I2C_TIMEOUT    (-3)
 #define I2C_ARGS       (-4)
 #define I2C_PT         (-5)
+#define I2C_LM92_ERR   (-6)
 #define I2C_BERR_MSG   "I2C Bus-Error"
 #define I2C_BB_MSG     "I2C Bus-Busy Error"
 #define I2C_TO_MSG     "I2C Time-Out"
 #define I2C_ARGS_MSG   "Wrong argument"
 #define I2C_PT_MSG     "PortTalk Error"
+#define I2C_LM92_MSG   "LM92 Read Error"
 
 // The LM92 sign bit is normally bit 12. The value read from the
 // LM92 is SHL3. Therefore the sign bit is at bit 15
