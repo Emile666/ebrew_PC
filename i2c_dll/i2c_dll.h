@@ -9,6 +9,9 @@
 //           the I2C Hardware.
 // ----------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2004/02/25 18:21:36  emile
+// - Undo of previous revision. Porttalk was not the problem here.
+//
 // Revision 1.9  2004/02/25 13:09:10  emile
 // - Bug-fix: only close PortTalk device when it is open. Introduced the
 //            variable 'pt_opened' and the macro 'CLOSE_PORTTALK' for this.
@@ -58,6 +61,40 @@
 #define I2C_ARGS_MSG   "Wrong argument"
 #define I2C_PT_MSG     "PortTalk Error"
 #define I2C_LM92_MSG   "LM92 Read Error"
+
+//-----------------------------------------------------------------
+// Defines for the VELLEMAN P8000 board. The I2C bus is directly
+// connected to the parallel port pins in the following way:
+// SCL             : /SELECT_IN: attached to Control register bit 3 (0x08)
+// SDA to I2C bus  : /AUTO_FEED: attached to Control register bit 1 (0x02)
+// SDA from I2C bus: SELECT    : attached to Status  register bit 4 (0x10)
+// -----------------------------------------------------------------------
+// SCL SDA Control_Register
+//  0   0  14 = 0x0E
+//  0   1  12 = 0x0C
+//  1   0   6 = 0x06
+//  1   1   4 = 0x04
+//-----------------------------------------------------------------
+#define I2C_SDA_IN    (0x10)
+#define I2C_IDLE      (0x04)
+#define I2C_SCL0_SDA0 (0x0E)
+#define I2C_SCL0_SDA1 (0x0C)
+#define I2C_SCL1_SDA0 (0x06)
+#define I2C_SCL1_SDA1 I2C_IDLE
+
+//---------------------------------------------------------------------------
+// i2c_method: ISA PCB card of LPTx: parallel port PCB card or Velleman P8000
+//---------------------------------------------------------------------------
+#define WIN_9X        (0)
+#define WIN_XP        (1)
+
+#define ISA_CARD      (0)
+#define LPT_CARD      (2)
+#define VELLEMAN_CARD (4)
+#define ALL_CARDS     (6)
+
+// I2C slave HW responds with an ACK (0) or an NACK (1)
+enum i2c_acks {I2C_ACK, I2C_NACK};
 
 //-----------------------------------------------------------------
 // The LM92 sign bit is normally bit 12. The value read from the
@@ -152,7 +189,7 @@ typedef struct
    int    dac;   // Value for DA Converter
 } adda_t;
 
-extern "C" __declspec(dllexport) int    __stdcall i2c_init(int address, byte win_ver, byte clock_reg_val);
+extern "C" __declspec(dllexport) int    __stdcall i2c_init(int address, byte control, byte clock_reg_val);
 extern "C" __declspec(dllexport) int    __stdcall i2c_start(void);
 extern "C" __declspec(dllexport) int    __stdcall i2c_address(byte address);
 extern "C" __declspec(dllexport) int    __stdcall i2c_write(byte address, byte *p, int bytes);

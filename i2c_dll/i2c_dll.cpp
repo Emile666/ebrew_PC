@@ -5,15 +5,18 @@
 // Revision : $Revision$
 // ----------------------------------------------------------------------------
 // Purpose  : I2C DLL, which can be used by both Visual C++ and Visual
-//            Basic. It is meant to directly access the I2C Hardware.
+//            Basic. It is meant to directly access any I2C Hardware.
 //
-//            The I2C DLL routines are meant for a PCF8584 I2C bus
-//            controller chip. Two variations are possible here:
-//            1) The PCF8584 is mounted on a ISA printed circuit board
-//            2) The PCF8584 is mounted on a PCB connected to the parallel
-//               port.
+//            The I2C DLL routines are meant for:
+//            A) Interfacing with a PCF8584 I2C bus controller chip.
+//               Two variations are possible here:
+//               1) The PCF8584 is mounted on a ISA printed circuit board
+//               2) The PCF8584 is mounted on a PCB connected to the parallel
+//                  port.
+//            B) Direct interfacing with the I2C bus which is connected to
+//               the Parallel Port (Velleman P8000 board).
 //            This is controlled by setting the proper variable in the
-//            i2c_init() routine.
+//            i2c_init() routine. See this routine for more details.
 //
 //            It is also possible to use the I2C DLL on various Windows
 //            platform. Two variations again:
@@ -21,7 +24,7 @@
 //            2) Win 2000, NT, XP
 //            Again this is controlled by setting the proper variable in
 //            the i2c_init() routine.
-//            For option 2, the PortTalk DLL from www.beyondlogic.org is
+//            For option 2), the PortTalk DLL from www.beyondlogic.org is
 //            used to directly access the parallel port. You should install
 //            PortTalk first before using the routines in this DLL.
 //
@@ -36,6 +39,9 @@
 //           The DLL is built with Borland C++ Builder 4.0.
 // ----------------------------------------------------------------------------
 // $Log$
+// Revision 1.16  2004/02/25 18:21:36  emile
+// - Undo of previous revision. Porttalk was not the problem here.
+//
 // Revision 1.15  2004/02/25 13:09:10  emile
 // - Bug-fix: only close PortTalk device when it is open. Introduced the
 //            variable 'pt_opened' and the macro 'CLOSE_PORTTALK' for this.
@@ -131,12 +137,6 @@
 #include <time.h>
 
 #pragma argsused
-
-//---------------------------------------------------------
-// i2c_method: ISA PCB card of LPTx: parallel port PCB card
-//---------------------------------------------------------
-#define ISA_CARD (0)
-#define LPT_CARD (1)
 
 //--------------------------------------------------------------------------
 // Bit defines for LPTx: Control Register
@@ -299,7 +299,7 @@ static byte last_start;   // TRUE = Last action on bus was start
 static byte ic_adr;       // Currently addressed IC and R/W_ bit
 
 static byte win_nt;       // TRUE = Windows NT, 2000, XP; FALSE = Win 95,98,ME
-static byte i2c_method;   // [ISA_CARD, LPT_CARD]
+static byte i2c_method;   // [ISA_CARD, LPT_CARD, VELLEMAN_CARD]
 static byte clock_reg_S2; // Init. value for S2 clock register of PCF8584
 static int  S023;         // Registers S0, S2 and S3 of PCF8584
 static int  S1;           // Register S1 of PCF8584 (= S023 + 1)
@@ -565,7 +565,7 @@ int i2c_berr_check(void)
 } // i2c_berr_check()
 
 extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
-                                                        byte win_ver,
+                                                        byte control,
                                                         byte clock_reg_val)
 /*------------------------------------------------------------------
   Purpose  : Sets the proper base address for the PCF8584. This should
@@ -573,10 +573,20 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
              in two ways:
              1) With an ISA PCB card: valid IO addresses are 0x300, 0x310,
                 0x320, 0x330 or 0x340.
-             2) With a I2C interface card connected to a parallel port.
-                Base addresses are 0x378 (LPT1) and 0x278 (LPT2:)
-  Variables: address      : the IO base address for the PCF8584
-             win_ver      : TRUE = Windows NT, 2000 or XP platform
+             2) With an I2C interface card with a PCF8584 I2C bus controller connected
+                to a parallel port. Base addresses are 0x378 (LPT1) and 0x278 (LPT2:).
+             3) With a Velleman P8000 PCB connected to a parallel port. Direct
+                connection to the I2C hardware, no PCF8584 I2C bus controller.
+  Variables: address      : the IO base address (e.g. for the PCF8584)
+             control      : A control byte. The bits have the following meaning:
+                            Bit 0: 1 = Windows NT, 2000 or XP platform
+                                   0 = Windows 95, 98, ME
+                            Bit 21: I2C Hardware platform
+                                -------------------------------------------
+                                00: ISA PCB with PCF8584
+                                01: PCF8584 on the parallel port
+                                10: Velleman P8000 PCB on the parallel port
+                                11: Reserved
              clock_reg_val: value for the clock register S2 of the PCF8584.
                             Should be one of the values from fscl_values[].
                             This byte controls the SCL frequency:
@@ -593,42 +603,61 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
              The static byte clock_reg_S2 is set
   ------------------------------------------------------------------*/
 {
-   int err   = I2C_NOERR; // error return-value
+   int err   = I2C_ARGS; // error return-value
 
-   win_nt    = win_ver;
+   win_nt    = control & WIN_XP; // TRUE = Windows NT, 2000, XP
 
    if (win_nt && (OpenPortTalk() == -1))
    {
       return I2C_PT;
    } // if
 
-   switch (address)
+   i2c_method = (control & ALL_CARDS); // Isolate I2C HW platform bits
+   switch (i2c_method)
    {
-      case 0x300: case 0x310:
-      case 0x320: case 0x330:
-      case 0x340:
-           i2c_method = ISA_CARD; // ISA PCB card selected
-           S023       = address;  // base address for PCF8584
-           S1         = S023 + 1;
+      case ISA_CARD: // ISA card with PCF8584
+           if ((address == 0x300) || (address == 0x310) || (address == 0x320) ||
+               (address == 0x330) || (address == 0x340))
+           {
+              S023 = address;   // base address for PCF8584
+              S1   = S023 + 1;
+              err  = I2C_NOERR; // No error
+           } // if
+           // return error in all other cases
            break;
-      case 0x378: case 0x278:
-           i2c_method = LPT_CARD;    // LPTx: card selected
-           lpt_data   = address;     // base address for LPTx: card
-           lpt_stat   = address + 1; // status register
-           lpt_ctrl   = address + 2; // control register
-           outportb(lpt_ctrl,0x00);  // Init. /SW RD WR A0
+      case LPT_CARD: // LPT card with PCF8584
+           if ((address == 0x378) || (address == 0x278))
+           {
+              lpt_data   = address;     // base address for LPTx: card
+              lpt_stat   = address + 1; // status register
+              lpt_ctrl   = address + 2; // control register
+              outportb(lpt_ctrl,0x00);  // Init. /SW RD WR A0
+              err        = I2C_NOERR;   // No error
+           } // if
+           // return error in all other cases
+           break;
+      case VELLEMAN_CARD: // VELLEMAN card, direct connection to I2C bus
+           if ((address == 0x378) || (address == 0x278))
+           {
+              lpt_data   = address;        // base address for LPTx: card
+              lpt_stat   = address + 1;    // status register
+              lpt_ctrl   = address + 2;    // control register
+              outportb(lpt_ctrl,I2C_IDLE); // init. I2C bus, IDLE state
+              err = I2C_NOERR;   // No error
+           } // if
+           // return error in all other cases
            break;
       default:
            err = I2C_ARGS; // wrong input address
            break;
-   } // switch
+   } // switch i2c_method
    clock_reg_S2 = clock_reg_val; // save S2 clock register value for i2c_start()
    return err; // return error-code
 } // i2c_init()
 
 extern "C" __declspec(dllexport) int __stdcall i2c_start(void)
 /*------------------------------------------------------------------
-  Purpose  : Initialises the I2C bus.
+  Purpose  : Initialises the I2C bus
   Variables: None
              The static byte clock_reg_S2 is used
   Returns  : Error: I2C_NOERR : No error
@@ -639,37 +668,49 @@ extern "C" __declspec(dllexport) int __stdcall i2c_start(void)
    int err = I2C_NOERR; // error return-value
    byte x; // temp. variable
 
-   write_S1(0x00);   // Disable Serial Interface, next. reg. = SO' (own address)
-   pauze();
-   write_S023(0xFF); // Set effective own address S0' to a non-zero value
-   pauze();
-   write_S1(0x20);   // Load next byte into clock-register S2
-   pauze();
-   //--------------------------------------------------------------------
-   // The var. clock_reg_S2 (set in i2c_init) contains the value for the
-   // clock register S2 of the PCF8584. It controls the SCL frequency.
-   //--------------------------------------------------------------------
-   write_S023(clock_reg_S2);
-   pauze();
-   write_S1(0x40); // Enable Serial Interface, load next byte into S0 (Data)
-   pauze();
-   x = read_S1();  // Check if I2C bus is busy (Bus-Busy bit is 1)
-   pauze();
-   if ((x & BBb) == 0x00)
+   if (i2c_method == VELLEMAN_CARD)
    {
-      err = I2C_BB; // return error is I2C bus busy
+      outportb(lpt_ctrl,I2C_IDLE); // I2C bus = IDLE state, just to make sure
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL1_SDA0); // generate I2C start condition
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL0_SDA0); // set both SCL and SDA to 0
+      pauze();
    }
    else
-   {
-      write_S023(0x00); // Load S0 with address & R/W_ bit
-      ic_adr = 0x00;    // save address & R/W_ bit
-      pauze();
-      // Load next byte in S0 (data), generate START + address
-      // remain in MST/TRM (Master/Transmitter) mode
-      write_S1(0x44);
-      last_start = TRUE; // set flag: last action was START
-      pauze();
-      err = i2c_berr_check(); // check for bus-error
+   {   // ISA_CARD or LPT_CARD: both have a PCF8584 controller
+       write_S1(0x00);   // Disable Serial Interface, next. reg. = SO' (own address)
+       pauze();
+       write_S023(0xFF); // Set effective own address S0' to a non-zero value
+       pauze();
+       write_S1(0x20);   // Load next byte into clock-register S2
+       pauze();
+       //--------------------------------------------------------------------
+       // The var. clock_reg_S2 (set in i2c_init) contains the value for the
+       // clock register S2 of the PCF8584. It controls the SCL frequency.
+       //--------------------------------------------------------------------
+       write_S023(clock_reg_S2);
+       pauze();
+       write_S1(0x40); // Enable Serial Interface, load next byte into S0 (Data)
+       pauze();
+       x = read_S1();  // Check if I2C bus is busy (Bus-Busy bit is 1)
+       pauze();
+       if ((x & BBb) == 0x00)
+       {
+          err = I2C_BB; // return error is I2C bus busy
+       }
+       else
+       {
+          write_S023(0x00); // Load S0 with address & R/W_ bit
+          ic_adr = 0x00;    // save address & R/W_ bit
+          pauze();
+          // Load next byte in S0 (data), generate START + address
+          // remain in MST/TRM (Master/Transmitter) mode
+          write_S1(0x44);
+          last_start = TRUE; // set flag: last action was START
+          pauze();
+          err = i2c_berr_check(); // check for bus-error
+       } // else
    } // else
    return err; // return-value
 } // i2c_start()
@@ -677,8 +718,9 @@ extern "C" __declspec(dllexport) int __stdcall i2c_start(void)
 int wait_byte(void)
 /*------------------------------------------------------------------
   Purpose  : This function waits until a complete byte has been
-             send or received. Time-out value is a multiple of
-             the delay in pauze() and is approx. 0.5 second.
+             send or received from the PCF8584 I2C bus controller.
+             Time-out value is a multiple of the delay in pauze()
+             and is approx. 0.5 second.
   Variables: None
       bytes: Number of bytes to write
   Returns  : Error: I2C_NOERR  : No error
@@ -723,6 +765,112 @@ int terminate_read(void)
    return wait_byte(); // wait for last byte: goes LOST! Return result.
 } // terminate_read()
 
+i2c_acks i2c_output_bb(byte serdata)
+/*------------------------------------------------------------------
+  Purpose  : Send one byte directly to the I2C Hardware, using a
+             mechanism called 'bit-banging'.
+  Variables:
+    serdata: the byte to write to the I2C bus
+  Returns  : ACK : The byte has been sent successfully
+             NACK: The slave I2C chip responded with a NACK
+  ------------------------------------------------------------------*/
+{
+   i2c_acks ret; // return value
+   byte     p[] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
+   int      i;   // loop counter
+
+   for (i = 0; i < 8; i++)
+   {  // start with MSB first!
+      if (serdata & p[i])
+      {
+         outportb(lpt_ctrl,I2C_SCL0_SDA1); // bit is a '1'
+         pauze();
+         outportb(lpt_ctrl,I2C_SCL1_SDA1); // set SCL to 1
+         pauze();
+         outportb(lpt_ctrl,I2C_SCL0_SDA1); // set SCL to 0 again
+         pauze();
+         outportb(lpt_ctrl,I2C_SCL0_SDA0); // set SDA to 0 again
+         pauze();
+      }
+      else
+      {
+         outportb(lpt_ctrl,I2C_SCL0_SDA0); // bit is a '0'
+         pauze();
+         outportb(lpt_ctrl,I2C_SCL1_SDA0); // set SCL to 1
+         pauze();
+         outportb(lpt_ctrl,I2C_SCL0_SDA0); // set SCL to 0 again
+         pauze();
+      }
+   } // for
+   //-------------------------------------------------------------
+   //Now 8 bits have been transferred, Read back the ACK/NACK bit
+   //-------------------------------------------------------------
+   outportb(lpt_ctrl,I2C_SCL0_SDA1);
+   pauze();
+   outportb(lpt_ctrl,I2C_SCL1_SDA1);
+   pauze();
+   // Read ACK value. This should be 0 for ACK and 1 for NACK
+   // Input data-bit is inverted on the Velleman board!
+   ret = (inportb(lpt_stat) & I2C_SDA_IN) ? I2C_ACK : I2C_NACK;
+   pauze();
+   outportb(lpt_ctrl,I2C_SCL0_SDA1);
+   pauze();
+   return ret;
+} // i2c_output_bb()
+
+byte i2c_input_bb(bool last)
+/*------------------------------------------------------------------
+  Purpose  : Reads one byte directly to the I2C Hardware, using a
+             mechanism called 'bit-banging'.
+  Variables:
+       last: TRUE = this is the last byte to read from the device
+  Returns  : the byte read from the I2C device
+  ------------------------------------------------------------------*/
+{
+   byte  result = 0; // byte read from HW device
+   byte  p[] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
+   int   i;   // loop counter
+
+   outportb(lpt_ctrl,I2C_SCL0_SDA1); // start with SDA_OUT = 1
+   pauze();
+   for (i = 0; i < 8; i++)
+   {  // start with MSB first!
+      outportb(lpt_ctrl,I2C_SCL1_SDA1); // now set SCL = 1
+      pauze();
+      if (inportb(lpt_stat) & I2C_SDA_IN) // read one bit
+      {
+         result |= p[i];
+      } // if
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL0_SDA1); // now set SCL = 0 again
+      pauze();
+   } // for
+   //-------------------------------------------------------------
+   //Now 8 bits have been read, send an ACK/NACK bit
+   //-------------------------------------------------------------
+   if (last)
+   {  // send a NACK
+      outportb(lpt_ctrl,I2C_SCL0_SDA1); // 1 = NACK
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL1_SDA1); // set CLK = 1
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL0_SDA1); // set CLK = 0 again
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL0_SDA0); // set CLK = 0 again
+      pauze();
+   }
+   else
+   {  // send an ACK
+      outportb(lpt_ctrl,I2C_SCL0_SDA0); // 0 = ACK
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL1_SDA0); // set CLK = 1
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL0_SDA0); // set CLK = 0 again
+      pauze();
+   }
+   return result;
+} // i2c_input_bb()
+
 extern "C" __declspec(dllexport) int __stdcall i2c_address(byte address)
 /*------------------------------------------------------------------
   Purpose  : Send a 'REPEAT START' condition, followed by the address.
@@ -737,52 +885,59 @@ extern "C" __declspec(dllexport) int __stdcall i2c_address(byte address)
    int err;         // error return-value
    byte x; // temp. variable
 
-   err = wait_byte(); // wait for on-going actions
-   if (err)
+   if (i2c_method == VELLEMAN_CARD)
    {
-      return err; // return in case of time-out
-   } // if
-   if ((ic_adr & RWb) == RWb) // Is slave still transmitting?
-   {
-      err = terminate_read(); // if yes, terminate transmission
-      if (err)
-      {
-         return err; // return in case of time-out
-      } // if
-   } // if
-   if (last_start)
-   {
-      // check if last action was START
-      write_S1(0x47);   // load STOP/START condition
+      return (i2c_output_bb(address) == I2C_ACK) ? I2C_NOERR : I2C_BB;
    }
    else
-   {
-      write_S1(0x45);   // load REPEAT START condition
+   {   // ISA_CARD or LPT_CARD: both have a PCF8584 controller
+       err = wait_byte(); // wait for on-going actions
+       if (err)
+       {
+          return err; // return in case of time-out
+       } // if
+       if ((ic_adr & RWb) == RWb) // Is slave still transmitting?
+       {
+          err = terminate_read(); // if yes, terminate transmission
+          if (err)
+          {
+             return err; // return in case of time-out
+          } // if
+       } // if
+       if (last_start)
+       {
+          // check if last action was START
+          write_S1(0x47);   // load STOP/START condition
+       }
+       else
+       {
+          write_S1(0x45);   // load REPEAT START condition
+       } // else
+       pauze();
+
+       last_start = TRUE;   // set flag: last action was START
+       write_S023(address); // send REPEAT START & address & R/W_ bit
+       ic_adr = address;    // save address and R/W_ bit
+       pauze();
+       err = wait_byte();   // wait till REPEAT START is send
+       if (err)
+       {
+          return err;   // return in case of time-out
+       } // if
+
+       x = read_S1();  // test Last Received Bit (= ACK_)
+       pauze();
+       if ((x & LRBb) == LRBb)
+       {
+          return I2C_BB;  // Error: I2C bus busy
+       }
+       else if ((ic_adr & RWb) == RWb)
+       {
+          read_S023();  // action = READ
+          pauze();      // set PIN bit to allow PCD8584 to receive data (dummy read)
+       } // else if
+       return I2C_NOERR;  // Return, no error
    } // else
-   pauze();
-
-   last_start = TRUE;   // set flag: last action was START
-   write_S023(address); // send REPEAT START & address & R/W_ bit
-   ic_adr = address;    // save address and R/W_ bit
-   pauze();
-   err = wait_byte();   // wait till REPEAT START is send
-   if (err)
-   {
-      return err;   // return in case of time-out
-   } // if
-
-   x = read_S1();  // test Last Received Bit (= ACK_)
-   pauze();
-   if ((x & LRBb) == LRBb)
-   {
-      return I2C_BB;  // Error: I2C bus busy
-   }
-   else if ((ic_adr & RWb) == RWb)
-   {
-      read_S023();  // action = READ
-      pauze();      // set PIN bit to allow PCD8584 to receive data (dummy read)
-   } // else if
-   return I2C_NOERR;  // Return, no error
 } // i2c_address()
 
 extern "C" __declspec(dllexport) int __stdcall i2c_write(byte address, byte *p, int bytes)
@@ -798,35 +953,51 @@ extern "C" __declspec(dllexport) int __stdcall i2c_write(byte address, byte *p, 
                     I2C_BB    : I2C bus is still busy
   ------------------------------------------------------------------*/
 {
-   int b = 0;           // counter for #bytes to write
-   int err = I2C_NOERR; // error return-value
-   int full;            // TRUE = IC accepts no more bytes
+   int b   = 0;             // counter for #bytes to write
+   int err = I2C_NOERR;     // error return-value
+   int full;                // TRUE = IC accepts no more bytes
+   i2c_acks retn = I2C_ACK; // ACK,NACK code from I2C device
 
-   // If the IC expects a read, we must first tell the addressed IC
-   // that we want to write.
-   err = wait_byte();
-   if (err != I2C_NOERR)
+   if (i2c_method == VELLEMAN_CARD)
    {
-      return err; // exit if error
+      while ((b < bytes) && (retn == I2C_ACK))
+      {
+         retn = i2c_output_bb(p[b++]);
+      } // for
+      if (retn == I2C_NACK)
+      {
+         err = I2C_BB;
+      } // if
+      return err;
    } // if
+   else
+   {   // ISA_CARD or LPT_CARD: both have a PCF8584 controller
+       // If the IC expects a read, we must first tell the addressed IC
+       // that we want to write.
+       err = wait_byte();
+       if (err != I2C_NOERR)
+       {
+          return err; // exit if error
+       } // if
 
-   if ((ic_adr & RWb) == RWb)
-   {
-      ic_adr &= ~RWb;            // clear R/W_ bit
-      err = i2c_address(address); // prepare bus for writing
-   } // if
+       if ((ic_adr & RWb) == RWb)
+       {
+          ic_adr &= ~RWb;            // clear R/W_ bit
+          err = i2c_address(address); // prepare bus for writing
+       } // if
 
-   full = FALSE;
-   while ((b < bytes) && !full && (err == I2C_NOERR))
-   {
-      last_start = FALSE;
-      write_S023(p[b++]); // send byte
-      pauze();
-      err  = wait_byte();    // wait until byte is sent
-      full = ((read_S1() & LRBb) == LRBb); // test Last Received Bit (= ACK_)
-      pauze();
-   } // while
-   return err; // return error code
+       full = FALSE;
+       while ((b < bytes) && !full && (err == I2C_NOERR))
+       {
+          last_start = FALSE;
+          write_S023(p[b++]); // send byte
+          pauze();
+          err  = wait_byte();    // wait until byte is sent
+          full = ((read_S1() & LRBb) == LRBb); // test Last Received Bit (= ACK_)
+          pauze();
+       } // while
+       return err; // return error code
+   } // else
 } // i2c_write()
 
 extern "C" __declspec(dllexport) int __stdcall i2c_read(byte address, byte *p, int bytes)
@@ -845,32 +1016,45 @@ extern "C" __declspec(dllexport) int __stdcall i2c_read(byte address, byte *p, i
                     I2C_TIMEOUT : I2C bus time-out error
   ------------------------------------------------------------------*/
 {
-   int b   = 0;         // counter for #bytes to read
-   int err = I2C_NOERR; // error return-value
+   int  b   = 0;         // counter for #bytes to read
+   int  err = I2C_NOERR; // error return-value
+   bool last;
 
-   // If the IC expects a write, we must first tell the addressed IC
-   // that we want to read.
-   err = wait_byte();
-   if (err != I2C_NOERR)
+   if (i2c_method == VELLEMAN_CARD)
    {
-      return err; // exit if error
-   } // if
+      while (b < bytes)
+      {
+         last = (b == bytes-1);
+         p[b++] = i2c_input_bb(last); // read byte, send (N)ACK
+      } // for
+      return I2C_NOERR;
+   }
+   else
+   {   // ISA_CARD or LPT_CARD: both have a PCF8584 controller
+       // If the IC expects a write, we must first tell the addressed IC
+       // that we want to read.
+       err = wait_byte();
+       if (err != I2C_NOERR)
+       {
+          return err; // exit if error
+       } // if
 
-   if ((ic_adr & RWb) == 0x00)
-   {
-      ic_adr |= RWb; // set R/W_ bit
-      err = i2c_address(address); // prepare bus for reading
-   } // if
+       if ((ic_adr & RWb) == 0x00)
+       {
+          ic_adr |= RWb; // set R/W_ bit
+          err = i2c_address(address); // prepare bus for reading
+       } // if
 
-   while ((b < bytes) && (err == I2C_NOERR))
-   {
-      last_start = FALSE;       // flag: last action was NOT start
-      err        = wait_byte(); // wait on reception of next byte
-      p[b++]     = read_S023(); // read byte
-      pauze();
-   } // while
-   p[b] = '\0'; // close array properly
-   return err; // return error-code
+       while ((b < bytes) && (err == I2C_NOERR))
+       {
+          last_start = FALSE;       // flag: last action was NOT start
+          err        = wait_byte(); // wait on reception of next byte
+          p[b++]     = read_S023(); // read byte
+          pauze();
+       } // while
+       p[b] = '\0'; // close array properly
+       return err; // return error-code
+   } // else
 } // i2c_read()
 
 /*------------------------------------------------------------------
@@ -884,28 +1068,40 @@ extern "C" __declspec(dllexport) int __stdcall i2c_stop(void)
 {
    int err = I2C_NOERR; // error return-value
 
-   err = wait_byte();   // wait for on-going actions
-   if (err != I2C_NOERR)
+   if (i2c_method == VELLEMAN_CARD)
    {
-      ClosePortTalk();
-      return err;
-   } // if
-   if ((ic_adr & RWb) == RWb) // Is slave still transmitting?
-   {
-      err = terminate_read(); // If so, terminate transmission
-      if (err != I2C_NOERR)
-      {
-         ClosePortTalk();
-         return err;
-      } // if
-   } // if
-   write_S1(0x42);         // set STOP condition through S1 register
-   pauze();
-   write_S023(0x42);       // generate STOP condition
-   pauze();
-   err = i2c_berr_check(); // check for I2C bus-error
-   write_S1(0x00);         // turn serial interface OFF
-   pauze();
+      outportb(lpt_ctrl,I2C_SCL0_SDA0); // just to make sure that SCL = SDA = 0
+      pauze();
+      outportb(lpt_ctrl,I2C_SCL1_SDA0); // generate stop condition
+      pauze();
+      outportb(lpt_ctrl,I2C_IDLE);      // I2C bus is idle
+      pauze();
+   }
+   else
+   {   // ISA_CARD or LPT_CARD: both have a PCF8584 controller
+       err = wait_byte();   // wait for on-going actions
+       if (err != I2C_NOERR)
+       {
+          ClosePortTalk();
+          return err;
+       } // if
+       if ((ic_adr & RWb) == RWb) // Is slave still transmitting?
+       {
+          err = terminate_read(); // If so, terminate transmission
+          if (err != I2C_NOERR)
+          {
+             ClosePortTalk();
+             return err;
+          } // if
+       } // if
+       write_S1(0x42);         // set STOP condition through S1 register
+       pauze();
+       write_S023(0x42);       // generate STOP condition
+       pauze();
+       err = i2c_berr_check(); // check for I2C bus-error
+       write_S1(0x00);         // turn serial interface OFF
+       pauze();
+   } // else
    ClosePortTalk();
    return err;
 } // i2c_stop()
