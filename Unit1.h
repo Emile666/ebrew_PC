@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.18  2004/02/01 14:47:14  emile
+// - Rebuild with new i2c_dll version. The SCL clock frequency is now reset
+//   to 10 kHz again (the 90 kHz caused frequent lock-ups of the I2C bus)
+// - All GUI related updates are removed from the timer routine and are
+//   stored in a separate Idle routine (ebrew_idle_handler). This routine
+//   runs in the background, which has a great impact on the CPU load.
+// - The timer routine (T50msec2Timer) now only contains the I2C IO and no
+//   longer any screen object updates.
+//
 // Revision 1.17  2004/01/31 21:28:24  emile
 // - cvs revision number now added to About Screen
 // - Hints added to objects on MainForm
@@ -262,7 +271,7 @@ private:	// User declarations
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
         void __fastcall Restore_Settings(void);
-        void __fastcall Reset_I2C_Bus(int i2c_bus_id);
+        void __fastcall Reset_I2C_Bus(int i2c_bus_id, int err);
         timer_vars      tmr;        // struct with timer variables
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         ma              str_vmlt;   // Struct for MA5 filter for pressure transducer

@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.22  2004/02/01 14:47:13  emile
+// - Rebuild with new i2c_dll version. The SCL clock frequency is now reset
+//   to 10 kHz again (the 90 kHz caused frequent lock-ups of the I2C bus)
+// - All GUI related updates are removed from the timer routine and are
+//   stored in a separate Idle routine (ebrew_idle_handler). This routine
+//   runs in the background, which has a great impact on the CPU load.
+// - The timer routine (T50msec2Timer) now only contains the I2C IO and no
+//   longer any screen object updates.
+//
 // Revision 1.21  2004/01/31 21:28:24  emile
 // - cvs revision number now added to About Screen
 // - Hints added to objects on MainForm
@@ -337,7 +346,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
 
          Reg->CloseKey();      // Close the Registry
-         init_adc(&padc);      // Calculate ADC converstion constants
+         init_adc(&padc);      // Calculate ADC conversion constants
          init_pid2(&pid_pars); // Init. PID controller
          // Do NOT delete Reg yet, since we need it further on
       } // if
@@ -1018,17 +1027,36 @@ void __fastcall TMainForm::MenuHelpAboutClick(TObject *Sender)
 } // TMainForm::About1Click()
 //---------------------------------------------------------------------------
 
-void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id)
+void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
 /*------------------------------------------------------------------
   Purpose  : This routine reset the I2C bus in case of an error.
-             The user needs to turn the power off and then of again
-             (of the electronics, NOT the PC!).
+             The user needs to turn the power off and then on again
+             (of the electronics, NOT the PC!), only when i2c_stop()
+             was not successful.
   Returns  : None
   ------------------------------------------------------------------*/
 {
    char tmp_str[80];    // temp string for calculations
+   char err_txt[40];    // temp string for error message
 
-   sprintf(tmp_str,"Error accessing I2C bus device ID 0x%2x",i2c_bus_id);
+   switch (err)
+   {
+      case I2C_BERR:     strcpy(err_txt,I2C_BERR_MSG);
+                         break;
+      case I2C_BB:       strcpy(err_txt,I2C_BB_MSG);
+                         break;
+      case I2C_TIMEOUT:  strcpy(err_txt,I2C_TO_MSG);
+                         break;
+      case I2C_ARGS:     strcpy(err_txt,I2C_ARGS_MSG);
+                         break;
+      case I2C_PT:       strcpy(err_txt,I2C_PT_MSG);
+                         break;
+      case I2C_LM92_ERR: strcpy(err_txt,I2C_LM92_MSG);
+                         break;
+      default:           sprintf(err_txt,"Unknown Error (%d)",err);
+                         break;
+   }
+   sprintf(tmp_str,"%s while accessing I2C device 0x%2x",err_txt,i2c_bus_id);
    if (i2c_stop() != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
       MessageBox(NULL,"i2c_stop() not successful: Cycle power Off -> On, then press OK button.",tmp_str,MB_OK);
@@ -1129,7 +1157,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        // Read values from all AD Coverters
        if (hw_status & ADDA_OK)
        {
-          read_adc(&padc); // Read the value of all ADCs
+          err = read_adc(&padc); // Read the value of all ADCs
+          if (err) Reset_I2C_Bus(ADDA_BASE,err);
        }
        else
        {
@@ -1146,7 +1175,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
           padc.ad1 = lm92_read(0); // Read HLT temp. from LM92 device
           if (padc.ad1 == LM92_ERR)
           {
-             Reset_I2C_Bus(LM92_1_BASE);
+             Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
           } // if
        } // if
        if (hw_status & LM92_2_OK)
@@ -1154,7 +1183,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
           padc.ad2 = lm92_read(1); // Read MLT temp. from LM92 device
           if (padc.ad2 == LM92_ERR)
           {
-             Reset_I2C_Bus(LM92_2_BASE);
+             Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
           } // if
        } // if
 
@@ -1250,9 +1279,13 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       // Now update the LEDs with the proper values by calling macro SET_LED
       //      HW_BIT, which display, which var., Visibility
       SET_LED(LED1_OK,1,led1,led1_vis);
+      if (err) Reset_I2C_Bus(LED1_BASE,err);
       SET_LED(LED2_OK,2,led2,led2_vis);
+      if (err) Reset_I2C_Bus(LED2_BASE,err);
       SET_LED(LED3_OK,3,led3,led3_vis);
+      if (err) Reset_I2C_Bus(LED3_BASE,err);
       SET_LED(LED4_OK,4,led4,led4_vis);
+      if (err) Reset_I2C_Bus(LED4_BASE,err);
    } // else if
    //--------------------------------------------------------------------------
    // Fifth time-slice: Calculate State Transition Diagram (STD) and determine
@@ -1278,7 +1311,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       //-----------------------------------------------------------------
       if (hw_status & DIG_IO_MSB_OK)
       {
-         WriteIOByte((byte)(std_out & 0x00FE),MSB_IO);
+         err = WriteIOByte((byte)(std_out & 0x00FE),MSB_IO);
+         if (err) Reset_I2C_Bus(DIG_IO_MSB_BASE,err);
       } // if
    } // else if
    //--------------------------------------------------------------------------
@@ -1331,7 +1365,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-------------------------------------------------
    if (hw_status & DIG_IO_LSB_OK)
    {
-      WriteIOByte(~value,LSB_IO); // Write inverted value to IO port
+      err = WriteIOByte(~value,LSB_IO); // Write inverted value to IO port
+      if (err) Reset_I2C_Bus(DIG_IO_MSB_BASE,err);
    } // if
 } // TMainForm::T50msecTimer()
 //---------------------------------------------------------------------------
@@ -1862,4 +1897,6 @@ void __fastcall TMainForm::FormCreate(TObject *Sender)
    Application->OnIdle = ebrew_idle_handler;
 } // TMainForm::FormCreate()
 //---------------------------------------------------------------------------
+
+
 

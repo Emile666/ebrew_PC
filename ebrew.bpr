@@ -64,7 +64,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=1
 Release=0
-Build=36
+Build=41
 Debug=0
 PreRelease=0
 Special=0
@@ -76,7 +76,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=de Boezem
 FileDescription=ebrew automates the HERMS home-brewery, web-site: www.vandelogt.nl
-FileVersion=1.1.0.36
+FileVersion=1.1.0.41
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=
@@ -84,6 +84,9 @@ OriginalFilename=
 ProductName=
 ProductVersion=V1.0
 Comments=
+
+[Excluded Packages]
+C:\WINDOWS\SYSTEM32\ibsmp40.bpl=Borland C++ InterBase Alerter Component
 
 [HistoryLists\hlIncludePath]
 Count=9
@@ -98,17 +101,18 @@ Item7=..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\in
 Item8=$(BCB)\include;$(BCB)\include\vcl
 
 [HistoryLists\hlLibraryPath]
-Count=10
-Item0=$(BCB)\Projects\Lib;$(BCB)\Lib\tiw;..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item1=..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item2=i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item3=..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item4=..\..\..\Programming\bc\c\PSP\REUSE;..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item5=..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item6=..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item7=..\;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item8=..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item9=$(BCB)\lib\obj;$(BCB)\lib
+Count=11
+Item0=\\pc-emile\c\program files\borland\cbuilder4\Lib;$(BCB)\Projects\Lib;$(BCB)\Lib\tiw;..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item1=$(BCB)\Projects\Lib;$(BCB)\Lib\tiw;..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item2=..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item3=i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item4=..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item5=..\..\..\Programming\bc\c\PSP\REUSE;..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item6=..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item7=..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item8=..\;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item9=..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item10=$(BCB)\lib\obj;$(BCB)\lib
 
 [HistoryLists\hlDebugSourcePath]
 Count=1
