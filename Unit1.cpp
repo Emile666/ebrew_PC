@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.16  2003/12/21 13:39:40  emile
+// - Writing to LSB_IO: all bits are inverted, because hardware is modified to
+//   enable sinking instead of sourcing.
+//
 // Revision 1.15  2003/09/24 21:01:18  emile
 // - lm92_read() function: no second read if first read already returns with an error.
 // - Reset_I2C_Bus() function added. Called when lm92_read() returns with an error.
@@ -101,13 +105,13 @@
 #include "FixParamsDialog.h"
 #include "PID_Settings_Dialog.h"
 #include "I2CSettingsDialog.h"
-#include "About_Form.h"
 #include "EditMashScheme.h"
 #include "ViewMashProgressForm.h"
 #include "DataGraphForm.h"
 #include "Sparge_Settings.h"
 #include "RestoreSettings.h"
 #include "misc.h"
+#include "VersionAwareAbout.h"
 #include <Dialogs.hpp>
 
 #include "i2c_dll.h"
@@ -936,12 +940,9 @@ void __fastcall TMainForm::MenuHelpAboutClick(TObject *Sender)
   Returns  : None
   ------------------------------------------------------------------*/
 {
-   TAbout *ptmp;
-
-   ptmp = new TAbout(this);
-   ptmp->ShowModal();
-   delete ptmp;
-   ptmp = 0; // NULL the pointer
+   Application->CreateForm(__classid(TVersionAwareAbout), &VersionAwareAbout);
+   VersionAwareAbout->ShowModal();
+   delete VersionAwareAbout;
 } // TMainForm::About1Click()
 //---------------------------------------------------------------------------
 

@@ -15,14 +15,13 @@ VERSION = BCB.04.04
 # ---------------------------------------------------------------------------
 PROJECT = ebrew.exe
 OBJFILES = O\ebrew.obj O\Unit1.obj O\PID_Settings_Dialog.obj O\FixParamsDialog.obj \
-  O\I2CSettingsDialog.obj O\MISC.obj O\PID_REG.obj O\About_Form.obj \
-  O\EditMashScheme.obj O\ViewMashProgressForm.obj O\DataGraphForm.obj \
-  O\Sparge_Settings.obj O\i2c_dll.obj O\RestoreSettings.obj
+  O\I2CSettingsDialog.obj O\MISC.obj O\PID_REG.obj O\EditMashScheme.obj \
+  O\ViewMashProgressForm.obj O\DataGraphForm.obj O\Sparge_Settings.obj \
+  O\i2c_dll.obj O\RestoreSettings.obj O\VersionAwareAbout.obj
 RESFILES = ebrew.res
 RESDEPEN = $(RESFILES) Unit1.dfm PID_Settings_Dialog.dfm FixParamsDialog.dfm \
-  I2CSettingsDialog.dfm About_Form.dfm EditMashScheme.dfm \
-  ViewMashProgressForm.dfm DataGraphForm.dfm Sparge_Settings.dfm \
-  RestoreSettings.dfm
+  I2CSettingsDialog.dfm EditMashScheme.dfm ViewMashProgressForm.dfm \
+  DataGraphForm.dfm Sparge_Settings.dfm RestoreSettings.dfm VersionAwareAbout.dfm
 LIBFILES =
 LIBRARIES = AnimTimer.lib
 SPARELIBS = VCL40.lib VCLJPG40.lib AnimTimer.lib bcbsmp40.lib VCLX40.lib
@@ -63,9 +62,9 @@ ALLLIB = $(LIBFILES) $(LIBRARIES) import32.lib cp32mt.lib
 IncludeVerInfo=1
 AutoIncBuild=1
 MajorVer=1
-MinorVer=0
+MinorVer=1
 Release=0
-Build=24
+Build=35
 Debug=0
 PreRelease=0
 Special=0
@@ -75,15 +74,15 @@ Locale=1043
 CodePage=1252
 
 [Version Info Keys]
-CompanyName=E. vd Logt
-FileDescription=E-Brewing
-FileVersion=1.0.0.24
+CompanyName=de Boezem
+FileDescription=ebrew automates the HERMS home-brewery, web-site: www.vandelogt.nl
+FileVersion=1.1.0.35
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=
 OriginalFilename=
 ProductName=
-ProductVersion=1.0.0.0
+ProductVersion=V1.0
 Comments=
 
 [HistoryLists\hlIncludePath]
