@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.15  2003/09/24 21:01:18  emile
+// - lm92_read() function: no second read if first read already returns with an error.
+// - Reset_I2C_Bus() function added. Called when lm92_read() returns with an error.
+// - LED Display update: time-slice now every second (was every TS seconds)
+// - hw_status is set to 0 if i2c_start() returns with an error
+//
 // Revision 1.14  2003/09/15 20:37:21  emile
 // - LM76 constants renamed in LM92 constants
 // - Pump Popupmenu added (same as already done for the valves)
@@ -636,7 +642,7 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
 
    if (hw_status & DIG_IO_LSB_OK)
    {
-      err = WriteIOByte(0x00,LSB_IO); // disable heater, alive LED & PUMP
+      err = WriteIOByte(0xFF,LSB_IO); // disable heater, alive LED & PUMP
       sprintf(s,"Error %d while closing LSB_IO",err);
       if (err) MessageBox(NULL,s,"ERROR",MB_OK);
    } // if
@@ -1342,12 +1348,14 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       value &= ~PUMPb;
    } // else
 
-   //---------------------------------------
+   //-------------------------------------------------
    // Output value to IO port every 50 msec.
-   //---------------------------------------
+   // See misc.h for bit definitions
+   // Bits are inverted, because they are active low
+   //-------------------------------------------------
    if (hw_status & DIG_IO_LSB_OK)
    {
-      WriteIOByte(value,LSB_IO); // Write value to IO port
+      WriteIOByte(~value,LSB_IO); // Write inverted value to IO port
    } // if
 } // TMainForm::T50msecTimer()
 //---------------------------------------------------------------------------
