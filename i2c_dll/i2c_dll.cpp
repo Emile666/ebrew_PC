@@ -36,6 +36,10 @@
 //           The DLL is built with Borland C++ Builder 4.0.
 // ----------------------------------------------------------------------------
 // $Log$
+// Revision 1.15  2004/02/25 13:09:10  emile
+// - Bug-fix: only close PortTalk device when it is open. Introduced the
+//            variable 'pt_opened' and the macro 'CLOSE_PORTTALK' for this.
+//
 // Revision 1.14  2004/02/25 09:40:18  emile
 // - Several comments added and updated.
 // - fscl_values[] + comments added to i2c_dll.cpp
@@ -126,9 +130,6 @@
 #include <conio.h>
 #include <time.h>
 
-//---------------------------------------------------------------------------
-//USERES("i2c_dll.res");
-//---------------------------------------------------------------------------
 #pragma argsused
 
 //---------------------------------------------------------
@@ -291,7 +292,6 @@ static int led_decode[] = {0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
 #define ADDA_CONTROL_BYTE (0x44)
 #define ADDA_BUF          (0x05)
 
-
 //---------------------------
 // Internal i2c_dll variables
 //---------------------------
@@ -299,7 +299,6 @@ static byte last_start;   // TRUE = Last action on bus was start
 static byte ic_adr;       // Currently addressed IC and R/W_ bit
 
 static byte win_nt;       // TRUE = Windows NT, 2000, XP; FALSE = Win 95,98,ME
-static byte pt_opened;    // TRUE = PortTalk device is opened successfully
 static byte i2c_method;   // [ISA_CARD, LPT_CARD]
 static byte clock_reg_S2; // Init. value for S2 clock register of PCF8584
 static int  S023;         // Registers S0, S2 and S3 of PCF8584
@@ -597,18 +596,10 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
    int err   = I2C_NOERR; // error return-value
 
    win_nt    = win_ver;
-   pt_opened = FALSE; // init. to PortTalk device NOT opened
 
-   if (win_nt)
+   if (win_nt && (OpenPortTalk() == -1))
    {
-      if (OpenPortTalk() == -1)
-      {
-         return I2C_PT;
-      }
-      else
-      {
-         pt_opened = TRUE; //true = PortTalk device opened
-      } // else
+      return I2C_PT;
    } // if
 
    switch (address)
@@ -896,14 +887,16 @@ extern "C" __declspec(dllexport) int __stdcall i2c_stop(void)
    err = wait_byte();   // wait for on-going actions
    if (err != I2C_NOERR)
    {
-      CLOSE_PORTTALK;  // MACRO, defined in i2c_dll.h
+      ClosePortTalk();
+      return err;
    } // if
    if ((ic_adr & RWb) == RWb) // Is slave still transmitting?
    {
       err = terminate_read(); // If so, terminate transmission
       if (err != I2C_NOERR)
       {
-         CLOSE_PORTTALK;   // MACRO, defined in i2c_dll.h
+         ClosePortTalk();
+         return err;
       } // if
    } // if
    write_S1(0x42);         // set STOP condition through S1 register
@@ -913,7 +906,8 @@ extern "C" __declspec(dllexport) int __stdcall i2c_stop(void)
    err = i2c_berr_check(); // check for I2C bus-error
    write_S1(0x00);         // turn serial interface OFF
    pauze();
-   CLOSE_PORTTALK;         // MACRO, defined in i2c_dll.h
+   ClosePortTalk();
+   return err;
 } // i2c_stop()
 
 extern "C" __declspec(dllexport) int __stdcall set_led(int number, int dp, int which_led, int visibility)
@@ -1202,7 +1196,7 @@ extern "C" __declspec(dllexport) int __stdcall eewrite(int addr, byte *p, byte n
    x    = (byte)(addr & 0x0ff);
    res |= i2c_write(FM24C08_BASE,&x,1); // write byte address
    res |= i2c_write(FM24C08_BASE,p,nr); // write data
-   res |= i2c_stop(); // Gen. stop condition = start write to EEPROM
+   res |= i2c_stop();  // Gen. stop condition = start write to EEPROM
    res |= i2c_start(); // Gen. start condition again
    return res;
 } // eewrite()
