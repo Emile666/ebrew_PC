@@ -24,6 +24,10 @@
 //                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
 //                        - PortTalk interface added (nt_in(), nt_out())
 // $Log$
+// Revision 1.3  2002/11/18 18:34:02  emile
+// - MAX6626 constants replaced by LM76 constants.
+// - lm76_read() function added.
+//
 // Revision 1.2  2002/09/18 17:05:35  emile
 // Added cvs tags
 //
@@ -1128,6 +1132,7 @@ extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc)
    int    res = I2C_NOERR;   // return result
    byte   buffer[2];         // array to store data from i2c_read()
    int    temp_int;          // the temp. from the LM76 as an integer
+   int    sign;              // sign of temperature
    double temp;              // the temp. from the LM76 as a double
 
    if (dvc == 0)
@@ -1150,8 +1155,18 @@ extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc)
    temp_int &= 0xff00;        // Clear bits 7..0
    temp_int |= buffer[1];     // Add bits D4..D0 to temp_int bits 7..3
    temp_int &= 0xFFF8;        // Clear Crit High & Low bits
+   sign = ((temp_int & LM76_SIGNb) == LM76_SIGNb);
+   if (sign)
+   {
+      temp_int &= ~LM76_SIGNb;        // Clear sign bit
+      temp_int  = LM76_FS - temp_int; // Convert two complement number
+   } // if
    temp = (double)temp_int / 128.0; // SHR 3 (= 8) + multiply by 0.0625 (= 1/16)
-   return temp;               // Return value now in °C
+   if (sign)
+   {
+      temp = -temp; // negate number
+   } // if
+   return temp;     // Return value now in °C
 } // lm76_read()
 
 //---------------------------------------------------------------------------

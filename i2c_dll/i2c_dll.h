@@ -44,8 +44,18 @@
 #define I2C_ARGS_MSG   "Wrong argument"
 #define I2C_PT_MSG     "PortTalk Error"
 
+// The LM76 sign bit is normally bit 12. The value read from the
+// LM76 is SHL3. Therefore the sign bit is at bit 15
+// Same for the Full Scale value, normally 2^12 SHL3 = 2^15.
+#define LM76_SIGNb     (0x8000)
+#define LM76_FS        (32768)
+
+#ifndef FALSE
 #define FALSE (0)
+#endif
+#ifndef TRUE
 #define TRUE  (!FALSE)
+#endif
 
 #define LSB_IO (0)
 #define MSB_IO (1)
