@@ -5,6 +5,9 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2003/06/01 19:36:34  emile
+// - Switch/Fix added for Vmlt
+//
 // Revision 1.3  2003/06/01 14:08:06  emile
 // - Same as previous log entry: CVS and BCB got confused => saved old files.
 //
@@ -98,6 +101,13 @@ void __fastcall TFix_Params::CB_vmltClick(TObject *Sender)
 void __fastcall TFix_Params::Vmlt_MEditClick(TObject *Sender)
 {
    Vmlt_MEdit->SelectAll();
+}
+//---------------------------------------------------------------------------
+
+#define IDH_FIXPARAMETERS (0x010050)
+void __fastcall TFix_Params::Help_ButtonClick(TObject *Sender)
+{
+   Application->HelpContext(IDH_FIXPARAMETERS);
 }
 //---------------------------------------------------------------------------
 

@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.27  2004/02/25 18:51:05  emile
+// - Separate Start_I2C_Communication routine created
+// - 'T50msec->Enabled = False' removed. This caused lots of problems. Once
+//   enabled, always leave it like that (possible bug in TAnimTimer).
+// - Menu option 'View|Check I2C HW devices' added
+// - CVS revision is now also printed to the log-file
+//
 // Revision 1.26  2004/02/25 10:07:38  emile
 // - fscl_values[] now moved to i2c_dll.cpp
 // - bug-fix in exit routine: no i2c_stop error message if hw_status == 0
@@ -588,10 +595,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
    time_switch                            = 0;    // Time switch disabled at power-up
    delete Reg; // Delete Registry object to prevent memory leak
 } // Main_Initialisation()
-
 //---------------------------------------------------------------------------
-__fastcall TMainForm::TMainForm(TComponent* Owner)
-        : TForm(Owner)
+
+__fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 /*------------------------------------------------------------------
   Purpose  : This is the main constructor for the program.
   Returns  : None
@@ -902,21 +908,21 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
    {
       ptmp->Gamma_MEdit->Text = AnsiString(swfx.gamma_fx); // Set fix value
    } // if
-   // Set Ref. Temp (Tset_hlt)
-   ptmp->CB_Tset->Checked = swfx.tset_sw; // Set Checkbox for Tset
-   if (swfx.tset_sw)
+   // Set HLT Reference Temperature (tset_hlt)
+   ptmp->CB_Tset->Checked = swfx.tset_hlt_sw; // Set Checkbox for Tset
+   if (swfx.tset_hlt_sw)
    {
-      ptmp->Tset_MEdit->Text = AnsiString(swfx.tset_fx); // Set fix value
+      ptmp->Tset_MEdit->Text = AnsiString(swfx.tset_hlt_fx); // Set fix value
    } // if
-   ptmp->CB_Tad1->Checked = swfx.tad1_sw; // Set Checkbox for Tad1
-   if (swfx.tad1_sw)
+   ptmp->CB_Tad1->Checked = swfx.thlt_sw; // Set Checkbox for Thlt
+   if (swfx.thlt_sw)
    {
-      ptmp->Tad1_MEdit->Text = AnsiString(swfx.tad1_fx); // Set fix value
+      ptmp->Tad1_MEdit->Text = AnsiString(swfx.thlt_fx); // Set fix value
    } // if
-   ptmp->CB_Tad2->Checked = swfx.tad2_sw; // Set Checkbox for Tad1
-   if (swfx.tad2_sw)
+   ptmp->CB_Tad2->Checked = swfx.tmlt_sw; // Set Checkbox for Tmlt
+   if (swfx.tmlt_sw)
    {
-      ptmp->Tad2_MEdit->Text = AnsiString(swfx.tad2_fx); // Set fix value
+      ptmp->Tad2_MEdit->Text = AnsiString(swfx.tmlt_fx); // Set fix value
    } // if
    ptmp->CB_std->Checked = swfx.std_sw; // Set Checkbox for Tad1
    if (swfx.std_sw)
@@ -938,24 +944,22 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
          swfx.gamma_fx = ptmp->Gamma_MEdit->Text.ToDouble();
       } // if
       // Get Ref. Temp (Tset_hlt)
-      swfx.tset_sw = ptmp->CB_Tset->Checked;
-      if (swfx.tset_sw)
+      swfx.tset_hlt_sw = ptmp->CB_Tset->Checked;
+      if (swfx.tset_hlt_sw)
       {
-         swfx.tset_fx = ptmp->Tset_MEdit->Text.ToDouble();
+         swfx.tset_hlt_fx = ptmp->Tset_MEdit->Text.ToDouble();
       } // if
-      // Get Temp from AD1(Tad1)
-      swfx.tad1_sw = ptmp->CB_Tad1->Checked;
-      if (swfx.tad1_sw)
+      // Get Thlt
+      swfx.thlt_sw = ptmp->CB_Tad1->Checked;
+      if (swfx.thlt_sw)
       {
-         // Max. value for Tad1 = ADDA_VREF E-1 °C
-         swfx.tad1_fx = ptmp->Tad1_MEdit->Text.ToDouble();
+        swfx.thlt_fx = ptmp->Tad1_MEdit->Text.ToDouble();
       } // if
-      // Get Temp from AD2(Tad2)
-      swfx.tad2_sw = ptmp->CB_Tad2->Checked;
-      if (swfx.tad2_sw)
+      // Get Tmlt
+      swfx.tmlt_sw = ptmp->CB_Tad2->Checked;
+      if (swfx.tmlt_sw)
       {
-         // Max. value for Tad2 = ADDA_VREF E-1 °C
-         swfx.tad2_fx = ptmp->Tad2_MEdit->Text.ToDouble();
+         swfx.tmlt_fx = ptmp->Tad2_MEdit->Text.ToDouble();
       } // if
       // Get STD state
       swfx.std_sw = ptmp->CB_std->Checked;
@@ -965,7 +969,7 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
          swfx.std_fx = ptmp->STD_MEdit->Text.ToInt();
          if (swfx.std_fx < 0 || swfx.std_fx > S12_CHILL)
          {
-            swfx.std_fx = 0; // reset to a save value
+            swfx.std_fx = 0; // reset to a safe value
          }
       } // if
       // Get Vmlt value
@@ -1205,6 +1209,137 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
       Main_Initialisation(); // continue with init. process
    } // else
 } // TMainForm::Reset_I2C_bus()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::Generate_IO_Signals(void)
+/*------------------------------------------------------------------
+  Purpose  : This routines does the following (called every 50 msec.)
+             1) It calculates a new pulse for Gamma, the triac control.
+                Example: Gamma = 60 % => output is 60 times '1' and
+                40 times '0'.
+
+                      '1'          |-----------|
+                                   |           |
+                      '0' |--------|  Gamma    |---------
+                             40%       60%
+             2) It calculates the Alive bit (blinking LED)
+             3) It calculates the Pump bit (control pump on/off)
+             4) It sends all signals to the PCF8574 I2C IO device
+  Variables: The timer variables in tmr (Unit1.h) are used and updated.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   int lsb_io = 0x00; // init. byte to write to DIG_IO_LSB_BASE
+   int err    = 0;    // I2C error return value
+
+   switch (tmr.isrstate)
+   {
+      case 0: //---------------------------------------------------------
+              // State 0: Enable heating element
+              // Goto 'disable heating element' if triac_too_hot or
+              //                          (timeout_htimer && !100%_gamma)
+              //---------------------------------------------------------
+              if (triac_too_hot)
+              {
+                 lsb_io &= ~HEATERb; // set heater OFF
+                 tmr.isrstate = 1;   // go to 'disable heater' state
+                 tmr.ltimer   = tmr.time_low; // init. low-timer
+              }
+              else if (tmr.htimer == 0)
+              {  // timer has counted down
+                 if (tmr.time_low == 0)
+                 {  // indication for 100% gamma, remain in this state
+                    tmr.htimer = tmr.time_high; // init. high-timer again
+                    lsb_io |= HEATERb; // Set heater ON
+                 }
+                 else
+                 {
+                    lsb_io &= ~HEATERb; // set heater OFF
+                    tmr.isrstate = 1;   // go to 'disable heater' state
+                    tmr.ltimer   = tmr.time_low; // init. low-timer
+                 } // else
+              } // if
+              else
+              {  // timer has not counted down yet, continue
+                 lsb_io |= HEATERb; // Set heater ON
+                 tmr.htimer--;      // decrement high-timer
+              } /* else */
+              break;
+
+      case 1: //---------------------------------------------------------
+              // State 1: Disable heating element
+              // Goto 'enable heating element' if timeout_ltimer &&
+              //                                  !0%_gamma && !triac_too_hot
+              //---------------------------------------------------------
+              if (tmr.ltimer == 0)
+              {  // timer has counted down
+                 if (tmr.time_high == 0)
+                 {
+                    // indication for 0% gamma, remain in this state
+                    tmr.ltimer = tmr.time_low; // init. timer again
+                    lsb_io &= ~HEATERb; // set heater OFF
+                 }
+                 else if (!triac_too_hot)
+                 {
+                    lsb_io |= HEATERb; // set heater ON
+                    tmr.isrstate = 0;  // go to 'enable heater' state
+                    tmr.htimer   = tmr.time_high; // init. high-timer
+                 } // else if
+                 // Remain in this state if timeout && !0% && triac_too_hot
+              } // if
+              else
+              {
+                 // timer has not counted down yet, continue
+                 lsb_io &= ~HEATERb; // Set heater OFF
+                 tmr.ltimer--; // decrement low-timer
+              } // else
+              break;
+
+      default:  tmr.isrstate = 1;
+                break;
+   } // case
+
+   //------------------------------------------------------------------
+   // Calculate alive toggle bit to see if this routine is still alive
+   //------------------------------------------------------------------
+   if (++tmr.alive_tmr >= ALIVE_TICKS)
+   {
+     tmr.alive_tmr = 0;          // reset timer
+     tmr.alive     = !tmr.alive; // invert alive (bit 1 of IO port)
+   } // if
+   if (tmr.alive)
+   {
+      lsb_io &= ~ALIVEb; // Enable alive LED
+   }
+   else
+   {
+      lsb_io |= ALIVEb;  // Disable alive LED
+   } // else
+
+   //--------------------------------------------
+   // Send Pump On/Off signal to DIG_IO_LSB_BASE.
+   //--------------------------------------------
+   if (std_out & P0b)
+   {
+      lsb_io |= PUMPb;
+   }
+   else
+   {
+      lsb_io &= ~PUMPb;
+   } // else
+
+   //-------------------------------------------------
+   // Output lsb_io to IO port every 50 msec.
+   // (see misc.h for bit definitions)
+   // Bits are inverted, because they are active low
+   //-------------------------------------------------
+   if (hw_status & DIG_IO_LSB_OK)
+   {
+      err = WriteIOByte(~lsb_io,LSB_IO); // Write inverted value to IO port
+      if (err) Reset_I2C_Bus(DIG_IO_LSB_BASE,err);
+   } // if
+} // Generate_IO_Signals()
+//---------------------------------------------------------------------------
 
 void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
 /*------------------------------------------------------------------
@@ -1215,68 +1350,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
   Returns  : None
   ------------------------------------------------------------------*/
 {
-   int        value = 0x00;  // init. byte to write to DIG_IO_LSB_BASE
    int        err = 0;       // error return value, needed for SET_LED macro
    TDateTime  td_now;        // holds current date and time
-
-   switch (tmr.isrstate)
-   {
-      case 0: /* enable heater */
-              if (triac_too_hot)
-              {
-                 value &= ~HEATERb; // set heater OFF
-                 tmr.isrstate = 1;  // go to 'disable heater' state
-                 tmr.ltimer   = tmr.time_low; // init. timer
-              }
-              else if (tmr.htimer == 0)
-              {  /* timer has counted down */
-                 if (tmr.time_low == 0)
-                 {  /* indication for 100% gamma, remain in this state */
-                    tmr.htimer = tmr.time_high; /* init. timer again */
-                    value |= HEATERb; // Set heater ON
-                 }
-                 else
-                 {
-                    value &= ~HEATERb; // set heater OFF
-                    tmr.isrstate = 1; /* go to 'disable heater' state */
-                    tmr.ltimer   = tmr.time_low; /* init. timer */
-                 } /* else */
-              } /* if */
-              else
-              {  /* timer has not counted down yet, continue */
-                 value |= HEATERb; // Set heater ON
-                 tmr.htimer--; /* decrement timer */
-              } /* else */
-              break;
-
-      case 1: /* disable heater */
-              if (tmr.ltimer == 0)
-              {  /* timer has counted down */
-                 if (tmr.time_high == 0)
-                 {
-                    /* indication for 0% gamma, remain in this state */
-                    tmr.ltimer = tmr.time_low; /* init. timer again */
-                    value &= ~HEATERb; // set heater OFF
-                 }
-                 else if (!triac_too_hot)
-                 {
-                    value |= HEATERb; // set heater ON
-                    tmr.isrstate = 0; /* go to 'enable heater' state */
-                    tmr.htimer   = tmr.time_high; /* init. timer */
-                 } /* else if*/
-                 // Remain in this state if timeout && !0% && triac_too_hot
-              } /* if */
-              else
-              {
-                 /* time has not counted down yet, continue */
-                 value &= ~HEATERb; // Set heater OFF
-                 tmr.ltimer--; /* decrement timer */
-              } /* else */
-              break;
-
-      default:  tmr.isrstate = 1;
-                break;
-   } /* case */
 
    //--------------------------------------------------------------
    // This is the main control loop, executed once every 50 msec.
@@ -1287,8 +1362,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    tmr.pid_tmr++; // increment timer
 
    //----------------------------------------------------------------
-   // First time-slice: this time-slice is executed once every second.
-   //                   Read AD-Converters and call MA filter for Vmlt.
+   // TIME-SLICE: this time-slice is executed once every second.
+   //             Read AD-Converters and call MA filter for Vmlt.
    //----------------------------------------------------------------
    if (tmr.pid_tmr % 20 == 1)
    {
@@ -1300,54 +1375,26 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        }
        else
        {
-          padc.ad1 = 0.0; // HLT temperature
-          padc.ad2 = 0.0; // MLT temperature
+          padc.ad1 = 0.0; // Future use
+          padc.ad2 = 0.0; // Future use
           padc.ad3 = 0.0; // Triac temperature
           padc.ad4 = 0.0; // Pressure transducer
        } // else
-       //-----------------------------------------------------------------
-       // If a LM92 is connected, overwrite the LM35 values on AD1 and AD2
-       //-----------------------------------------------------------------
-       if (hw_status & LM92_1_OK)
-       {
-          padc.ad1 = lm92_read(0); // Read HLT temp. from LM92 device
-          if (padc.ad1 == LM92_ERR)
-          {
-             Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
-          } // if
-       } // if
-       if (hw_status & LM92_2_OK)
-       {
-          padc.ad2 = lm92_read(1); // Read MLT temp. from LM92 device
-          if (padc.ad2 == LM92_ERR)
-          {
-             Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
-          } // if
-       } // if
-
-       if (swfx.tad1_sw)
-       {
-          padc.ad1 = (double)swfx.tad1_fx;
-       } // if
-
-       if (swfx.tad2_sw)
-       {
-          padc.ad2 = (double)swfx.tad2_fx;
-       } // if
 
        //---------------------------------------------------
        // Triac Temperature Protection: hysteresis function
        //---------------------------------------------------
+       ttriac = padc.ad3; // Triac temperature
        if (triac_too_hot)
        {
-          if (padc.ad3 < ttriac_llim)
+          if (ttriac < ttriac_llim)
           {
              triac_too_hot = false;
           }
        }
        else
        {
-          if (padc.ad3 > ttriac_hlim)
+          if (ttriac > ttriac_hlim)
           {
              triac_too_hot = true;
           }
@@ -1364,12 +1411,56 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           volumes.Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
        }
-   } // if
+   } // else if
+
+   //----------------------------------------------------------------
+   // TIME-SLICE: this time-slice is executed once every second.
+   //             It reads the LM92 temperature sensor (HLT)
+   //----------------------------------------------------------------
+   else if (tmr.pid_tmr % 20 == 2)
+   {
+       //-----------------------------------------------------------------
+       // If a LM92 is connected, overwrite the LM35 values on AD1 and AD2
+       //-----------------------------------------------------------------
+       if (hw_status & LM92_1_OK)
+       {
+          thlt = lm92_read(0); // Read HLT temp. from LM92 device
+          if (thlt == LM92_ERR)
+          {
+             Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
+          } // if
+       } // if
+       if (swfx.thlt_sw)
+       {
+          thlt = (double)swfx.thlt_fx;
+       } // if
+   } // else if
+
+   //----------------------------------------------------------------
+   // TIME-SLICE: this time-slice is executed once every second.
+   //             It reads the LM92 temperature sensor (MLT)
+   //----------------------------------------------------------------
+   else if (tmr.pid_tmr % 20 == 3)
+   {
+       if (hw_status & LM92_2_OK)
+       {
+          tmlt = lm92_read(1); // Read MLT temp. from LM92 device
+          if (tmlt == LM92_ERR)
+          {
+             Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
+          } // if
+       } // if
+       if (swfx.tmlt_sw)
+       {
+          tmlt = (double)swfx.tmlt_fx;
+       } // if
+   } // else if
+
    //-----------------------------------------------------------------------
-   // Second time-slice: Time switch controller. Enable PI controller
-   //                    if current date & time matches the date & time set.
+   // TIME-SLICE: Time switch controller. Enable PI controller
+   // [5 sec.]    if current date & time matches the date & time set.
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr == 2)
+   else if (tmr.pid_tmr == 4)
    {
       // Only useful if PID controller is disabled AND time_switch is enabled
       if ((PID_RB->ItemIndex != 1) && (time_switch == 1))
@@ -1380,15 +1471,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
             PID_RB->ItemIndex = 1; // Enable PID Controller
          }
       } // if
-   } // else
-   //--------------------------------------------------------------------------
-   // Third time-slice: Calculate Gamma value with the PID controller.
-   //                   Update Tset_hlt and update values on screen every TS seconds.
-   //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr == 3)
-   {
+
       // PID_RB->ItemIndex = 1 => PID Controller On
-      pid_reg2(padc.ad1,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex); // gamma = pid_reg2(temp)
+      pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex); // gamma = pid_reg2(temp)
       if (swfx.gamma_sw)
       {
          gamma = swfx.gamma_fx; // fix gamma
@@ -1397,39 +1482,58 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       // check if tset_hlt should be increased
       if (pid_pars.mash_control == 0) // 0 = Tad1 (HLT), 1 = Tad2 (MLT)
       {
-         tset_mlt = update_tset(&tset_hlt,padc.ad1,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
+         tset_mlt = update_tset(&tset_hlt,thlt,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       }
       else
       {
-         tset_mlt = update_tset(&tset_hlt,padc.ad2,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
+         tset_mlt = update_tset(&tset_hlt,tmlt,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       } // else
 
-      if (swfx.tset_sw)
+      if (swfx.tset_hlt_sw)
       {
-         tset_hlt = swfx.tset_fx; // fix tset
+         tset_hlt = swfx.tset_hlt_fx; // fix tset_hlt
       } // if
    } // else if
+
    //-----------------------------------------------------------------------
-   // Fourth time-slice: Output values to I2C LED Displays every TS seconds.
+   // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 4)
+   else if (tmr.pid_tmr % 20 == 5)
    {
       // Now update the LEDs with the proper values by calling macro SET_LED
-      //      HW_BIT, which display, which var., Visibility
-      SET_LED(LED1_OK,1,led1,led1_vis);
-      if (err) Reset_I2C_Bus(LED1_BASE,err);
-      SET_LED(LED2_OK,2,led2,led2_vis);
-      if (err) Reset_I2C_Bus(LED2_BASE,err);
-      SET_LED(LED3_OK,3,led3,led3_vis);
-      if (err) Reset_I2C_Bus(LED3_BASE,err);
-      SET_LED(LED4_OK,4,led4,led4_vis);
-      if (err) Reset_I2C_Bus(LED4_BASE,err);
+      //      HW_BIT, which display, which var., Visibility, LEDx_BASE
+      SET_LED(LED1_OK,1,led1,led1_vis,LED1_BASE);
    } // else if
+
+   //-----------------------------------------------------------------------
+   // TIME-SLICE: Output values to I2C LED Display every second
+   //-----------------------------------------------------------------------
+   else if (tmr.pid_tmr % 20 == 6)
+   {
+      SET_LED(LED2_OK,2,led2,led2_vis,LED2_BASE);
+   } // else if
+
+   //-----------------------------------------------------------------------
+   // TIME-SLICE: Output values to I2C LED Display every second
+   //-----------------------------------------------------------------------
+   else if (tmr.pid_tmr % 20 == 7)
+   {
+      SET_LED(LED3_OK,3,led3,led3_vis,LED3_BASE);
+   } // else if
+
+   //-----------------------------------------------------------------------
+   // TIME-SLICE: Output values to I2C LED Display every second
+   //-----------------------------------------------------------------------
+   else if (tmr.pid_tmr % 20 == 8)
+   {
+      SET_LED(LED4_OK,4,led4,led4_vis,LED4_BASE);
+   } // else if
+
    //--------------------------------------------------------------------------
-   // Fifth time-slice: Calculate State Transition Diagram (STD) and determine
-   //                   new settings of the valves (every second).
+   // TIME-SLICE: Calculate State Transition Diagram (STD) and determine
+   //             new settings of the valves (every second)
    //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 5)
+   else if (tmr.pid_tmr % 20 == 9)
    {
       int std_tmp;
       if (swfx.std_sw)
@@ -1440,9 +1544,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          std_tmp = -1;
       }
-      /* Tmlt = AD2, Thlt = AD1 */
-      update_std(&volumes,padc.ad2,padc.ad1,tset_hlt,&std_out,
-                 ms,ms_idx,ms_tot,&sp,&std,PID_RB->ItemIndex,std_tmp);
+      update_std(&volumes, tmlt, thlt, tset_hlt, &std_out, ms, ms_idx,
+                 ms_tot, &sp, &std, PID_RB->ItemIndex, std_tmp);
       //-----------------------------------------------------------------
       // Now output all valve bits to DIG_IO_MSB_BASE (if it is present).
       // NOTE: The pump bit is output to DIG_IO_LSB_IO!
@@ -1453,59 +1556,32 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
          if (err) Reset_I2C_Bus(DIG_IO_MSB_BASE,err);
       } // if
    } // else if
+
    //--------------------------------------------------------------------------
-   // Last time-slice
+   // LAST TIME-SLICE
    //--------------------------------------------------------------------------
    else if (tmr.pid_tmr == pid_pars.ts_ticks)
    {
       tmr.pid_tmr = 1; // reset timer
       /*------------------------------------------------*/
       /* Now calculate high and low time for the timers */
+      /* Needed for Generate_Gamma_Pulse()              */
       /*------------------------------------------------*/
       tmr.time_high = (int)((gamma * pid_pars.ts_ticks) / 100);
       tmr.time_low  = pid_pars.ts_ticks - tmr.time_high;
    } // else if
    //--------------------------------------------------------------------------
+   // END OF TIME-SLICES
+   //--------------------------------------------------------------------------
 
-   //------------------------------------------------------------------
-   // Calculate alive toggle bit to see if this routine is still alive.
-   //------------------------------------------------------------------
-   if (++tmr.alive_tmr >= ALIVE_TICKS)
-   {
-     tmr.alive_tmr = 0;          // reset timer
-     tmr.alive     = !tmr.alive; // invert alive (bit 1 of IO port)
-   } // if
-   if (tmr.alive)
-   {
-      value |= ALIVEb;  // Set alive LED on
-   }
-   else
-   {
-      value &= ~ALIVEb; // Disable alive LED
-   } // else
-
-   //--------------------------------------------
-   // Send Pump On/Off signal to DIG_IO_LSB_BASE.
-   //--------------------------------------------
-   if (std_out & P0b)
-   {
-      value |= PUMPb;
-   }
-   else
-   {
-      value &= ~PUMPb;
-   } // else
-
-   //-------------------------------------------------
-   // Output value to IO port every 50 msec.
-   // See misc.h for bit definitions
-   // Bits are inverted, because they are active low
-   //-------------------------------------------------
-   if (hw_status & DIG_IO_LSB_OK)
-   {
-      err = WriteIOByte(~value,LSB_IO); // Write inverted value to IO port
-      if (err) Reset_I2C_Bus(DIG_IO_MSB_BASE,err);
-   } // if
+   //------------------------------------------------
+   // Calculate IO signals (done every 50 msec.)
+   // - Gamma (triac) pulse
+   // - Alive bit (LED)
+   // - Pump bit
+   // - Output value to PCF874 IO port every 50 msec.
+   //------------------------------------------------
+   Generate_IO_Signals();
 } // TMainForm::T50msecTimer()
 //---------------------------------------------------------------------------
 
@@ -1790,80 +1866,27 @@ void __fastcall TMainForm::ON1Click(TObject *Sender)
 } // TMainForm::ON1Click()
 //---------------------------------------------------------------------------
 
+#define SET_POPUPMENU(Vx,VxM,Vxb)                                                     \
+  if (PopupMenu1->PopupComponent->Name.AnsiCompare(Vx) == 0)                          \
+  {                                                                                   \
+     if (std_out & VxM) /* Manual Override Mode */                                    \
+     {                                                                                \
+        if (std_out & Vxb) PopupMenu1->Items->Items[2]->Checked = true; /* On (M) */  \
+        else               PopupMenu1->Items->Items[1]->Checked = true; /* Off (M) */ \
+     }                                                                                \
+     else PopupMenu1->Items->Items[0]->Checked = true; /* Auto */                     \
+  }
+
 void __fastcall TMainForm::PopupMenu1Popup(TObject *Sender)
 {
-   if (PopupMenu1->PopupComponent->Name.AnsiCompare("P0") == 0)
-   {
-      if (std_out & P0M) // Manual Override Mode
-      {
-         if (std_out & P0b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
-         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
-      }
-      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
-   }
-   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
-   {
-      if (std_out & V1M) // Manual Override Mode
-      {
-         if (std_out & V1b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
-         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
-      }
-      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
-   }
-   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V2") == 0)
-   {
-      if (std_out & V2M) // Manual Override Mode
-      {
-         if (std_out & V2b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
-         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
-      }
-      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
-   }
-   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V3") == 0)
-   {
-      if (std_out & V3M) // Manual Override Mode
-      {
-         if (std_out & V3b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
-         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
-      }
-      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
-   }
-   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V4") == 0)
-   {
-      if (std_out & V4M) // Manual Override Mode
-      {
-         if (std_out & V4b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
-         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
-      }
-      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
-   }
-   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V5") == 0)
-   {
-      if (std_out & V5M) // Manual Override Mode
-      {
-         if (std_out & V5b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
-         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
-      }
-      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
-   }
-   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V6") == 0)
-   {
-      if (std_out & V6M) // Manual Override Mode
-      {
-         if (std_out & V6b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
-         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
-      }
-      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
-   }
-   else
-   {
-      if (std_out & V7M) // Manual Override Mode
-      {
-         if (std_out & V7b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
-         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
-      }
-      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
-   }
+        SET_POPUPMENU("P0",P0M,P0b)
+   else SET_POPUPMENU("V1",V1M,V1b)
+   else SET_POPUPMENU("V2",V2M,V2b)
+   else SET_POPUPMENU("V3",V3M,V3b)
+   else SET_POPUPMENU("V4",V4M,V4b)
+   else SET_POPUPMENU("V5",V5M,V5b)
+   else SET_POPUPMENU("V6",V6M,V6b)
+   else SET_POPUPMENU("V7",V7M,V7b)
 }  // TMainForm::PopupMenu1Popup()
 //---------------------------------------------------------------------------
 
@@ -1899,15 +1922,15 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
 {
    char tmp_str[80];   // temp string for calculations
 
-   sprintf(tmp_str,"%4.2f",padc.ad1); // Display AD1 value to screen
+   sprintf(tmp_str,"%4.2f",thlt);   // Display Thlt value on screen
    Val_Thlt->Caption    = tmp_str;
-   tm_hlt->Value->Value = padc.ad1;   // update HLT thermometer object
+   tm_hlt->Value->Value = thlt;     // update HLT thermometer object
 
-   sprintf(tmp_str,"%4.2f",padc.ad2); // Display AD2 value to screen
+   sprintf(tmp_str,"%4.2f",tmlt);   // Display Tmlt value on screen
    Val_Tmlt->Caption    = tmp_str;
-   tm_mlt->Value->Value = padc.ad2;   // update MLT thermometer object
+   tm_mlt->Value->Value = tmlt;     // update MLT thermometer object
 
-   tm_triac->Value->Value = padc.ad3; // Update thermometer object
+   tm_triac->Value->Value = ttriac; // Update thermometer object
    //---------------------------------------------------
    // Triac Temperature Protection: hysteresis function
    //---------------------------------------------------

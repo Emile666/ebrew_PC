@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.21  2004/02/25 18:51:05  emile
+// - Separate Start_I2C_Communication routine created
+// - 'T50msec->Enabled = False' removed. This caused lots of problems. Once
+//   enabled, always leave it like that (possible bug in TAnimTimer).
+// - Menu option 'View|Check I2C HW devices' added
+// - CVS revision is now also printed to the log-file
+//
 // Revision 1.20  2004/02/21 23:11:20  emile
 // - Changed behaviour after I2C Bus reset to a more silent one. Resulted in:
 //   - Addition of checkbox "Give message on successful reset after I2C error"
@@ -171,25 +178,27 @@
 //                       3=Tset_mlt, 4=Ttriac, 5=Vmlt
 // Macro, used in TMainForm::T50msec2Timer()
 //--------------------------------------------------------
-#define SET_LED(LEDX_OK,w_disp,ledx,ledx_vis)                                  \
+#define SET_LED(LEDX_OK,w_disp,ledx,ledx_vis,ledx_base)                        \
   if (hw_status & (LEDX_OK))                                                   \
   {                                                                            \
      switch (ledx)                                                             \
      {                                                                         \
-        case 0: err  = set_led((int)(100.0 * padc.ad1),2,(w_disp),(ledx_vis)); \
+        case 0: err  = set_led((int)(100.0 * thlt),2,(w_disp),(ledx_vis));     \
                 break;                                                         \
-        case 1: err  = set_led((int)(100.0 * padc.ad2),2,(w_disp),(ledx_vis)); \
+        case 1: err  = set_led((int)(100.0 * tmlt),2,(w_disp),(ledx_vis));     \
                 break;                                                         \
         case 2: err  = set_led((int)(100.0 * tset_hlt),2,(w_disp),(ledx_vis)); \
                 break;                                                         \
         case 3: err  = set_led((int)(100.0 * tset_mlt),2,(w_disp),(ledx_vis)); \
                 break;                                                         \
-        case 4: err  = set_led((int)(100.0 * padc.ad3),2,(w_disp),(ledx_vis)); \
+        case 4: err  = set_led((int)(100.0 * ttriac),2,(w_disp),(ledx_vis));   \
                 break;                                                         \
         case 5: err  = set_led((int)(100.0 * volumes.Vmlt),2,(w_disp),(ledx_vis)); \
                 break;                                                         \
        default: break;                                                         \
      }                                                                         \
+     if (err) Reset_I2C_Bus(ledx_base,err);                                    \
+                                                                         \
   }
 
 //------------------------------------------------------------------------------
@@ -199,18 +208,18 @@
 
 typedef struct _swfx_struct
 {
-   bool   tset_sw;  // Switch valye for tset
-   double tset_fx;  // Fix value for tset
-   bool   gamma_sw; // Switch value for gamma
-   double gamma_fx; // Fix value for gamma
-   bool   tad1_sw;  // Switch value for Tad1
-   double tad1_fx;  // Fix value for Tad1 [E-1 Celsius]
-   bool   tad2_sw;  // Switch value for Tad2
-   double tad2_fx;  // Fix value for Tad2 [E-1 Celsius]
-   bool   std_sw;   // Switch value for STD state
-   int    std_fx;   // Fix value for STD state
-   bool   vmlt_sw;  // Switch value for Vmlt
-   double vmlt_fx;  // Fix value for Vmlt
+   bool   tset_hlt_sw;  // Switch value for tset_hlt
+   double tset_hlt_fx;  // Fix value for tset_hlt
+   bool   gamma_sw;     // Switch value for gamma
+   double gamma_fx;     // Fix value for gamma
+   bool   thlt_sw;      // Switch value for Thlt
+   double thlt_fx;      // Fix value for Thlt [Celsius]
+   bool   tmlt_sw;      // Switch value for Tmlt
+   double tmlt_fx;      // Fix value for Tmlt [Celsius]
+   bool   std_sw;       // Switch value for STD state
+   int    std_fx;       // Fix value for STD state
+   bool   vmlt_sw;      // Switch value for Vmlt
+   double vmlt_fx;      // Fix value for Vmlt
 } swfx_struct;
 
 //---------------------------------------------------------------------------
@@ -297,6 +306,7 @@ private:	// User declarations
         void __fastcall Restore_Settings(void);
         void __fastcall exit_ebrew(void);
         void __fastcall Reset_I2C_Bus(int i2c_bus_id, int err);
+        void __fastcall Generate_IO_Signals(void);
         timer_vars      tmr;        // struct with timer variables
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         ma              str_vmlt;   // Struct for MA5 filter for pressure transducer
@@ -320,6 +330,9 @@ public:		// User declarations
         double          gamma;      // PID controller output
         double          tset_hlt;   // HLT reference temperature
         double          tset_mlt;   // MLT reference temperature
+        double          thlt;       // HLT actual temperature
+        double          tmlt;       // MLT actual temperature
+        double          ttriac;     // Triac electronics actual temperature
         pid_params      pid_pars;   // struct containing PID parameters
         int             ms_tot;     // tot. nr. of valid temp & time values
         int             ms_idx;     // index in ms[] array

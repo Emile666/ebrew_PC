@@ -5,6 +5,9 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2003/06/01 19:36:34  emile
+// - Switch/Fix added for Vmlt
+//
 // Revision 1.4  2003/06/01 14:08:06  emile
 // - Same as previous log entry: CVS and BCB got confused => saved old files.
 //
@@ -41,7 +44,7 @@ __published:	// IDE-managed Components
         TLabel *Tset_Label;
         TButton *Button1;
         TButton *Button2;
-        TButton *Button3;
+        TButton *Help_Button;
         TLabel *Label1;
         TCheckBox *CB_Tad1;
         TMaskEdit *Tad1_MEdit;
@@ -65,6 +68,7 @@ __published:	// IDE-managed Components
         void __fastcall STD_MEditClick(TObject *Sender);
         void __fastcall CB_vmltClick(TObject *Sender);
         void __fastcall Vmlt_MEditClick(TObject *Sender);
+        void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TFix_Params(TComponent* Owner);

@@ -5,6 +5,15 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2003/06/01 11:53:48  emile
+// - tset has been renamed in tset_hlt for more clearance
+// - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
+//        This is now 'thlt >= tset_hlt', because timer0 only starts with water
+//        in the MLT => this caused a dead-lock.
+// - 6 defines have been made adjustable via 'Options|Sparge & STD Settings'.
+//   These defines were TMLT_HLIMIT, TMLT_LLIMIT, TIMEOUT_1SEC, VMLT_EMPTY,
+//   TIMEOUT3 and TIMEOUT4.
+//
 // Revision 1.3  2002/12/30 20:21:59  emile
 // - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
 // - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
@@ -100,5 +109,12 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       ViewMashProgress->Memo1->Lines->Add(s);
    } // if
 } // TViewMashProgress::UpdateTimerTimer()
+//---------------------------------------------------------------------------
+
+#define IDH_VIEWMASHSPARGEPROGRESS (0x10080)
+void __fastcall TViewMashProgress::Help_ButtonClick(TObject *Sender)
+{
+   Application->HelpContext(IDH_VIEWMASHSPARGEPROGRESS);
+}
 //---------------------------------------------------------------------------
 

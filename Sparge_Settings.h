@@ -5,6 +5,11 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2003/06/01 13:40:45  emile
+// - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
+// - Switch/fix for std state added for easier testing
+// - Vmash value added to 'Options|Sparge & STD Settings' dialog screen.
+//
 // Revision 1.3  2003/06/01 11:53:47  emile
 // - tset has been renamed in tset_hlt for more clearance
 // - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
@@ -37,7 +42,7 @@ __published:	// IDE-managed Components
         TEdit *EBatches;
         TButton *Button1;
         TButton *Button2;
-        TButton *Button3;
+        TButton *Help_Button;
         TEdit *EBTime;
         TLabel *Label2;
         TLabel *Label3;
@@ -62,6 +67,7 @@ __published:	// IDE-managed Components
         TLabel *Label13;
         TLabel *Label14;
         TEdit *EVmash;
+        void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TSpargeSettings(TComponent* Owner);

@@ -5,6 +5,11 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2004/02/22 12:56:44  emile
+// - SCL clock frequency now adjustable. Following changes are made:
+//   - New Registry value: FSCL_PRESCALER
+//   - Hardware Setting screen now contains a Combobox with frequencies
+//
 // Revision 1.5  2004/02/21 23:11:20  emile
 // - Changed behaviour after I2C Bus reset to a more silent one. Resulted in:
 //   - Addition of checkbox "Give message on successful reset after I2C error"
@@ -55,7 +60,7 @@ class TI2C_Settings : public TForm
 __published:	// IDE-managed Components
         TButton *Button1;
         TButton *Button2;
-        TButton *Button3;
+        TButton *Help_Button;
         TRadioGroup *RG1;
         TRadioGroup *RG2;
         TLabel *Vref1_Label;
@@ -104,6 +109,7 @@ __published:	// IDE-managed Components
         TEdit *Hw_devices_Edit;
         TComboBox *fscl_combo;
         TLabel *Label11;
+        void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TI2C_Settings(TComponent* Owner);

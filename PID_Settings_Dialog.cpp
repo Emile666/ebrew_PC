@@ -5,6 +5,10 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2003/06/29 13:11:34  emile
+// - Time switch function added (PID options screen). The PID controller is
+//   enabled when the predefined date and time have been met.
+//
 // Revision 1.2  2002/12/30 13:33:44  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -43,6 +47,13 @@ void __fastcall TPID_Settings::RG2Click(TObject *Sender)
       Time_Edit->Enabled  = false;
       Time_Label->Enabled = false;
    } // else
+}
+//---------------------------------------------------------------------------
+
+#define IDH_PIDSETTINGS (0x100A0)
+void __fastcall TPID_Settings::Button3Click(TObject *Sender)
+{
+   Application->HelpContext(IDH_PIDSETTINGS);
 }
 //---------------------------------------------------------------------------
 

@@ -5,6 +5,10 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2003/06/29 13:11:35  emile
+// - Time switch function added (PID options screen). The PID controller is
+//   enabled when the predefined date and time have been met.
+//
 // Revision 1.2  2002/12/30 13:33:44  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -51,6 +55,7 @@ __published:
         TLabel *Date_Label;
         TLabel *Time_Label;
         void __fastcall RG2Click(TObject *Sender);
+        void __fastcall Button3Click(TObject *Sender);
 private:
 public:
 	virtual __fastcall TPID_Settings(TComponent *Owner);

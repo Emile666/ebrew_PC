@@ -4,6 +4,13 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2004/01/31 16:01:04  emile
+// - Init. HW High/Low limit temp. changed to 70/50 C respectively.
+// - Added code for calculation/simulation of Vhlt and Vboil
+// - Hardware dialog updated: 3 new controls added for Vhlt and Vboil simulation
+// - Registry key no longer in ebrew but in Software\\ebrew
+// - First attempt to catch CVS version ID in source code
+//
 // Revision 1.6  2003/09/15 20:37:21  emile
 // - LM76 constants renamed in LM92 constants
 // - Pump Popupmenu added (same as already done for the valves)
@@ -84,9 +91,9 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
       fprintf(fd,"%6.2f, %6.2f, %6.2f, %6.2f, %5.1f, %6.2f,%3d,%3d,%3d\n",
                                                       MainForm->tset_mlt,
                                                       MainForm->tset_hlt,
-                                                      MainForm->padc.ad1, // HLT
-                                                      MainForm->padc.ad2, // MLT
-                                                      MainForm->padc.ad3, // TTriac
+                                                      MainForm->thlt,
+                                                      MainForm->tmlt,
+                                                      MainForm->ttriac,
                                                       MainForm->volumes.Vmlt,
                                                       MainForm->PID_RB->ItemIndex,
                                                       MainForm->ms_idx,
@@ -96,10 +103,17 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
 
    if (ShowDataGraphs)
    {
-      ShowDataGraphs->Tad1_Graph->DataPoint(clRed,MainForm->padc.ad1);
+      ShowDataGraphs->Tad1_Graph->DataPoint(clRed,MainForm->thlt);
       ShowDataGraphs->Tad1_Graph->Update();
-      ShowDataGraphs->Tad2_Graph->DataPoint(clRed,MainForm->padc.ad2);
+      ShowDataGraphs->Tad2_Graph->DataPoint(clRed,MainForm->tmlt);
       ShowDataGraphs->Tad2_Graph->Update();
    } // if
 } // TShowDataGraphs::GraphTimerTimer()
 //---------------------------------------------------------------------------
+#define IDH_VIEWDATA (0x10070)
+void __fastcall TShowDataGraphs::Help_ButtonClick(TObject *Sender)
+{
+   Application->HelpContext(IDH_VIEWDATA);
+}
+//---------------------------------------------------------------------------
+

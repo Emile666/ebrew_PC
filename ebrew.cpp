@@ -4,6 +4,10 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2003/12/21 21:16:59  emile
+// - Old About screen removed, replaced by Version Aware About box. This
+//   new About screen shows the version number (and a nice picture!).
+//
 // Revision 1.3  2002/12/30 13:33:45  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -35,6 +39,7 @@ WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
         {
                  Application->Initialize();
                  Application->Title = "E-Brew!";
+                 Application->HelpFile = "C:\\DATA\\ebrew\\win_app\\EBREW.HLP";
                  Application->CreateForm(__classid(TMainForm), &MainForm);
                  Application->CreateForm(__classid(TPID_Settings), &PID_Settings);
                  Application->CreateForm(__classid(TFix_Params), &Fix_Params);
