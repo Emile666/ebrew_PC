@@ -5,6 +5,15 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2004/04/19 21:55:49  emile
+// - Added calibration offsets and MA-filters for Thlt and Tmlt:
+//   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
+//   - New Measurement Dialog screen
+//   - Several parameters moved from HW Settings Dialog Screen
+// - Added new Registry variable MA_VMLT: MA filter order of Vmlt is now
+//   also stored in Registry
+// - Help-file is updated
+//
 // Revision 1.7  2004/03/10 10:10:38  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -102,6 +111,8 @@ __published:	// IDE-managed Components
         TEdit *Hw_devices_Edit;
         TComboBox *fscl_combo;
         TLabel *Label11;
+        TLabel *Label2;
+        TLabel *Label3;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

@@ -5,6 +5,18 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2004/03/10 10:10:39  emile
+// - Reduced complexity of several routines:
+//   - T50msecTimer split, new routine Generate_IO_Signals added
+//   - PopupMenu1Popup now uses (new) macro SET_POPUPMENU
+//   - Reset_I2C_Bus now included in SET_LED macro
+// - Every I2C write action now in a separate time-slice to avoid
+//   I2C bus errors if fscl is low
+// - This is the first version where the help file function is enabled
+//   - All help buttons and F1 function key are operational
+//   - Help file sources: ebrew.rtf and ebrew.hpj are added to CVS
+// - ad1, ad2 and ad3 variables -> thlt, tmlt and ttriac (new variables)
+//
 // Revision 1.4  2003/06/01 11:53:48  emile
 // - tset has been renamed in tset_hlt for more clearance
 // - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
@@ -92,14 +104,13 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       } // for
 
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
-      sprintf(s,"ebrew_std = %d, ms_idx = %d, sp_idx = %d, Vmash = %4.1f L",MainForm->std.ebrew_std,
-                                                                            MainForm->ms_idx,
-                                                                            MainForm->std.sp_idx,
-                                                                            MainForm->std.vmash);
+      sprintf(s,"ebrew_std = %d, ms_idx = %d, sp_idx = %d",MainForm->std.ebrew_std,
+                                                           MainForm->ms_idx,
+                                                           MainForm->std.sp_idx);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer1 (state  5-> 6) = %d/%d sec.",MainForm->std.timer1,MainForm->sp.sp_time_ticks);
+      sprintf(s,"Timer1 (state 05-> 06) = %d/%d sec.",MainForm->std.timer1,MainForm->sp.sp_time_ticks);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer2 (state  8-> 7) = %d/%d sec.",MainForm->std.timer2,MainForm->sp.to_xsec);
+      sprintf(s,"Timer2 (state 08-> 07) = %d/%d sec.",MainForm->std.timer2,MainForm->sp.to_xsec);
       ViewMashProgress->Memo1->Lines->Add(s);
       sprintf(s,"Timer3 (state 10->11) = %d/%d sec.",MainForm->std.timer3,MainForm->sp.to3);
       ViewMashProgress->Memo1->Lines->Add(s);

@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.31  2004/04/26 13:30:22  emile
+// Bug-fix: init_pid3() did not calculate correctly when Ti = 0. Corrected.
+//
 // Revision 1.30  2004/04/25 14:02:17  emile
 // - Added a 'type C' PID controller, function pid_reg3(). Possible to select
 //   this from the PID settings dialog screen. Left the old one in for
@@ -317,7 +320,6 @@ void __fastcall TMainForm::Restore_Settings(void)
          //----------------------------
          std.ebrew_std = p1[k].std_val; // Current state
          std.sp_idx    = p1[k].sp_idx;  // Sparging sessions done
-         std.vmash     = p1[k].vmash;   // Vmash value
          x             = p1[k].eline + 1 - p1[k].start_lstd;
          x            *= 5;             // Log-file -> 5 sec.: STD called -> 1 sec.
          switch (std.ebrew_std) // init. timers for states that have timers
@@ -477,15 +479,12 @@ void __fastcall TMainForm::Main_Initialisation(void)
       {
          Reg->OpenKey(REGKEY,FALSE);
          known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
-         i = Reg->ReadInteger("TS");  // Read TS from registry
-         pid_pars.ts = (double)i;
-         i = Reg->ReadInteger("Kc");  // Read Kc from registry
-         pid_pars.kc = (double)i;
-         i = Reg->ReadInteger("Ti");  // Read Ti from registry
-         pid_pars.ti = (double)i;
-         i = Reg->ReadInteger("Td");  // Read Td from registry
-         pid_pars.td = (double)i;
-         pid_pars.temp_offset  = Reg->ReadInteger("TOffset");
+         pid_pars.ts = Reg->ReadFloat("TS");  // Read TS from registry
+         pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
+         pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
+         pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
+         pid_pars.temp_offset  = Reg->ReadFloat("TOffset");
+         pid_pars.temp_offset2 = Reg->ReadFloat("TOffset2");
          pid_pars.mash_control = Reg->ReadInteger("Mash_Control"); // 0 = Thlt, 1 = Tmlt
          pid_pars.pid_model    = Reg->ReadInteger("PID_Model"); // 0 = Type A, 1 = Type C
 
@@ -512,11 +511,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
          volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
          cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG"); // display message
 
-         init_ma(&str_thlt,Reg->ReadInteger("MA_THLT")); // MA filter for Thlt
-         thlt_offset = Reg->ReadFloat("THLT_OFFSET");    // offset calibration
-         init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT")); // MA filter for Tmlt
-         tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");    // offset calibration
-         init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT")); // MA filter for Vmlt
+         init_ma(&str_thlt,Reg->ReadInteger("MA_THLT"),thlt); // MA filter for Thlt
+         thlt_offset = Reg->ReadFloat("THLT_OFFSET");         // offset calibration
+         init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT"),tmlt); // MA filter for Tmlt
+         tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");         // offset calibration
+         init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT"),volumes.Vmlt); // MA filter for Vmlt
          padc.vref4 = Reg->ReadInteger("VREF4"); // Full-Scale value for Vmlt
          padc.dac   = Reg->ReadInteger("DAC");   // DAC value for offset compensation of Vmlt
 
@@ -660,11 +659,14 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           fscl_prescaler = 5;
           Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler); // set fscl to 11.72 kHz
           // PID Settings Dialog
-          Reg->WriteInteger("TS",TS_INIT);  // Set Default value
-          Reg->WriteInteger("Kc",KC_INIT);  // Controller gain
-          Reg->WriteInteger("Ti",TI_INIT);  // Ti constant
-          Reg->WriteInteger("Td",TD_INIT);  // Td constant
-          Reg->WriteInteger("PID_Model",0); // Type A PID Controller
+          Reg->WriteFloat("TS",TS_INIT);       // Set Default sample time
+          Reg->WriteFloat("Kc",KC_INIT);       // Controller gain
+          Reg->WriteFloat("Ti",TI_INIT);       // Ti constant
+          Reg->WriteFloat("Td",TD_INIT);       // Td constant
+          Reg->WriteFloat("TOffset",1.0);      // HLT - MLT heat loss
+          Reg->WriteFloat("TOffset2",-0.5);    // offset for early start of mash timers
+          Reg->WriteInteger("Mash_Control",1); // 0 = Thlt, 1 = Tmlt
+          Reg->WriteInteger("PID_Model",0);    // Type A PID Controller
 
           //-------------------------------------------------------
           // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
@@ -700,8 +702,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("VREF3",VREF_INIT); // init. ADC3 VREF
           Reg->WriteInteger("VREF4",VREF_INIT); // init. ADC4 VREF
           Reg->WriteInteger("DAC",0);           // Init. DA Converter
-          Reg->WriteInteger("TOffset",3);       // HLT - MLT heat loss
-          Reg->WriteInteger("Mash_Control",1);  // 0 = Thlt, 1 = Tmlt
           // Init values for Sparge Settings
           Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
           Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
@@ -762,7 +762,6 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
 {
    TRegistry *Reg = new TRegistry();
    TPID_Settings *ptmp;
-   int i;
    char tmp[255]; // temp. array
 
    ptmp = new TPID_Settings(this);
@@ -773,21 +772,16 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
       if (Reg->KeyExists(REGKEY))
       {
          Reg->OpenKey(REGKEY,FALSE);
-         i = Reg->ReadInteger("TS");      // Read TS from registry
-         ptmp->TS_edit->Text = AnsiString(i);
-         i = Reg->ReadInteger("Kc");      // Read Kc from registry
-         ptmp->Kc_Edit->Text = AnsiString(i);
-         i = Reg->ReadInteger("Ti");      // Read Ti from registry
-         ptmp->Ti_Edit->Text = AnsiString(i);
-         i = Reg->ReadInteger("Td");      // Read Ti from registry
-         ptmp->Td_Edit->Text = AnsiString(i);
-         i = Reg->ReadInteger("TOffset"); // Read Temp. Offset from registry
-         ptmp->Offs_Edit->Text = AnsiString(i);
-         i = Reg->ReadInteger("Mash_Control"); // Read Mash Control from registry
-         ptmp-> RG1->ItemIndex = i;
-         i = Reg->ReadInteger("PID_Model"); // Read PID controller type from registry
-         ptmp->PID_Model->ItemIndex = i;
-         ptmp->RG2->ItemIndex = time_switch;   // Value of time-switch [off, on]
+         // Read parameters from registry
+         ptmp->TS_edit->Text        = AnsiString(Reg->ReadFloat("TS"));
+         ptmp->Kc_Edit->Text        = AnsiString(Reg->ReadFloat("Kc"));
+         ptmp->Ti_Edit->Text        = AnsiString(Reg->ReadFloat("Ti"));
+         ptmp->Td_Edit->Text        = AnsiString(Reg->ReadFloat("Td"));
+         ptmp->Offs_Edit->Text      = AnsiString(Reg->ReadFloat("TOffset"));
+         ptmp->Offs2_Edit->Text     = AnsiString(Reg->ReadFloat("TOffset2"));
+         ptmp-> RG1->ItemIndex      = Reg->ReadInteger("Mash_Control");
+         ptmp->PID_Model->ItemIndex = Reg->ReadInteger("PID_Model");
+         ptmp->RG2->ItemIndex       = time_switch; // Value of time-switch [off, on]
          if (time_switch)
          {
             ptmp->Date_Edit->Text = DateToStr(dt_time_switch);
@@ -797,22 +791,18 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          } // if
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
-            i = ptmp->TS_edit->Text.ToInt();
-            pid_pars.ts = (double)i;
-            Reg->WriteInteger("TS",i);  // Set to value from form
-            i = ptmp->Kc_Edit->Text.ToInt();
-            pid_pars.kc = (double)i;
-            Reg->WriteInteger("Kc",i);  // Set to value from form
-            i = ptmp->Ti_Edit->Text.ToInt();
-            pid_pars.ti = (double)i;
-            Reg->WriteInteger("Ti",i);  // Set to value from form
-            i = ptmp->Td_Edit->Text.ToInt();
-            pid_pars.td = (double)i;
-            Reg->WriteInteger("Td",i);  // Set to value from form
-
-            i = ptmp->Offs_Edit->Text.ToInt();
-            pid_pars.temp_offset = (double)i;
-            Reg->WriteInteger("TOffset",i);  // Set to value from form
+            pid_pars.ts = ptmp->TS_edit->Text.ToDouble();
+            Reg->WriteFloat("TS",pid_pars.ts);
+            pid_pars.kc = ptmp->Kc_Edit->Text.ToDouble();
+            Reg->WriteFloat("Kc",pid_pars.kc);
+            pid_pars.ti = ptmp->Ti_Edit->Text.ToDouble();
+            Reg->WriteFloat("Ti",pid_pars.ti);
+            pid_pars.td = ptmp->Td_Edit->Text.ToDouble();
+            Reg->WriteFloat("Td",pid_pars.td);
+            pid_pars.temp_offset = ptmp->Offs_Edit->Text.ToDouble();
+            Reg->WriteFloat("TOffset",pid_pars.temp_offset);
+            pid_pars.temp_offset2 = ptmp->Offs2_Edit->Text.ToDouble();
+            Reg->WriteFloat("TOffset2",pid_pars.temp_offset2);
             pid_pars.mash_control = ptmp->RG1->ItemIndex;
             Reg->WriteInteger("Mash_Control",pid_pars.mash_control);
             pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
@@ -1525,15 +1515,23 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          gamma = swfx.gamma_fx; // fix gamma
       } // if
+      /*------------------------------------------------*/
+      /* Now calculate high and low time for the timers */
+      /* Needed for Generate_IO_Signals();              */
+      /*------------------------------------------------*/
+      tmr.time_high = (int)((gamma * pid_pars.ts_ticks) / 100);
+      tmr.time_low  = pid_pars.ts_ticks - tmr.time_high;
 
       // check if tset_hlt should be increased
       if (pid_pars.mash_control == 0) // 0 = Thlt, 1 = Tmlt
       {
-         tset_mlt = update_tset(&tset_hlt,thlt,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
+         tset_mlt = update_tset(&tset_hlt,thlt,pid_pars.temp_offset,
+                                pid_pars.temp_offset2,ms,&ms_idx,ms_tot);
       }
       else
       {
-         tset_mlt = update_tset(&tset_hlt,tmlt,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
+         tset_mlt = update_tset(&tset_hlt,tmlt,pid_pars.temp_offset,
+                                pid_pars.temp_offset2,ms,&ms_idx,ms_tot);
       } // else
 
       if (swfx.tset_hlt_sw)
@@ -1610,12 +1608,6 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    else if (tmr.pid_tmr == pid_pars.ts_ticks)
    {
       tmr.pid_tmr = 1; // reset timer
-      /*------------------------------------------------*/
-      /* Now calculate high and low time for the timers */
-      /* Needed for Generate_Gamma_Pulse()              */
-      /*------------------------------------------------*/
-      tmr.time_high = (int)((gamma * pid_pars.ts_ticks) / 100);
-      tmr.time_low  = pid_pars.ts_ticks - tmr.time_high;
    } // else if
    //--------------------------------------------------------------------------
    // END OF TIME-SLICES
@@ -1766,7 +1758,6 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);     // TIMEOUT_xSEC [sec]
         ptmp->Eto3->Text        = AnsiString(sp.to3);         // TIMEOUT3 [sec]
         ptmp->Eto4->Text        = AnsiString(sp.to4);         // TIMEOUT4 [sec]
-        ptmp->EVmash->Text      = AnsiString(std.vmash);      // Vmash [L]
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
@@ -1783,7 +1774,6 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("TO3",       ptmp->Eto3->Text.ToInt());        // TIMEOUT3 [sec]
            Reg->WriteInteger("TO4",       ptmp->Eto4->Text.ToInt());        // TIMEOUT4 [sec]
            Init_Sparge_Settings(); // Init. struct with sparge settings with new values
-           std.vmash = ptmp->EVmash->Text.ToDouble(); // Special case: Vmash value
         } // if
         delete ptmp;
         ptmp = 0; // NULL the pointer
@@ -2194,14 +2184,14 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             //------------------
             // HLT Temperature
             //------------------
-            init_ma(&str_thlt,ptmp->UD_MA_HLT->Position); // order of MA filter
+            init_ma(&str_thlt,ptmp->UD_MA_HLT->Position,thlt); // order of MA filter
             Reg->WriteInteger("MA_THLT",ptmp->UD_MA_HLT->Position);
             thlt_offset = ptmp->Thlt_Offset->Text.ToDouble();
             Reg->WriteFloat("THLT_OFFSET",thlt_offset);
             //------------------
             // MLT Temperature
             //------------------
-            init_ma(&str_tmlt,ptmp->UD_MA_MLT->Position); // order of MA filter
+            init_ma(&str_tmlt,ptmp->UD_MA_MLT->Position,tmlt); // order of MA filter
             Reg->WriteInteger("MA_TMLT",ptmp->UD_MA_MLT->Position);
             tmlt_offset = ptmp->Tmlt_Offset->Text.ToDouble();
             Reg->WriteFloat("TMLT_OFFSET",tmlt_offset);
@@ -2215,11 +2205,11 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             //------------------
             // MLT Volume
             //------------------
-            init_ma(&str_vmlt,ptmp->NMA_edit->Text.ToInt()); // order of MA filter
+            init_ma(&str_vmlt,ptmp->NMA_edit->Text.ToInt(),volumes.Vmlt); // order of MA filter
             Reg->WriteInteger("MA_VMLT",ptmp->NMA_edit->Text.ToInt());
-            padc.dac   = ptmp->DAC_edit->Text.ToInt();       // DAC value
+            padc.dac   = ptmp->DAC_edit->Text.ToInt();   // DAC value
             Reg->WriteInteger("DAC"  ,padc.dac);
-            padc.vref4 = ptmp->Vref4_edit->Text.ToInt();     // Vref4
+            padc.vref4 = ptmp->Vref4_edit->Text.ToInt(); // Vref4
             Reg->WriteInteger("VREF4",padc.vref4);
             //-------------------
             // Boil Kettle Volume
@@ -2246,5 +2236,17 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
    delete ptmp;
    ptmp = 0; // NULL the pointer
 } // TMainForm::MeasurementsClick()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::Contents1Click(TObject *Sender)
+{
+   Application->HelpCommand(HELP_FINDER,0);
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::HowtoUseHelp1Click(TObject *Sender)
+{
+   Application->HelpCommand(HELP_HELPONHELP,0);
+}
 //---------------------------------------------------------------------------
 

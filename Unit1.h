@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.23  2004/04/19 21:55:49  emile
+// - Added calibration offsets and MA-filters for Thlt and Tmlt:
+//   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
+//   - New Measurement Dialog screen
+//   - Several parameters moved from HW Settings Dialog Screen
+// - Added new Registry variable MA_VMLT: MA filter order of Vmlt is now
+//   also stored in Registry
+// - Help-file is updated
+//
 // Revision 1.22  2004/03/10 10:10:39  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -170,10 +179,10 @@
 #include "VrThermoMeter.hpp"
 #include "VrPowerMeter.hpp"
 
-#define TS_INIT   (5)
-#define KC_INIT   (4)
-#define TI_INIT (110)
-#define TD_INIT  (27)
+#define TS_INIT    (5.0)
+#define KC_INIT   (69.0)
+#define TI_INIT  (520.0)
+#define TD_INIT  (130.0)
 #define LOGFILE "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
 #define REGKEY    "Software\\ebrew"
@@ -246,7 +255,6 @@ __published:	// IDE-managed Components
         TMenuItem *Help1;
         TMenuItem *MenuHelpAbout;
         TMenuItem *HowtoUseHelp1;
-        TMenuItem *SearchforHelpOn1;
         TMenuItem *Contents1;
         TMenuItem *MenuOptionsPIDSettings;
         TMenuItem *MenuView_I2C_HW_Devices;
@@ -279,7 +287,6 @@ __published:	// IDE-managed Components
         TMenuItem *MenuViewMash_progress;
         TMenuItem *MenuOptionsI2CSettings;
         TMenuItem *SpargeSettings1;
-        TImage *Image1;
         TMenuItem *Auto1;
         TMenuItem *OFF1;
         TMenuItem *ON1;
@@ -293,6 +300,7 @@ __published:	// IDE-managed Components
         TvrThermoMeter *tm_triac;
         TVrPowerMeter *Heater;
         TMenuItem *Measurements;
+        TImage *Image1;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -312,6 +320,8 @@ __published:	// IDE-managed Components
         void __fastcall FormCreate(TObject *Sender);
         void __fastcall MenuView_I2C_HW_DevicesClick(TObject *Sender);
         void __fastcall MeasurementsClick(TObject *Sender);
+        void __fastcall Contents1Click(TObject *Sender);
+        void __fastcall HowtoUseHelp1Click(TObject *Sender);
 private:	// User declarations
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall Start_I2C_Communication(int known_status);

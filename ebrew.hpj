@@ -4,6 +4,7 @@
 COMPRESS=12 Hall Zeck
 LCID=0x413 0x0 0x0 ; Nederlands (Nederland)
 REPORT=Yes
+CONTENTS=IDH_HelpContents
 TITLE=ebrew Help file (English)
 CNT=ebrew.cnt
 BMROOT=SRC_HELP

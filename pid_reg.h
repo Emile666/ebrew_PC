@@ -5,6 +5,12 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.3  2004/04/25 14:02:17  emile
+  - Added a 'type C' PID controller, function pid_reg3(). Possible to select
+    this from the PID settings dialog screen. Left the old one in for
+    compatibility. New registry variable PID_Model.
+  - Gamma added to log-file, so that the PID controller can be tuned.
+
   Revision 1.2  2002/12/30 13:33:45  emile
   - Headers with CVS tags added to every source file
   - Restore Settings function is added
@@ -37,6 +43,7 @@ typedef struct _pid_params
    double k3; // k3 value for PID controller
    int    ts_ticks; // ticks for timer
    double temp_offset; // Offset to add to Tset to compensate for HLT-MLT losses
+   double temp_offset2; // Offset to add to Tmlt for early start of mash timers
    int    mash_control; // 0 = Thlt, 1 = Tmlt
    int    pid_model;    // 0 = Type A (pid_reg2), 1 = Type C (pid_reg3)
 } pid_params; // struct pid_params

@@ -6,6 +6,13 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.9  2004/01/31 16:01:05  emile
+  - Init. HW High/Low limit temp. changed to 70/50 C respectively.
+  - Added code for calculation/simulation of Vhlt and Vboil
+  - Hardware dialog updated: 3 new controls added for Vhlt and Vboil simulation
+  - Registry key no longer in ebrew but in Software\\ebrew
+  - First attempt to catch CVS version ID in source code
+
   Revision 1.8  2003/09/15 20:37:22  emile
   - LM76 constants renamed in LM92 constants
   - Pump Popupmenu added (same as already done for the valves)
@@ -160,7 +167,7 @@ void calc_phases_start(FILE *fd, log_struct p[])
             if (!p[log_idx].sparging_start && std > 4)
             {
                p[log_idx].sparging_start = line_nr;
-               p[log_idx].vmash          = dtmp_old; /* last Vmlt before transition */
+               //p[log_idx].vmash          = dtmp_old; /* last Vmlt before transition */
             } /* if */
             dtmp_old = dtmp; /* update previous value */
             FIND_PHASE(p[log_idx].boil_start,9);     /* Find 1st entry of "10. BOIL" */
@@ -368,7 +375,7 @@ int decode_log_file(FILE *fd, log_struct p[])
             p[log_idx].tmr_ms_idx     = 0;
             p[log_idx].sp_idx         = 0;
             p[log_idx].max_std        = 0;
-            p[log_idx].vmash          = 0.0;
+            //p[log_idx].vmash          = 0.0;
 
             if (log_idx > 0)
             {
@@ -466,7 +473,7 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts)
    return ret;
 } // read_input_file
 
-double update_tset(double *tset, double temp, double offset,
+double update_tset(double *tset, double temp, double offset, double offset2,
                    maisch_schedule ms[], int *ms_idx, int ms_total)
 /*------------------------------------------------------------------
   Purpose  : This function checks if tset should be increased, based
@@ -486,6 +493,7 @@ double update_tset(double *tset, double temp, double offset,
      *tset : The reference temperature for the PID controller
       temp : The actual temperature of the HLT or MLT
     offset : Temperature offset to add to tset (1X or 2X)
+   offset2 : Temperature offset for early start of mash timers
       time : the actual time in TS ticks
       ms[] : Array containing the maisch schedule
     ms_idx : index in the array [0 .. ms_total-1]
@@ -496,7 +504,8 @@ double update_tset(double *tset, double temp, double offset,
    if (*ms_idx < ms_total)
    {
       *tset = ms[*ms_idx].temp + offset; // get ref. temp. from mash scheme
-      if ((ms[*ms_idx].timer == NOT_STARTED) && (temp >= ms[*ms_idx].temp))
+      if ((ms[*ms_idx].timer == NOT_STARTED) &&
+          (temp >= ms[*ms_idx].temp + offset2))
       {
          /* 2) timer has not started yet and ref. temp. has been achieved */
          ms[*ms_idx].timer = 0; /* start timer */
@@ -566,20 +575,12 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
    switch (std->ebrew_std)
    {
       case S00_INITIALISATION:
-           if (vol->Vhlt_simulated)
-           {
-              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
-           }
            if (pid_on & 0x01)
            {
               std->ebrew_std = S01_WAIT_FOR_HLT_TEMP;
            } // if
            break;
       case S01_WAIT_FOR_HLT_TEMP:
-           if (vol->Vhlt_simulated)
-           {
-              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
-           }
            if (thlt >= tset_hlt) // HLT TEMP is OK
            {
               std->ebrew_std = S02_FILL_MLT;
@@ -596,18 +597,11 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
            } // if
            break;
       case S03_MASH_IN_PROGRESS:
-           if (vol->Vhlt_simulated)
-           {
-              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
-           }
            if ((ms_idx >= ms_total - 1) && // Mashing finished?
                (ms[ms_idx].timer >= ms[ms_idx].time))
            {
-              std->sp_idx    = 0;    // init. sparging index
-              std->vmash     = vol->Vmlt; // remember current MLT volume
+              std->sp_idx    = 0;                  // init. sparging index
               std->timer1    = sps->sp_time_ticks; // timer1 -> TIME-OUT
-              vol->Vhlt_old  = vol->Vhlt_start; // remember old value
-              vol->Vboil_old = 0.0;
               std->ebrew_std = S05_SPARGING_REST;
            }
            else if (tmlt > ms[ms_idx].temp + sps->tmlt_hlimit)
@@ -616,10 +610,6 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
            } // else if
            break;
       case S04_BYPASS_HEAT_EXCHANGER:
-           if (vol->Vhlt_simulated)
-           {
-              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
-           }
            if ((tmlt < ms[ms_idx].temp + sps->tmlt_llimit) ||
                ((ms_idx >= ms_total - 1) && // Mashing finished?
                 (ms[ms_idx].timer >= ms[ms_idx].time)))
@@ -628,15 +618,13 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
            } // if
            break;
       case S05_SPARGING_REST:
-           if (vol->Vhlt_simulated)
-           {
-              vol->Vhlt = vol->Vhlt_old - vol->Vmlt;
-           }
            if (++std->timer1 >= sps->sp_time_ticks)
            {
+              vol->Vmlt_old  = vol->Vmlt;  // save Vmlt for state 6 & 9
+              vol->Vboil_old = vol->Vboil; // save Vboil for state 6 & 9
               if (std->sp_idx < sps->sp_batches)
               {
-                 std->ebrew_std = S06_PUMP_FROM_MLT_TO_BOIL; // Pump to BOIL again
+                 std->ebrew_std = S06_PUMP_FROM_MLT_TO_BOIL; // Pump to BOIL (again)
               } // if
               else
               {
@@ -647,38 +635,38 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
       case S06_PUMP_FROM_MLT_TO_BOIL:
            if (vol->Vboil_simulated)
            {
-              vol->Vboil = vol->Vboil_old + std->vmash - vol->Vmlt;
+              vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            }
-           if (vol->Vmlt < std->vmash - sps->sp_vol_batch)
+           if (vol->Vmlt <= vol->Vmlt_old - sps->sp_vol_batch)
            {
-              std->timer2    = 0; // init. 1 sec. timer
-              vol->Vhlt_old  = vol->Vhlt; // remember value of HLT
+              std->timer2    = 0;          // init. 1 sec. timer
               std->ebrew_std = S08_DELAY_xSEC;
            } // if
            break;
       case S07_PUMP_FROM_HLT_TO_MLT:
            if (vol->Vhlt_simulated)
            {
-              vol->Vhlt = vol->Vhlt_old + std->vmash - vol->Vmlt;
+              vol->Vhlt = vol->Vhlt_old + vol->Vmlt_old - vol->Vmlt;
            }
-           if (vol->Vmlt > std->vmash)
+           if (vol->Vmlt >= vol->Vmlt_old + sps->sp_vol_batch)
            {
-              std->sp_idx++;      // Increase #Sparging Sessions done
-              std->timer1    = 0; // init timer1
-              vol->Vboil_old = vol->Vboil; // remember value of BOIL
+              std->sp_idx++;              // Increase #Sparging Sessions done
+              std->timer1    = 0;         // init timer1
               std->ebrew_std = S05_SPARGING_REST;
            } // if
            break;
       case S08_DELAY_xSEC:
            if (++std->timer2 >= sps->to_xsec)
            {
+              vol->Vhlt_old  = vol->Vhlt;          // remember old value
+              vol->Vmlt_old  = vol->Vmlt;          // remember current MLT volume
               std->ebrew_std = S07_PUMP_FROM_HLT_TO_MLT;
            } // if
            break;
       case S09_EMPTY_MLT:
            if (vol->Vboil_simulated)
            {
-              vol->Vboil = vol->Vboil_old + std->vmash - vol->Vmlt;
+              vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            }
            if (vol->Vmlt < sps->vmlt_empty)
            {
@@ -770,7 +758,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
    return std->ebrew_std; // return the new state of the STD
 } // update_std()
 
-void init_ma(ma *p, int N)
+void init_ma(ma *p, int N, double init_val)
 /*------------------------------------------------------------------
   Purpose  : This function initialises the Moving Average (MA) struct
              that is used in the moving_average() function
@@ -778,17 +766,18 @@ void init_ma(ma *p, int N)
         *p : Pointer to the ma struct (specify a new struct for every
              new filter!)
          N : The order of the Moving Average filter (1 = No filtering)
+   init_val: The value to init the MA filter to
   Returns  : -
   ------------------------------------------------------------------*/
 {
    int i; // temp. var.
 
-   p->N     = N;   // order of MA filter
-   p->index = 0;   // index in cyclic array
-   p->sum   = 0.0; // running sum
+   p->N     = N;        // order of MA filter
+   p->index = 0;        // index in cyclic array
+   p->sum   = init_val; // running sum
    for (i = 0; i < N; i++)
    {
-      p->T[i] = 0.0; // clear cyclic array
+      p->T[i] = init_val; // set cyclic array to init. value
    } // for
 } // init_ma()
 

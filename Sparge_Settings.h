@@ -5,6 +5,18 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2004/03/10 10:10:38  emile
+// - Reduced complexity of several routines:
+//   - T50msecTimer split, new routine Generate_IO_Signals added
+//   - PopupMenu1Popup now uses (new) macro SET_POPUPMENU
+//   - Reset_I2C_Bus now included in SET_LED macro
+// - Every I2C write action now in a separate time-slice to avoid
+//   I2C bus errors if fscl is low
+// - This is the first version where the help file function is enabled
+//   - All help buttons and F1 function key are operational
+//   - Help file sources: ebrew.rtf and ebrew.hpj are added to CVS
+// - ad1, ad2 and ad3 variables -> thlt, tmlt and ttriac (new variables)
+//
 // Revision 1.4  2003/06/01 13:40:45  emile
 // - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
 // - Switch/fix for std state added for easier testing
@@ -66,7 +78,15 @@ __published:	// IDE-managed Components
         TLabel *Label12;
         TLabel *Label13;
         TLabel *Label14;
-        TEdit *EVmash;
+        TLabel *Label15;
+        TLabel *Label16;
+        TLabel *Label17;
+        TLabel *Label18;
+        TLabel *Label19;
+        TLabel *Label20;
+        TLabel *Label21;
+        TLabel *Label22;
+        TLabel *Label23;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

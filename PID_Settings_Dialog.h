@@ -5,6 +5,12 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2004/04/25 14:02:17  emile
+// - Added a 'type C' PID controller, function pid_reg3(). Possible to select
+//   this from the PID settings dialog screen. Left the old one in for
+//   compatibility. New registry variable PID_Model.
+// - Gamma added to log-file, so that the PID controller can be tuned.
+//
 // Revision 1.4  2004/03/10 10:10:38  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -67,6 +73,14 @@ __published:
         TLabel *Date_Label;
         TLabel *Time_Label;
         TRadioGroup *PID_Model;
+        TLabel *Label5;
+        TLabel *Label6;
+        TLabel *Label7;
+        TLabel *Label8;
+        TLabel *Label9;
+        TLabel *Label10;
+        TEdit *Offs2_Edit;
+        TLabel *Label11;
         void __fastcall RG2Click(TObject *Sender);
         void __fastcall Button3Click(TObject *Sender);
 private:

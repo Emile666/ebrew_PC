@@ -6,6 +6,13 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.9  2004/01/31 16:01:05  emile
+// - Init. HW High/Low limit temp. changed to 70/50 C respectively.
+// - Added code for calculation/simulation of Vhlt and Vboil
+// - Hardware dialog updated: 3 new controls added for Vhlt and Vboil simulation
+// - Registry key no longer in ebrew but in Software\\ebrew
+// - First attempt to catch CVS version ID in source code
+//
 // Revision 1.8  2003/09/15 20:37:22  emile
 // - LM76 constants renamed in LM92 constants
 // - Pump Popupmenu added (same as already done for the valves)
@@ -145,7 +152,6 @@ typedef struct _std_struct
    int    timer3;    // Timer for transition to state 'Empty Heat Exchanger'
    int    timer4;    // Timer for state 'Empty Heat Exchanger'
    int    timer5;    // Timer for boiling time
-   double vmash;     // MLT volume after mashing is completed
 } std_struct;
 
 typedef struct _timer_vars
@@ -172,12 +178,13 @@ typedef struct _ma
 #define VBOIL_START (0.0)
 typedef struct _volume_struct
 {
-   double Vhlt;  // Volume of HLT in litres
-   double Vmlt;  // Volume of MLT in litres
-   double Vboil; // Volume of Boil kettle in litres
+   double Vhlt;       // Volume of HLT in litres
+   double Vmlt;       // Volume of MLT in litres
+   double Vboil;      // Volume of Boil kettle in litres
    int    Vhlt_start; // Starting volume of HLT
-   double Vhlt_old;   // Prev. value of Vhlt, used for calculating Vhlt
-   double Vboil_old;  // Prev. value of Vboil, used for calculating Vboil
+   double Vhlt_old;   // Prev. value of Vhlt, used in STD
+   double Vmlt_old;   // Prev. value of Vmlt, used in STD
+   double Vboil_old;  // Prev. value of Vboil, used in STD
    // Assumption is made here that Vmlt is always measured.
    int    Vhlt_simulated;  // true = Vhlt is not measured, but calculated
    int    Vboil_simulated; // true = Vboil is not measured, but calculated
@@ -257,12 +264,12 @@ typedef struct _volume_struct
 
 int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts);
-double update_tset(double *tset, double temp, double offset,
+double update_tset(double *tset, double temp, double offset, double offset2,
                    maisch_schedule ms[], int *ms_idx, int ms_total);
 int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
                unsigned int *kleppen, maisch_schedule ms[], int ms_idx, int ms_total,
                sparge_struct *sps, std_struct *std, int pid_on, int std_fx);
-void init_ma(ma *p, int N);
+void init_ma(ma *p, int N, double init_val);
 double moving_average(ma *p, double x);
 
 #ifdef __cplusplus
