@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2003/06/29 13:11:35  emile
+// - Time switch function added (PID options screen). The PID controller is
+//   enabled when the predefined date and time have been met.
+//
 // Revision 1.9  2003/06/01 19:36:34  emile
 // - Switch/Fix added for Vmlt
 //
@@ -238,90 +242,67 @@ void __fastcall TMainForm::Main_Initialisation(void)
    catch (ERegistryException &E)
    {
       ShowMessage(E.Message);
-      delete Reg;
-      return;
    } // catch
+
    //----------------------------------------------------------------------
    // Start I2C Communication: ISA PCB Card with Base Address from Registry
    //----------------------------------------------------------------------
-
-   if (i2c_init(x1,TRUE) != I2C_NOERR)
+   hw_status = i2c_init(x1,TRUE);
+   if (hw_status != I2C_NOERR)
    {
       sprintf(s,"Error in i2c_init(0x%x)",x1);
       MessageBox(NULL,I2C_ARGS_MSG,s,MB_OK);
-      delete Reg;
-      return;
    } // if
-
-   switch (i2c_start()) // Start I2C Communication
+   else
    {
-      case I2C_BB  : MessageBox(NULL,I2C_BB_MSG,"Error in i2c_start()",MB_OK);
-                     hw_status = I2C_BB;
-                     delete Reg;
-                     return;
-                     break;
-      case I2C_BERR: MessageBox(NULL,I2C_BERR_MSG,"Error in i2c_start()",MB_OK);
-                     hw_status = I2C_BERR;
-                     delete Reg;
-                     return;
-                     break;
-      default      : hw_status = I2C_NOERR;
-                     break; /* NO_ERR */
-   } // switch
-
-   //----------------------------------------------------
-   // I2C Driver and Hardware Interface board is present.
-   // Now, check the individual Hardware Devices.
-   //----------------------------------------------------
-   check_i2c_hw(&hw_status); // check all hardware
-
-   // Print information using a MessageBox
-   hw_status & LCD_OK        ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(st,LCD_TXT,s1);
-   hw_status & DIG_IO_LSB_OK ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,DIG_IO_LSB_TXT,s1);
-   strcat(st,s);
-   hw_status & DIG_IO_MSB_OK ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,DIG_IO_MSB_TXT,s1);
-   strcat(st,s);
-   hw_status & LED1_OK       ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,LED1_TXT,s1);
-   strcat(st,s);
-   hw_status & LED2_OK       ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,LED2_TXT,s1);
-   strcat(st,s);
-   hw_status & LED3_OK       ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,LED3_TXT,s1);
-   strcat(st,s);
-   hw_status & LED4_OK       ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,LED4_TXT,s1);
-   strcat(st,s);
-   hw_status & ADDA_OK       ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,ADDA_TXT,s1);
-   strcat(st,s);
-   hw_status & LM76_1_OK     ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,LM76_1_TXT,s1);
-   strcat(st,s);
-   hw_status & LM76_2_OK     ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,LM76_2_TXT,s1);
-   strcat(st,s);
-   hw_status & ADS7828_OK    ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,ADS7828_TXT,s1);
-   strcat(st,s);
-   hw_status & FM24C08_OK    ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT);
-   sprintf(s,FM24C08_TXT,s1);
-   strcat(st,s);
-   MessageBox(NULL,st,"Results of I2C Hardware Check",MB_OK);
-
-   if (hw_status & LCD_OK)
-   {
-      //if (InitLCD()) MessageBox(NULL,"Error initialising LCD Display","ERROR",MB_OK);
-      //else
-      //{
-      //   print_lcd("Welcome to ebrew");
-      //   print_lcd("Written by Emile");
-      //}
-   } // if
+      hw_status = i2c_start(); // Start I2C Communication
+      switch (hw_status)
+      {
+         case I2C_BB  : MessageBox(NULL,I2C_BB_MSG,"Error in i2c_start()",MB_OK);
+                        break;
+         case I2C_BERR: MessageBox(NULL,I2C_BERR_MSG,"Error in i2c_start()",MB_OK);
+                        break;
+         default      : //-------------------------------------------------
+                        // No error, check the individual Hardware Devices.
+                        //-------------------------------------------------
+                        check_i2c_hw(&hw_status); // check all hardware
+                        // Print information using a MessageBox
+                        PR_HW_STAT(LCD_OK);       // LCD Display
+                        sprintf(st,LCD_TXT,s1);
+                        PR_HW_STAT(DIG_IO_LSB_OK); // IO Port LSB
+                        sprintf(s,DIG_IO_LSB_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(DIG_IO_MSB_OK); // IO Port MSB
+                        sprintf(s,DIG_IO_MSB_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(LED1_OK);       // LED1
+                        sprintf(s,LED1_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(LED2_OK);       // LED2
+                        sprintf(s,LED2_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(LED3_OK);       // LED3
+                        sprintf(s,LED3_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(LED4_OK);       // LED4
+                        sprintf(s,LED4_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(ADDA_OK);       // PCD8591 AD-DA Converter
+                        sprintf(s,ADDA_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(LM76_1_OK);     // LM92 Temp. Sensor
+                        sprintf(s,LM76_1_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(LM76_2_OK);     // LM92 Temp. Sensor
+                        sprintf(s,LM76_2_TXT,s1);
+                        strcat(st,s);
+                        PR_HW_STAT(FM24C08_OK);    // FM24C08 EEPROM
+                        sprintf(s,FM24C08_TXT,s1);
+                        strcat(st,s);
+                        MessageBox(NULL,st,"Results of I2C Hardware Check",MB_OK);
+                        break; /* NO_ERR */
+      } // switch
+   } // else
 
    //-------------------------------------
    // Read Mash Scheme for maisch.sch file
@@ -329,8 +310,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    if (!read_input_file(MASH_FILE,ms,&ms_tot,pid_pars.ts))
    {
        MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
-       delete Reg;
-       return;
    } /* if */
    Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
 
@@ -355,14 +334,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
          Reg->WriteInteger("ms_idx",ms_idx); // update registry setting
          tset_hlt = ms[ms_idx].temp; // Set tset value for HLT
          Reg->CloseKey();        // Close the Registry
-         delete Reg;
       } // if
    } // try
    catch (ERegistryException &E)
    {
       ShowMessage(E.Message);
-      delete Reg;
-      return;
    } // catch
 
    //-------------
@@ -415,6 +391,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
    PID_RB->Enabled                        = true; // Enable PID Controller Radio-buttons
    time_switch                            = 0;    // Time switch disabled at power-up
+   delete Reg; // Delete Registry object to prevent memory leak
 } // Main_Initialisation()
 
 //---------------------------------------------------------------------------
@@ -519,7 +496,13 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          i = Reg->ReadInteger("Mash_Control"); // Read Mash Control from registry
          ptmp->RG1->ItemIndex = i;
          ptmp->RG2->ItemIndex = time_switch;   // Value of time-switch [off, on]
-
+         if (time_switch)
+         {
+            ptmp->Date_Edit->Text = DateToStr(dt_time_switch);
+            AnsiString s = TimeToStr(dt_time_switch);
+            s.SetLength(s.Length()-3); // remove seconds
+            ptmp->Time_Edit->Text = s;
+         } // if
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
             i = ptmp->TS_edit->Text.ToInt();
@@ -546,7 +529,7 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             {
                strcpy(tmp,ptmp->Date_Edit->Text.c_str());
                strcat(tmp," ");
-               strcpy(tmp,ptmp->Time_Edit->Text.c_str());
+               strcat(tmp,ptmp->Time_Edit->Text.c_str());
                dt_time_switch = StrToDateTime(tmp);
             } // if
          } // if

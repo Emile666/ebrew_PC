@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2003/06/29 13:11:35  emile
+// - Time switch function added (PID options screen). The PID controller is
+//   enabled when the predefined date and time have been met.
+//
 // Revision 1.8  2003/06/01 19:36:34  emile
 // - Switch/Fix added for Vmlt
 //
@@ -75,6 +79,9 @@
 #define REGKEY    "ebrew"
 // 1 minute = 1/(60*24) part of one day, see TDateTime for details
 #define ONE_MINUTE (6.94444E-04)
+
+// Macro, used in TMainForm::Main_Initialisation()
+#define PR_HW_STAT(x)   hw_status & x ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT)
 
 typedef struct _swfx_struct
 {
