@@ -5,6 +5,17 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2004/02/21 23:11:20  emile
+// - Changed behaviour after I2C Bus reset to a more silent one. Resulted in:
+//   - Addition of checkbox "Give message on successful reset after I2C error"
+//     in Hardware Settings. New registry variable "CB_I2C_ERR_MSG".
+//   - Print Hardware status dialog screen only if hardware configuration has
+//     changed. Added "I2C Devices present" textbox in Hardware Settings.
+//     New registry variable "KNOWN_HW_DEVICES"
+//   - Restore_Settings only after power-down/power-up (added 'power_up_flag').
+// - Exit ebrew if I2C reset was unsuccessful
+// - TTRIAC_LLIM default value set to 60 instead of 50
+//
 // Revision 1.4  2004/01/31 16:01:04  emile
 // - Init. HW High/Low limit temp. changed to 70/50 C respectively.
 // - Added code for calculation/simulation of Vhlt and Vboil
@@ -91,6 +102,8 @@ __published:	// IDE-managed Components
         TLabel *Label9;
         TLabel *Label10;
         TEdit *Hw_devices_Edit;
+        TComboBox *fscl_combo;
+        TLabel *Label11;
 private:	// User declarations
 public:		// User declarations
         __fastcall TI2C_Settings(TComponent* Owner);

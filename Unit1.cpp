@@ -6,6 +6,17 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.24  2004/02/21 23:11:20  emile
+// - Changed behaviour after I2C Bus reset to a more silent one. Resulted in:
+//   - Addition of checkbox "Give message on successful reset after I2C error"
+//     in Hardware Settings. New registry variable "CB_I2C_ERR_MSG".
+//   - Print Hardware status dialog screen only if hardware configuration has
+//     changed. Added "I2C Devices present" textbox in Hardware Settings.
+//     New registry variable "KNOWN_HW_DEVICES"
+//   - Restore_Settings only after power-down/power-up (added 'power_up_flag').
+// - Exit ebrew if I2C reset was unsuccessful
+// - TTRIAC_LLIM default value set to 60 instead of 50
+//
 // Revision 1.23  2004/02/15 14:48:53  emile
 // - HLT and MLT Thermometer objects on screen: max. value is 90 degrees.
 // - Error handling improved:
@@ -301,15 +312,33 @@ void __fastcall TMainForm::Main_Initialisation(void)
   ------------------------------------------------------------------*/
 {
    TRegistry *Reg = new TRegistry();
-   FILE *fd;      // Log File Descriptor
-   char s[80];    // temp. string
-   char s1[20];   // temp. string
-   char st[1024]; // string for MessageBox
-   int  i;        // temp. variable
-   int  x1;       // Temp. var. for I2C HW base address
+   FILE *fd;            // Log File Descriptor
+   char s[80];          // temp. string
+   char s1[20];         // temp. string
+   char st[1024];       // string for MessageBox
+   int  i;              // temp. variable
+   int  x1;             // Temp. var. for I2C HW base address
+   int  fscl_prescaler; // index into PCF8584 prescaler values
+   //---------------------------------------------------------------------------
+   // The PCF8584 uses register S2 to set the proper SCL frequency. It contains
+   // bytes S4,S3,S2 (control CLK frequency) and S1, S0 (control fscl).
+   // This results in the following modes (assume CLK = 12 MHz):
+   //
+   // Div_by     Reg_S2     fscl(kHz)     Div_by     Reg_S2     fscl(kHz)
+   //   8192   11111 (0x1F)   1.46           512   10110 (0x16)  22.44
+   //   5120   11011 (0x1B)   2.34           384   10010 (0x12)  31.25
+   //   4096   10111 (0x17)   2.93           256   00010 (0x02)  46.88
+   //   3072   10011 (0x13)   3.91           160   11001 (0x19)  75.00
+   //   2048   00011 (0x03)   5.86           128   10101 (0x15)  93.75
+   //   1024   11110 (0x1E)  11.72            96   10001 (0x11) 125.00
+   //    640   11010 (0x1A)  18.75
+   //---------------------------------------------------------------------------
+   byte fscl_values[] = {0x1F, 0x1B, 0x17, 0x13, 0x03, 0x1E, 0x1A,
+                         0x16, 0x12, 0x02, 0x19, 0x15, 0x11};
 
-   // Fill pid_pars struct with TS, Kc, Ti & Td values from the Registry
-   //-------------------------------------------------------------------
+   //----------------------------------------
+   // Initialise all variables from Registry
+   //----------------------------------------
    try
    {
       if (Reg->KeyExists(REGKEY))
@@ -317,13 +346,19 @@ void __fastcall TMainForm::Main_Initialisation(void)
          Reg->OpenKey(REGKEY,FALSE);
          x1 = Reg->ReadInteger("I2C_Base");    // Read HW IO address as an int.
          known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
+         fscl_prescaler   = Reg->ReadInteger("FSCL_PRESCALER");
+         if ((fscl_prescaler < 0) || (fscl_prescaler > 12))
+         {
+            fscl_prescaler = 5; // set fscl to 11.72 kHz
+            Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
+         } // if
          i = Reg->ReadInteger("TS");  // Read TS from registry
          pid_pars.ts = (double)i;
-         i = Reg->ReadInteger("Kc");      // Read Kc from registry
+         i = Reg->ReadInteger("Kc");  // Read Kc from registry
          pid_pars.kc = (double)i;
-         i = Reg->ReadInteger("Ti");      // Read Ti from registry
+         i = Reg->ReadInteger("Ti");  // Read Ti from registry
          pid_pars.ti = (double)i;
-         i = Reg->ReadInteger("Td");      // Read Ti from registry
+         i = Reg->ReadInteger("Td");  // Read Td from registry
          pid_pars.td = (double)i;
          pid_pars.temp_offset = Reg->ReadInteger("TOffset");
          pid_pars.mash_control = Reg->ReadInteger("Mash_Control"); // 0 = Tad1, 1 = Tad2
@@ -367,7 +402,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //----------------------------------------------------------------------
    // Start I2C Communication: ISA PCB Card with Base Address from Registry
    //----------------------------------------------------------------------
-   hw_status = i2c_init(x1,TRUE);
+   hw_status = i2c_init(x1,TRUE,fscl_values[fscl_prescaler]);
    if (hw_status != I2C_NOERR)
    {
       sprintf(s,"Error in i2c_init(0x%x)",x1);
@@ -541,6 +576,9 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
           // No entry in Registry, create all keys
           Reg->CreateKey(REGKEY); // Create key if it does not exist yet
           Reg->OpenKey(REGKEY,FALSE);
+          Reg->WriteInteger("I2C_Base",0x378);   // I2C HW Base Address
+          Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
+          Reg->WriteInteger("FSCL_PRESCALER",5); // set fscl to 11.72 kHz
           // PID Settings Dialog
           Reg->WriteInteger("TS",TS_INIT);  // Set Default value
           Reg->WriteInteger("Kc",KC_INIT);  // Controller gain
@@ -579,7 +617,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
           Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
           known_hw_devices = DIG_IO_LSB_OK | LED1_OK | LED2_OK   | LED3_OK |
                              LED4_OK       | ADDA_OK | LM92_1_OK | LM92_2_OK;
-          Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
 
           // Init values for mash scheme variables
           Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
@@ -590,7 +627,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
           Reg->WriteInteger("DAC",0);           // Init. DA Converter
           Reg->WriteInteger("TOffset",3);       // HLT - MLT heat loss
           Reg->WriteInteger("Mash_Control",1);  // 0 = Tad1, 1 = Tad2
-          Reg->WriteInteger("I2C_Base",0x378);  // I2C HW Base Address
           // Init values for Sparge Settings
           Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
           Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
@@ -909,7 +945,8 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
    int x2;  // temp. variable representing new I2C HW Base Address
    char *endp; // temp. pointer for strtol() function
    char s[80]; // temp. array
-   //char dbg[160];
+   int  init_needed = false; // temp. flag, TRUE = Main_Initialisation to be called
+   int  fscl_prescaler;      // index into PCF8584 prescaler values
 
    TRegistry *Reg = new TRegistry();
    TI2C_Settings *ptmp;
@@ -926,6 +963,8 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          ptmp->HW_Base_Edit->Text = IntToHex(x1,3);
          known_hw_devices            = Reg->ReadInteger("KNOWN_HW_DEVICES");
          ptmp->Hw_devices_Edit->Text = IntToHex(known_hw_devices,3);
+         fscl_prescaler              = Reg->ReadInteger("FSCL_PRESCALER");
+         ptmp->fscl_combo->ItemIndex = fscl_prescaler;
          led1 = Reg->ReadInteger("LED1");     // Read LED1 from registry
          ptmp->RG1->ItemIndex = led1;         // Set radio-button
          led2 = Reg->ReadInteger("LED2");     // Read LED2 from registry
@@ -967,9 +1006,22 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          {
             strcpy(s,ptmp->HW_Base_Edit->Text.c_str());    // retrieve hex value
             x2 = (int)(strtol(s,&endp,16));                // convert to integer
+            if (x2 != x1)
+            {
+               init_needed = true;
+               Reg->WriteInteger("I2C_Base",x2); // save new I2C address
+            } // if
+
             strcpy(s,ptmp->Hw_devices_Edit->Text.c_str()); // retrieve hex value
             known_hw_devices = (int)(strtol(s,&endp,16));  // convert to integer
             Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
+
+            if (fscl_prescaler != ptmp->fscl_combo->ItemIndex)
+            {
+               init_needed    = true;
+               fscl_prescaler = ptmp->fscl_combo->ItemIndex;
+               Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
+            } // if
 
             //-------------------------------------------------------
             // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
@@ -1019,15 +1071,21 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
             cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
             Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
 
-            if (x2 != x1)
+            if (init_needed)
             {
-               Reg->WriteInteger("I2C_Base",x2); // save new I2C address
-               // New I2C HW Base Address, call i2c_stop() with old addresses
+               //--------------------------------------------------------
+               // New I2C HW Base Address or SCL prescaler was changed,
+               // call i2c_stop() and init I2C Bus communication again.
+               //--------------------------------------------------------
                if (i2c_stop() != I2C_NOERR)
-               {
-                  MessageBox(NULL,"Error closing I2C bus (i2c_stop())","ERROR",MB_OK);
+               {  // i2c bus locked, i2c_stop() did not work
+                  MessageBox(NULL,"i2c_stop() not successful: Cycle power Off -> On, then press OK button.","ERROR",MB_OK);
+                  MenuFileExitClick(this); // Exit ebrew program
                }
-               Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
+               else
+               {
+                  Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
+               } // else
             } // if
             init_adc(&padc); // recalculate conversion constants
          } // if
