@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.17  2003/12/21 21:16:59  emile
+// - Old About screen removed, replaced by Version Aware About box. This
+//   new About screen shows the version number (and a nice picture!).
+//
 // Revision 1.16  2003/12/21 13:39:40  emile
 // - Writing to LSB_IO: all bits are inverted, because hardware is modified to
 //   enable sinking instead of sourcing.
@@ -162,7 +166,7 @@ void __fastcall TMainForm::Restore_Settings(void)
       // Read all information from the log-file and try to
       // reconstruct the previous situation as good as possible
       //--------------------------------------------------------
-      j = decode_log_file(fd,p1); // read log file with data jusst before chrash
+      j = decode_log_file(fd,p1); // read log file with data just before chrash
       fclose(fd);                 // close log-file
       prps = new TRestore_Program_Settings(this);
       prps->ComboBox1->Items->Add("Reset to default values (ms_idx=0, sp_idx=0, ebrew_std=0)");
@@ -199,7 +203,14 @@ void __fastcall TMainForm::Restore_Settings(void)
          {
             ms[j].timer = ms[j].time; // set previous timers to time-out
          } // for j
-         ms[ms_idx].timer = p1[k].tmr_ms_idx; // restore timer value
+         if (p1[k].std_val >= S05_SPARGING_REST)
+         {
+            ms[ms_idx].timer = ms[ms_idx].time; // set to time-out if mashing is finished
+         }
+         else
+         {
+            ms[ms_idx].timer = p1[k].tmr_ms_idx; // do a best guess for the timer value
+         } // else
          //----------------------------
          // Restore Sparging parameters
          //----------------------------
@@ -378,7 +389,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    {
       if (Reg->KeyExists(REGKEY))
       {
-         ms_idx = 0; // start with mash scheme from the beginning
          Reg->OpenKey(REGKEY,FALSE);
          i = Reg->ReadInteger("ms_idx");
          if (i < MAX_MS)
@@ -959,11 +969,11 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id)
    sprintf(tmp_str,"Error accessing I2C bus device ID 0x%2x",i2c_bus_id);
    if (i2c_stop() != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
-      MessageBox(NULL,"i2c_stop() not successfull: Cycle power Off -> On, then press OK button.",tmp_str,MB_OK);
+      MessageBox(NULL,"i2c_stop() not successful: Cycle power Off -> On, then press OK button.",tmp_str,MB_OK);
    }
    else
    {
-      MessageBox(NULL,"i2c_stop() successfull: Press OK button to continue reset process",tmp_str,MB_OK);
+      MessageBox(NULL,"i2c_stop() successful: Press OK button to continue reset process",tmp_str,MB_OK);
    } // else
    Main_Initialisation(); // continue with init. process
 } // TMainForm::Reset_I2C_bus()
