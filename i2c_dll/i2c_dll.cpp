@@ -24,6 +24,9 @@
 //                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
 //                        - PortTalk interface added (nt_in(), nt_out())
 // $Log$
+// Revision 1.2  2002/09/18 17:05:35  emile
+// Added cvs tags
+//
 // ==================================================================
 #include <stdio.h>
 #include <windows.h>
@@ -40,6 +43,8 @@
 #include <time.h>
 
 //USEDEF("i2c_dll.def");
+//---------------------------------------------------------------------------
+USERES("i2c_dll.res");
 //---------------------------------------------------------------------------
 #pragma argsused
 
@@ -467,7 +472,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int address, byte win_ve
                     I2C_PT    : PortTalk error (NT, 2000, XP only)
   ------------------------------------------------------------------*/
 {
-   int err = I2C_NOERR; // error return-value
+   int err  = I2C_NOERR; // error return-value
 
    win_nt = win_ver;
    if (win_nt && (OpenPortTalk() == -1))
@@ -902,13 +907,13 @@ extern "C" __declspec(dllexport) void __stdcall check_i2c_hw(int *HW_present)
    {
       *HW_present |= ADDA_OK;
    }
-   if (i2c_address(MAX6626_1_BASE) == I2C_NOERR)
+   if (i2c_address(LM76_1_BASE) == I2C_NOERR)
    {
-      *HW_present |= MAX6626_1_OK;
+      *HW_present |= LM76_1_OK;
    }
-   if (i2c_address(MAX6626_2_BASE) == I2C_NOERR)
+   if (i2c_address(LM76_2_BASE) == I2C_NOERR)
    {
-      *HW_present |= MAX6626_2_OK;
+      *HW_present |= LM76_2_OK;
    }
    if (i2c_address(ADS7828_BASE) == I2C_NOERR)
    {
@@ -1090,7 +1095,6 @@ extern "C" __declspec(dllexport) int __stdcall eeread(int addr, byte *p, byte nr
 {
    int  res = I2C_NOERR;   // return result
    byte x; // temp. byte
-   int i;
 
    if ((addr < 0) || (addr > 1023) || (nr < 1) || ((addr & 0x0f) + nr > 16))
    {
@@ -1107,6 +1111,48 @@ extern "C" __declspec(dllexport) int __stdcall eeread(int addr, byte *p, byte nr
    res |= i2c_read(FM24C08_BASE | RWb,p,nr); // read data
    return res;
 } // eeread()
+
+extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc)
+/*------------------------------------------------------------------
+  Purpose  : This function reads the LM76 13-bit Temp. Sensor and
+             returns the temperature.
+             Reading Register 0 of the LM76 results in the following bits:
+              15   14  13 12      3   2    1   0
+             Sign MSB B10 B9 ... B0 Crit High Low
+  Variables:
+       dvc : 0 = Read from the LM76 at 0x92/0x93 (LM76_1)
+             1 = Read from the LM76 at 0x94/0x95 (LM76_2).
+  Returns  : The temperature from the LM76
+  ------------------------------------------------------------------*/
+{
+   int    res = I2C_NOERR;   // return result
+   byte   buffer[2];         // array to store data from i2c_read()
+   int    temp_int;          // the temp. from the LM76 as an integer
+   double temp;              // the temp. from the LM76 as a double
+
+   if (dvc == 0)
+   {
+      res  = i2c_address(LM76_1_BASE);
+      res |= i2c_read(LM76_1_BASE | RWb,buffer,2); // read 2 bytes from LM76 register 0
+   }
+   else
+   {
+      res  = i2c_address(LM76_2_BASE);
+      res |= i2c_read(LM76_2_BASE | RWb,buffer,2); // read 2 bytes from LM76 register 0
+   } // else
+   //---------------------------------------------------------------------------
+   // NOTE: For some strange reason the BCB compiler does not correctly compile
+   //       the << (SHL) and >> (SHR) operators. Therefore we are forced to use
+   //       multiplication here!
+   //---------------------------------------------------------------------------
+   temp_int = buffer[0];      // store {Sign, MSB, bit 10..5} at bits temp_int bits 7..0
+   temp_int *= 256;           // SHL 8, Sign now at bit 15
+   temp_int &= 0xff00;        // Clear bits 7..0
+   temp_int |= buffer[1];     // Add bits D4..D0 to temp_int bits 7..3
+   temp_int &= 0xFFF8;        // Clear Crit High & Low bits
+   temp = (double)temp_int / 128.0; // SHR 3 (= 8) + multiply by 0.0625 (= 1/16)
+   return temp;               // Return value now in °C
+} // lm76_read()
 
 //---------------------------------------------------------------------------
 //   Important note about DLL memory management in a VCL DLL:

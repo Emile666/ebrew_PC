@@ -3,7 +3,7 @@
 // Filenaam    : i2c_dll.h
 // Auteur      : E. van de Logt
 // Datum       : 01-07-2002
-// Versie      : V1.03
+// Versie      : V1.04
 // ------------------------------------------------------------------
 // Doel : External declaration for I2C DLL, which can be used by both
 //        Visual C++ and Visual Basic. It is meant to directly access
@@ -24,6 +24,8 @@
 //                        - DAC enabled (dac added to adda_t struct,
 //                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
 //                        - PortTalk interface added (nt_in(), nt_out())
+// 11-11-02 LGT    V1.04  - MAX6626 constants replaced by LM76 constants
+//                        - lm76_read function prototype added
 // ==================================================================
 #ifndef _I2C_DLL_H
 #define _I2C_DLL_H
@@ -46,6 +48,8 @@
 #define TRUE  (!FALSE)
 
 #define LSB_IO (0)
+#define MSB_IO (1)
+
 #define VREF_INIT         (930.0)
 
 //------------------------------
@@ -54,7 +58,7 @@
 // LCD Display        : PCF 8574
 // Digital IO         : PCF 8574
 // LED1..LED4 Displays: SAA 1064
-// AD/DA Converter    : PCF 8591 / MAX6626 / ADS7828
+// AD/DA Converter    : PCF 8591 / LM76 / ADS7828
 // EEPROM memory      : FM24C08
 //------------------------------
 #define LCD_BASE         (0x40)
@@ -65,8 +69,8 @@
 #define LED3_BASE        (0x74)
 #define LED4_BASE        (0x76)
 #define ADDA_BASE        (0x90)
-#define MAX6626_1_BASE   (0x92)
-#define MAX6626_2_BASE   (0x94)
+#define LM76_1_BASE      (0x92)
+#define LM76_2_BASE      (0x94)
 #define ADS7828_BASE     (0x96)
 #define FM24C08_BASE     (0xA0)
 
@@ -78,27 +82,31 @@
 #define LED3_OK          (0x0020)
 #define LED4_OK          (0x0040)
 #define ADDA_OK          (0x0080)
-#define MAX6626_1_OK     (0x0100)
-#define MAX6626_2_OK     (0x0200)
+#define LM76_1_OK        (0x0100)
+#define LM76_2_OK        (0x0200)
 #define ADS7828_OK       (0x0400)
 #define FM24C08_OK       (0x0800)
 #define ALL_OK           (0x0FFF)
 
 #define NOT_TXT          "NOT"
-#define YES_TXT          ""
-#define LCD_TXT          "LCD Display\tPCF 8574, 0x40 : %s Present\n"
-#define DIG_IO_LSB_TXT   "Dig. IO LSB\tPCF 8574, 0x42 : %s Present\n"
-#define DIG_IO_MSB_TXT   "Dig. IO MSB\tPCF 8574, 0x44 : %s Present\n"
-#define LED1_TXT         "LED1 Display\tSAA 1064, 0x70 : %s Present\n"
-#define LED2_TXT         "LED2 Display\tSAA 1064, 0x72 : %s Present\n"
-#define LED3_TXT         "LED3 Display\tSAA 1064, 0x74 : %s Present\n"
-#define LED4_TXT         "LED4 Display\tSAA 1064, 0x76 : %s Present\n"
-#define ADDA_TXT         "AD/DA Converter\tPCF 8591, 0x90 : %s Present\n"
-#define MAX6626_1_TXT    "Temp. Sensor 1\tMAX 6626, 0x92 : %s Present\n"
-#define MAX6626_2_TXT    "Temp. Sensor 2\tMAX 6626, 0x94 : %s Present\n"
-#define ADS7828_TXT      "12-bit 8 ch. ADC\tADS7828, 0x96 : %s Present\n"
-#define FM24C08_TXT      "EEPROM Device\tFM24C08, 0xA0 : %s Present\n"
+#define YES_TXT          "IS "
+#define LCD_TXT          "LCD Display\tPCF 8574\t0x40 : %s Present\n"
+#define DIG_IO_LSB_TXT   "Dig. IO LSB\tPCF 8574\t0x42 : %s Present\n"
+#define DIG_IO_MSB_TXT   "Dig. IO MSB\tPCF 8574\t0x44 : %s Present\n"
+#define LED1_TXT         "LED1 Display\tSAA 1064\t0x70 : %s Present\n"
+#define LED2_TXT         "LED2 Display\tSAA 1064\t0x72 : %s Present\n"
+#define LED3_TXT         "LED3 Display\tSAA 1064\t0x74 : %s Present\n"
+#define LED4_TXT         "LED4 Display\tSAA 1064\t0x76 : %s Present\n"
+#define ADDA_TXT         "AD/DA Converter\tPCF 8591\t0x90 : %s Present\n"
+#define LM76_1_TXT       "Temp. Sensor 1\tLM76\t0x92 : %s Present\n"
+#define LM76_2_TXT       "Temp. Sensor 2\tLM76\t0x94 : %s Present\n"
+#define ADS7828_TXT      "12-bit 8 ch. ADC\tADS7828\t0x96 : %s Present\n"
+#define FM24C08_TXT      "EEPROM Device\tFM24C08\t0xA0 : %s Present\n"
 
+//------------------------------------------------------------------
+// This struct is needed for the PCF8591 ADC/DAC. For every channel,
+// there is a corresponding conversion factor and reference voltage.
+//------------------------------------------------------------------
 typedef struct
 {
    double ad1; // The measured temperature (ADC1) in E-1 °C
@@ -116,18 +124,19 @@ typedef struct
    int    dac;   // Value for DA Converter
 } adda_t;
 
-extern "C" __declspec(dllexport) int __stdcall i2c_init(int address, byte win_ver);
-extern "C" __declspec(dllexport) int __stdcall i2c_start(void);
-extern "C" __declspec(dllexport) int __stdcall i2c_address(byte address);
-extern "C" __declspec(dllexport) int __stdcall i2c_write(byte address, byte *p, int bytes);
-extern "C" __declspec(dllexport) int __stdcall i2c_read(byte address, byte *p, int bytes);
-extern "C" __declspec(dllexport) int __stdcall i2c_stop(void);
-extern "C" __declspec(dllexport) int __stdcall set_led(int number, int dp, int which_led, int visibility);
-extern "C" __declspec(dllexport) void __stdcall check_i2c_hw(int *HW_present);
-extern "C" __declspec(dllexport) void __stdcall init_adc(adda_t *p);
-extern "C" __declspec(dllexport) int __stdcall read_ads7828(int channel, int *value);
-extern "C" __declspec(dllexport) int __stdcall read_adc(adda_t *p);
-extern "C" __declspec(dllexport) int __stdcall WriteIOByte(byte value, byte LorH);
-extern "C" __declspec(dllexport) int __stdcall eewrite(int addr, byte *p, byte nr);
-extern "C" __declspec(dllexport) int __stdcall eeread(int addr, byte *p, byte nr);
+extern "C" __declspec(dllexport) int    __stdcall i2c_init(int address, byte win_ver);
+extern "C" __declspec(dllexport) int    __stdcall i2c_start(void);
+extern "C" __declspec(dllexport) int    __stdcall i2c_address(byte address);
+extern "C" __declspec(dllexport) int    __stdcall i2c_write(byte address, byte *p, int bytes);
+extern "C" __declspec(dllexport) int    __stdcall i2c_read(byte address, byte *p, int bytes);
+extern "C" __declspec(dllexport) int    __stdcall i2c_stop(void);
+extern "C" __declspec(dllexport) int    __stdcall set_led(int number, int dp, int which_led, int visibility);
+extern "C" __declspec(dllexport) void   __stdcall check_i2c_hw(int *HW_present);
+extern "C" __declspec(dllexport) void   __stdcall init_adc(adda_t *p);
+extern "C" __declspec(dllexport) int    __stdcall read_ads7828(int channel, int *value);
+extern "C" __declspec(dllexport) int    __stdcall read_adc(adda_t *p);
+extern "C" __declspec(dllexport) int    __stdcall WriteIOByte(byte value, byte LorH);
+extern "C" __declspec(dllexport) int    __stdcall eewrite(int addr, byte *p, byte nr);
+extern "C" __declspec(dllexport) int    __stdcall eeread(int addr, byte *p, byte nr);
+extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc);
 #endif

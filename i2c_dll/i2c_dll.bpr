@@ -18,7 +18,7 @@ VERSION = BCB.04.04
 # ---------------------------------------------------------------------------
 PROJECT = i2c_dll.dll
 OBJFILES = i2c_dll.obj
-RESFILES =
+RESFILES = i2c_dll.res
 RESDEPEN = $(RESFILES)
 LIBFILES =
 IDLFILES =
@@ -44,7 +44,7 @@ CFLAG1 = -I$(BCB)\include -WD -Od -w -Tkh30000 -u- -r- -a8 -k -vi -c -tWM -tWD \
 IDLCFLAGS = -src_suffixcpp
 PFLAGS = -U$(BCB)\lib;$(RELEASELIBPATH) -I$(BCB)\include -$YD -$W -$O- -v -JPHN -M
 RFLAGS = -i$(BCB)\include
-AFLAGS = /i$(BCB)\include /mx /w2 /zd
+AFLAGS = /i$(BCB)\include /mx /w2 /zi /l
 LFLAGS = -L$(BCB)\lib;$(RELEASELIBPATH) -aa -Tpd -s -Gn -Gi -M
 # ---------------------------------------------------------------------------
 ALLOBJ = c0d32.obj $(OBJFILES)
@@ -54,7 +54,7 @@ ALLLIB = $(LIBFILES)  import32.lib cw32mt.lib
 !ifdef IDEOPTIONS
 
 [Version Info]
-IncludeVerInfo=0
+IncludeVerInfo=1
 AutoIncBuild=0
 MajorVer=1
 MinorVer=0
