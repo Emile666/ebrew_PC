@@ -6,6 +6,20 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.33  2004/05/08 14:52:51  emile
+// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+// - View mash progress screen: reorganised, pre-heat timers added, timers are now
+//   in seconds instead of minutes.
+// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+// - 'Apply' Button added to Fix parameters dialog screen.
+// - 'Edit mash scheme' no longer resets the (running) mash timers
+// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+//   also removed.
+// - Changing init. volume of HLT did not result in an update on screen. Corrected.
+//
 // Revision 1.32  2004/05/05 15:44:15  emile
 // - Main Screen picture update
 // - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
@@ -493,7 +507,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
          pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
          pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
-         pid_pars.pid_model = Reg->ReadInteger("PID_Model"); // 0 = Type A, 1 = Type C
+         pid_pars.pid_model = Reg->ReadInteger("PID_Model"); // [0..3]
 
          led1 = Reg->ReadInteger("LED1"); // Read led1 from registry
          led2 = Reg->ReadInteger("LED2"); // Read led2 from registry
@@ -528,14 +542,15 @@ void __fastcall TMainForm::Main_Initialisation(void)
 
          Reg->CloseKey();      // Close the Registry
          init_adc(&padc);      // Calculate ADC conversion constants
-         if (pid_pars.pid_model == 0)
+         switch (pid_pars.pid_model)
          {
-            init_pid2(&pid_pars); // Init. Type A PID controller
-         }
-         else
-         {
-            init_pid3(&pid_pars); // Init. Type C PID controller
-         } // else
+            case 0 : init_pid1(&pid_pars); break; // First   ebrew PID controller
+            case 1 : init_pid2(&pid_pars); break; // Updated ebrew PID controller
+            case 2 : init_pid3(&pid_pars); break; // Allen Bradley Type A controller
+            case 3 : init_pid4(&pid_pars); break; // Allen Bradley Type C controller
+            default: pid_pars.pid_model = 3;
+                     init_pid4(&pid_pars); break; // Allen Bradley Type C controller
+         } // switch
          // Do NOT delete Reg yet, since we need it further on
       } // if
    } // try
@@ -624,7 +639,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fprintf(fd,"hw_status = 0x%02X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,
                                                                           std.ms_tot,
                                                                           fscl_prescaler);
-      fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f ",sp.temp_offset,sp.temp_offset2);
+      fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
       fprintf(fd,"Vref1 = %3d, Vref2 = %3d, Vref3 = %3d, Vref4 = %3d, DAC-value = %3d\n\n",
                  padc.vref1,padc.vref2,padc.vref3,padc.vref4,padc.dac);
       fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt PID ms_ ebrew Gamma\n");
@@ -805,15 +820,16 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             pid_pars.td = ptmp->Td_Edit->Text.ToDouble();
             Reg->WriteFloat("Td",pid_pars.td);
             pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
+            switch (pid_pars.pid_model)
+            {
+               case 0 : init_pid1(&pid_pars); break; // First   ebrew PID controller
+               case 1 : init_pid2(&pid_pars); break; // Updated ebrew PID controller
+               case 2 : init_pid3(&pid_pars); break; // Allen Bradley Type A controller
+               case 3 : init_pid4(&pid_pars); break; // Allen Bradley Type C controller
+               default: pid_pars.pid_model = 3;
+                        init_pid4(&pid_pars); break; // Allen Bradley Type C controller
+            } // switch
             Reg->WriteInteger("PID_Model",pid_pars.pid_model);
-            if (pid_pars.pid_model == 0)
-            {
-               init_pid2(&pid_pars); // Init. Type A PID controller
-            }
-            else
-            {
-               init_pid3(&pid_pars); // Init. Type C PID controller
-            } // else
             time_switch = ptmp->RG2->ItemIndex; // 0 = off, 1 = on
             if (time_switch)
             {
@@ -1462,14 +1478,19 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       } // if
 
       // PID_RB->ItemIndex = 1 => PID Controller On
-      if (pid_pars.pid_model == 0)
-      {  // Type A PID Controller: gamma = pid_reg2(thlt)
-         pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-      }
-      else
-      {  // Type C PID Controller: gamma = pid_reg3(thlt)
-         pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-      } // else
+      switch (pid_pars.pid_model)
+      {
+         case 0 : pid_reg1(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break; // First ebrew PID controller
+         case 1 : pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break; // Updated ebrew PID controller
+         case 2 : pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break; // Allen Bradley Type A controller
+         case 3 : pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break; // Allen Bradley Type C controller
+         default: pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break;
+      } // switch
       if (swfx.gamma_sw)
       {
          gamma = swfx.gamma_fx; // fix gamma
@@ -1481,17 +1502,6 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       tmr.time_high = (int)((gamma * pid_pars.ts_ticks) / 100);
       tmr.time_low  = pid_pars.ts_ticks - tmr.time_high;
 
-      // check if tset_hlt should be increased
-      //if (pid_pars.mash_control == 0) // 0 = Thlt, 1 = Tmlt
-      //{
-      //   tset_mlt = update_tset(&tset_hlt,thlt,pid_pars.temp_offset,
-      //                          pid_pars.temp_offset2,ms,&ms_idx,ms_tot);
-      //}
-      //else
-      //{
-      //   tset_mlt = update_tset(&tset_hlt,tmlt,pid_pars.temp_offset,
-      //                          pid_pars.temp_offset2,ms,&ms_idx,ms_tot);
-      //} // else
    } // else if
 
    //-----------------------------------------------------------------------

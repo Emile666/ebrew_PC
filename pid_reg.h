@@ -5,6 +5,20 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.5  2004/05/08 14:52:52  emile
+  - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+    tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+  - View mash progress screen: reorganised, pre-heat timers added, timers are now
+    in seconds instead of minutes.
+  - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+  - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+  - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+  - 'Apply' Button added to Fix parameters dialog screen.
+  - 'Edit mash scheme' no longer resets the (running) mash timers
+  - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+    also removed.
+  - Changing init. volume of HLT did not result in an update on screen. Corrected.
+
   Revision 1.4  2004/05/05 15:44:16  emile
   - Main Screen picture update
   - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
@@ -51,17 +65,21 @@ typedef struct _pid_params
    double k1; // k1 value for PID controller
    double k2; // k2 value for PID controller
    double k3; // k3 value for PID controller
-   int    ts_ticks; // ticks for timer
-   int    pid_model;    // 0 = Type A (pid_reg2), 1 = Type C (pid_reg3)
+   int    ts_ticks;  // ticks for timer
+   int    pid_model; // PID Controller type [0..3]
 } pid_params; // struct pid_params
 
 //--------------------
 // Function Prototypes
 //--------------------
+void init_pid1(pid_params *p);
+void pid_reg1(double xk, double *yk, double tset, pid_params *p, int vrg);
 void init_pid2(pid_params *p);
 void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg);
 void init_pid3(pid_params *p);
 void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg);
+void init_pid4(pid_params *p);
+void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg);
 
 #ifdef __cplusplus
 };
