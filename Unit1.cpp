@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.14  2003/09/15 20:37:21  emile
+// - LM76 constants renamed in LM92 constants
+// - Pump Popupmenu added (same as already done for the valves)
+// - Added support for LED3 and LED4 displays
+// - 'I2C settings' renamed into 'Hardware Settings'
+// - Added more variables to LED1..LED4 selection. Now 6 variables to select
+// - Added SET_LED macro
+// - Added Triac Temperature protection functionality
+//
 // Revision 1.13  2003/08/03 13:27:32  emile
 // - FileOpen Dialog added to Restore Settings function, so that other log files
 //   besides the default name can be read.
@@ -299,8 +308,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
       switch (hw_status)
       {
          case I2C_BB  : MessageBox(NULL,I2C_BB_MSG,"Error in i2c_start()",MB_OK);
+                        hw_status = 0; // set to 'No Devices present'
                         break;
          case I2C_BERR: MessageBox(NULL,I2C_BERR_MSG,"Error in i2c_start()",MB_OK);
+                        hw_status = 0; // set to 'No Devices present'
                         break;
          default      : //-------------------------------------------------
                         // No error, check the individual Hardware Devices.
@@ -928,6 +939,28 @@ void __fastcall TMainForm::MenuHelpAboutClick(TObject *Sender)
 } // TMainForm::About1Click()
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id)
+/*------------------------------------------------------------------
+  Purpose  : This routine reset the I2C bus in case of an error.
+             The user needs to turn the power off and then of again
+             (of the electronics, NOT the PC!).
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   char tmp_str[80];    // temp string for calculations
+
+   sprintf(tmp_str,"Error accessing I2C bus device ID 0x%2x",i2c_bus_id);
+   if (i2c_stop() != I2C_NOERR)
+   {  // i2c bus locked, i2c_stop() did not work
+      MessageBox(NULL,"i2c_stop() not successfull: Cycle power Off -> On, then press OK button.",tmp_str,MB_OK);
+   }
+   else
+   {
+      MessageBox(NULL,"i2c_stop() successfull: Press OK button to continue reset process",tmp_str,MB_OK);
+   } // else
+   Main_Initialisation(); // continue with init. process
+} // TMainForm::Reset_I2C_bus()
+
 void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
 /*------------------------------------------------------------------
   Purpose  : This is the main Timer function which is called every
@@ -938,7 +971,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
   ------------------------------------------------------------------*/
 {
    int        value = 0x00;  // init. byte to write to DIG_IO_LSB_BASE
-   int        err = 0;       // error return value
+   int        err = 0;       // error return value, needed for SET_LED macro
    char       tmp_str[80];   // temp string for calculations
    TDateTime  td_now;        // holds current date and time
 
@@ -1033,10 +1066,18 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        if (hw_status & LM92_1_OK)
        {
           padc.ad1 = lm92_read(0); // Read HLT temp. from LM92 device
+          if (padc.ad1 == LM92_ERR)
+          {
+             Reset_I2C_Bus(LM92_1_BASE);
+          } // if
        } // if
        if (hw_status & LM92_2_OK)
        {
           padc.ad2 = lm92_read(1); // Read MLT temp. from LM92 device
+          if (padc.ad2 == LM92_ERR)
+          {
+             Reset_I2C_Bus(LM92_2_BASE);
+          } // if
        } // if
 
        if (swfx.tad1_sw)
@@ -1139,7 +1180,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // Fourth time-slice: Output values to I2C LED Displays every TS seconds.
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr == 4)
+   else if (tmr.pid_tmr % 20 == 4)
    {
       // Now update the LEDs with the proper values by calling macro SET_LED
       //      HW_BIT, which display, which var., Visibility

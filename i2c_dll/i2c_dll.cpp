@@ -9,6 +9,15 @@
 //        Basic. It is meant to directly access the I2C Hardware.
 // ------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2003/09/15 20:37:31  emile
+// - LM76 constants renamed in LM92 constants
+// - Pump Popupmenu added (same as already done for the valves)
+// - Added support for LED3 and LED4 displays
+// - 'I2C settings' renamed into 'Hardware Settings'
+// - Added more variables to LED1..LED4 selection. Now 6 variables to select
+// - Added SET_LED macro
+// - Added Triac Temperature protection functionality
+//
 // Revision 1.7  2003/07/11 21:04:15  emile
 // - Comments now in proper order.
 //
@@ -1158,29 +1167,43 @@ extern "C" __declspec(dllexport) double __stdcall lm92_read(byte dvc)
    if (dvc == 0)
    {
       res  = i2c_address(LM92_1_BASE);
-      res |= i2c_read(LM92_1_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
+      if (res == I2C_NOERR)
+      {
+         res = i2c_read(LM92_1_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
+      }
    }
    else
    {
       res  = i2c_address(LM92_2_BASE);
-      res |= i2c_read(LM92_2_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
+      if (res == I2C_NOERR)
+      {
+         res = i2c_read(LM92_2_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
+      }
    } // else
-   temp_int = buffer[0];      // store {Sign, MSB, bit 10..5} at bits temp_int bits 7..0
-   temp_int <<= 8;            // SHL 8, Sign now at bit 15
-   temp_int &= 0xff00;        // Clear bits 7..0
-   temp_int |= buffer[1];     // Add bits D4..D0 to temp_int bits 7..3
-   temp_int &= 0xFFF8;        // Clear Crit High & Low bits
-   sign = ((temp_int & LM92_SIGNb) == LM92_SIGNb);
-   if (sign)
+
+   if (res != I2C_NOERR)
    {
-      temp_int &= ~LM92_SIGNb;        // Clear sign bit
-      temp_int  = LM92_FS - temp_int; // Convert two complement number
-   } // if
-   temp = (double)temp_int / 128.0;   // SHR 3 + multiply with 0.0625 = 1/16
-   if (sign)
+      temp = LM92_ERR; // return error number instead of real number
+   }
+   else
    {
-      temp = -temp; // negate number
-   } // if
+      temp_int = buffer[0];      // store {Sign, MSB, bit 10..5} at bits temp_int bits 7..0
+      temp_int <<= 8;            // SHL 8, Sign now at bit 15
+      temp_int &= 0xff00;        // Clear bits 7..0
+      temp_int |= buffer[1];     // Add bits D4..D0 to temp_int bits 7..3
+      temp_int &= 0xFFF8;        // Clear Crit High & Low bits
+      sign = ((temp_int & LM92_SIGNb) == LM92_SIGNb);
+      if (sign)
+      {
+         temp_int &= ~LM92_SIGNb;        // Clear sign bit
+         temp_int  = LM92_FS - temp_int; // Convert two complement number
+      } // if
+      temp = (double)temp_int / 128.0;   // SHR 3 + multiply with 0.0625 = 1/16
+      if (sign)
+      {
+         temp = -temp; // negate number
+      } // if
+   } // else
    return temp;     // Return value now in °C
 } // lm92_read()
 

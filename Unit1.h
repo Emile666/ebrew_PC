@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.13  2003/09/15 20:37:22  emile
+// - LM76 constants renamed in LM92 constants
+// - Pump Popupmenu added (same as already done for the valves)
+// - Added support for LED3 and LED4 displays
+// - 'I2C settings' renamed into 'Hardware Settings'
+// - Added more variables to LED1..LED4 selection. Now 6 variables to select
+// - Added SET_LED macro
+// - Added Triac Temperature protection functionality
+//
 // Revision 1.12  2003/08/03 13:27:33  emile
 // - FileOpen Dialog added to Restore Settings function, so that other log files
 //   besides the default name can be read.
@@ -217,6 +226,7 @@ private:	// User declarations
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
         void __fastcall Restore_Settings(void);
+        void __fastcall Reset_I2C_Bus(int i2c_bus_id);
         timer_vars      tmr;        // struct with timer variables
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         ma              str_vmlt;   // Struct for MA5 filter for pressure transducer

@@ -49,6 +49,7 @@
 // Same for the Full Scale value, normally 2^12 SHL3 = 2^15.
 #define LM92_SIGNb     (0x8000)
 #define LM92_FS        (32768)
+#define LM92_ERR       (99.99)
 
 #ifndef FALSE
 #define FALSE (0)
