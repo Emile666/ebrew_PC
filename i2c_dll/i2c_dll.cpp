@@ -24,6 +24,15 @@
 //                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
 //                        - PortTalk interface added (nt_in(), nt_out())
 // $Log$
+// Revision 1.5  2003/07/11 18:34:53  emile
+// - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
+// - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
+// - Log-file header updated
+// - init_adc(): all vref initialisations are now the same (/ 2560).
+//               Removed the / 10 division of AD4 in the main loop, this is
+//               now done in init_adc().
+// - Multiply and division changed into <<= and >>= (in lm76_read())
+//
 // Revision 1.4  2002/12/09 21:25:14  emile
 // - TRUE / FALSE now conditionally defined.
 // - lm76_read() could not handle negative temperatures. Fixed.
@@ -1162,8 +1171,7 @@ extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc)
       temp_int &= ~LM76_SIGNb;        // Clear sign bit
       temp_int  = LM76_FS - temp_int; // Convert two complement number
    } // if
-   temp_int >>= 7;          // SHR 3 (= 8) + multiply by 0.0625 (= 1/16)
-   temp = (double)temp_int;
+   temp = (double)temp_int / 128.0;   // SHR 3 + multiply with 0.0625 = 1/16
    if (sign)
    {
       temp = -temp; // negate number
