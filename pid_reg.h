@@ -5,6 +5,11 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.2  2002/12/30 13:33:45  emile
+  - Headers with CVS tags added to every source file
+  - Restore Settings function is added
+  - "ebrew" registry key now in a define REGKEY
+
   V0.1 060302 First version
   ==================================================================
 */
@@ -29,9 +34,11 @@ typedef struct _pid_params
    double k0; // k0 value for PID controller
    double k1; // k1 value for PID controller
    double k2; // k2 value for PID controller
+   double k3; // k3 value for PID controller
    int    ts_ticks; // ticks for timer
    double temp_offset; // Offset to add to Tset to compensate for HLT-MLT losses
-   int    mash_control; // 0 = Tad1, 1 = Tad2
+   int    mash_control; // 0 = Thlt, 1 = Tmlt
+   int    pid_model;    // 0 = Type A (pid_reg2), 1 = Type C (pid_reg3)
 } pid_params; // struct pid_params
 
 //--------------------
@@ -39,6 +46,8 @@ typedef struct _pid_params
 //--------------------
 void init_pid2(pid_params *p);
 void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg);
+void init_pid3(pid_params *p);
+void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg);
 
 #ifdef __cplusplus
 };

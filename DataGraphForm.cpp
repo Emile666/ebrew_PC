@@ -4,6 +4,18 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2004/03/10 10:10:37  emile
+// - Reduced complexity of several routines:
+//   - T50msecTimer split, new routine Generate_IO_Signals added
+//   - PopupMenu1Popup now uses (new) macro SET_POPUPMENU
+//   - Reset_I2C_Bus now included in SET_LED macro
+// - Every I2C write action now in a separate time-slice to avoid
+//   I2C bus errors if fscl is low
+// - This is the first version where the help file function is enabled
+//   - All help buttons and F1 function key are operational
+//   - Help file sources: ebrew.rtf and ebrew.hpj are added to CVS
+// - ad1, ad2 and ad3 variables -> thlt, tmlt and ttriac (new variables)
+//
 // Revision 1.7  2004/01/31 16:01:04  emile
 // - Init. HW High/Low limit temp. changed to 70/50 C respectively.
 // - Added code for calculation/simulation of Vhlt and Vboil
@@ -64,7 +76,6 @@
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 #pragma link "PERFGRAP"
-#pragma link "AnimTimer"
 #pragma resource "*.dfm"
 TShowDataGraphs *ShowDataGraphs;
 //---------------------------------------------------------------------------
@@ -88,7 +99,7 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
    {
       gettime(&t1);
       fprintf(fd,"%02d:%02d:%02d, ",t1.ti_hour,t1.ti_min,t1.ti_sec);
-      fprintf(fd,"%6.2f, %6.2f, %6.2f, %6.2f, %5.1f, %6.2f,%3d,%3d,%3d\n",
+      fprintf(fd,"%6.2f, %6.2f, %6.2f, %6.2f, %5.1f, %6.2f,%3d,%3d,%3d, %5.1f\n",
                                                       MainForm->tset_mlt,
                                                       MainForm->tset_hlt,
                                                       MainForm->thlt,
@@ -97,7 +108,8 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
                                                       MainForm->volumes.Vmlt,
                                                       MainForm->PID_RB->ItemIndex,
                                                       MainForm->ms_idx,
-                                                      MainForm->std.ebrew_std);
+                                                      MainForm->std.ebrew_std,
+                                                      MainForm->gamma);
       fclose(fd);
    } /* if */
 

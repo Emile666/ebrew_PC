@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.29  2004/04/19 21:55:49  emile
+// - Added calibration offsets and MA-filters for Thlt and Tmlt:
+//   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
+//   - New Measurement Dialog screen
+//   - Several parameters moved from HW Settings Dialog Screen
+// - Added new Registry variable MA_VMLT: MA filter order of Vmlt is now
+//   also stored in Registry
+// - Help-file is updated
+//
 // Revision 1.28  2004/03/10 10:10:38  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -470,8 +479,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.ti = (double)i;
          i = Reg->ReadInteger("Td");  // Read Td from registry
          pid_pars.td = (double)i;
-         pid_pars.temp_offset = Reg->ReadInteger("TOffset");
-         pid_pars.mash_control = Reg->ReadInteger("Mash_Control"); // 0 = Tad1, 1 = Tad2
+         pid_pars.temp_offset  = Reg->ReadInteger("TOffset");
+         pid_pars.mash_control = Reg->ReadInteger("Mash_Control"); // 0 = Thlt, 1 = Tmlt
+         pid_pars.pid_model    = Reg->ReadInteger("PID_Model"); // 0 = Type A, 1 = Type C
 
          led1 = Reg->ReadInteger("LED1"); // Read led1 from registry
          led2 = Reg->ReadInteger("LED2"); // Read led2 from registry
@@ -506,7 +516,14 @@ void __fastcall TMainForm::Main_Initialisation(void)
 
          Reg->CloseKey();      // Close the Registry
          init_adc(&padc);      // Calculate ADC conversion constants
-         init_pid2(&pid_pars); // Init. PID controller
+         if (pid_pars.pid_model == 0)
+         {
+            init_pid2(&pid_pars); // Init. Type A PID controller
+         }
+         else
+         {
+            init_pid3(&pid_pars); // Init. Type C PID controller
+         } // else
          // Do NOT delete Reg yet, since we need it further on
       } // if
    } // try
@@ -584,19 +601,20 @@ void __fastcall TMainForm::Main_Initialisation(void)
       date d1;
       getdate(&d1);
       fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
-      fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, Ts = %6.2f\n",pid_pars.kc,pid_pars.ti,pid_pars.td,pid_pars.ts);
-      fprintf(fd,"k0 = %6.2f, k1 = %6.2f, k2 = %6.2f; ",pid_pars.k0,pid_pars.k1,pid_pars.k2);
+      fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, Ts = %5.2f, ",pid_pars.kc,pid_pars.ti,pid_pars.td,pid_pars.ts);
+      fprintf(fd,"PID_Model =%2d\n",pid_pars.pid_model);
+      fprintf(fd,"k0 = %6.2f, k1 = %6.2f, k2 = %6.2f, k3 = %6.2f; ",pid_pars.k0,pid_pars.k1,pid_pars.k2,pid_pars.k3);
       strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
       s[4] = '\0';
       fprintf(fd,"ebrew CVS Revision %s\n",s);
-      fprintf(fd,"hw_status = 0x%2X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,ms_tot,fscl_prescaler);
-      fprintf(fd,"Temp Offset = %4.1f, Mash progress controlled by Tad%1d ",pid_pars.temp_offset,1+pid_pars.mash_control);
-      (pid_pars.mash_control == 0) ? fprintf(fd,"(Thlt)\n") : fprintf(fd,"(Tmlt)\n");
+      fprintf(fd,"hw_status = 0x%02X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,ms_tot,fscl_prescaler);
+      fprintf(fd,"Temp Offset = %4.1f, Mash progress controlled by ",pid_pars.temp_offset);
+      (pid_pars.mash_control == 0) ? fprintf(fd,"Thlt\n") : fprintf(fd,"Tmlt\n");
       fprintf(fd,"Vref1 = %3d, Vref2 = %3d, Vref3 = %3d, Vref4 = %3d, DAC-value = %3d\n\n",
                  padc.vref1,padc.vref2,padc.vref3,padc.vref4,padc.dac);
-      fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt PID ms_ ebrew\n");
-      fprintf(fd,"[hh:mm:ss]  [°C]    [°C]     [°C]   [°C]   [°C]    [L]  _on idx _std\n");
-      fprintf(fd,"-------------------------------------------------------------------------\n");
+      fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt PID ms_ ebrew Gamma\n");
+      fprintf(fd,"[hh:mm:ss]  [°C]    [°C]     [°C]   [°C]   [°C]    [L]  _on idx _std   [%]\n");
+      fprintf(fd,"---------------------------------------------------------------------------\n");
       fclose(fd);
    } // else
 
@@ -640,6 +658,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("Kc",KC_INIT);  // Controller gain
           Reg->WriteInteger("Ti",TI_INIT);  // Ti constant
           Reg->WriteInteger("Td",TD_INIT);  // Td constant
+          Reg->WriteInteger("PID_Model",0); // Type A PID Controller
 
           //-------------------------------------------------------
           // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
@@ -759,7 +778,9 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          i = Reg->ReadInteger("TOffset"); // Read Temp. Offset from registry
          ptmp->Offs_Edit->Text = AnsiString(i);
          i = Reg->ReadInteger("Mash_Control"); // Read Mash Control from registry
-         ptmp->RG1->ItemIndex = i;
+         ptmp-> RG1->ItemIndex = i;
+         i = Reg->ReadInteger("PID_Model"); // Read PID controller type from registry
+         ptmp->PID_Model->ItemIndex = i;
          ptmp->RG2->ItemIndex = time_switch;   // Value of time-switch [off, on]
          if (time_switch)
          {
@@ -782,13 +803,22 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             i = ptmp->Td_Edit->Text.ToInt();
             pid_pars.td = (double)i;
             Reg->WriteInteger("Td",i);  // Set to value from form
-            init_pid2(&pid_pars);        // Init. PID controller
 
             i = ptmp->Offs_Edit->Text.ToInt();
             pid_pars.temp_offset = (double)i;
             Reg->WriteInteger("TOffset",i);  // Set to value from form
             pid_pars.mash_control = ptmp->RG1->ItemIndex;
             Reg->WriteInteger("Mash_Control",pid_pars.mash_control);
+            pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
+            Reg->WriteInteger("PID_Model",pid_pars.pid_model);
+            if (pid_pars.pid_model == 0)
+            {
+               init_pid2(&pid_pars); // Init. Type A PID controller
+            }
+            else
+            {
+               init_pid3(&pid_pars); // Init. Type C PID controller
+            } // else
             time_switch = ptmp->RG2->ItemIndex; // 0 = off, 1 = on
             if (time_switch)
             {
@@ -1477,14 +1507,21 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       } // if
 
       // PID_RB->ItemIndex = 1 => PID Controller On
-      pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex); // gamma = pid_reg2(temp)
+      if (pid_pars.pid_model == 0)
+      {  // Type A PID Controller: gamma = pid_reg2(thlt)
+         pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+      }
+      else
+      {  // Type C PID Controller: gamma = pid_reg3(thlt)
+         pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+      } // else
       if (swfx.gamma_sw)
       {
          gamma = swfx.gamma_fx; // fix gamma
       } // if
 
       // check if tset_hlt should be increased
-      if (pid_pars.mash_control == 0) // 0 = Tad1 (HLT), 1 = Tad2 (MLT)
+      if (pid_pars.mash_control == 0) // 0 = Thlt, 1 = Tmlt
       {
          tset_mlt = update_tset(&tset_hlt,thlt,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       }

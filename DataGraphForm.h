@@ -4,6 +4,11 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2004/03/26 10:22:55  emile
+// - Several files added to CVS repository, where not included yet
+// - Help file extended with many help items. First real help file version.
+// - TAnimTimer replaced by standard TTimer in TDataGraph form
+//
 // Revision 1.3  2004/03/10 10:10:37  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -32,7 +37,6 @@
 #include <StdCtrls.hpp>
 #include <Forms.hpp>
 #include "PERFGRAP.h"
-#include "AnimTimer.h"
 #include <ExtCtrls.hpp>
 //---------------------------------------------------------------------------
 class TShowDataGraphs : public TForm
