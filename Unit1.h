@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.14  2003/09/24 21:01:18  emile
+// - lm92_read() function: no second read if first read already returns with an error.
+// - Reset_I2C_Bus() function added. Called when lm92_read() returns with an error.
+// - LED Display update: time-slice now every second (was every TS seconds)
+// - hw_status is set to 0 if i2c_start() returns with an error
+//
 // Revision 1.13  2003/09/15 20:37:22  emile
 // - LM76 constants renamed in LM92 constants
 // - Pump Popupmenu added (same as already done for the valves)
@@ -97,6 +103,10 @@
 #include "AnimTimer.h"
 #include "i2c_dll.h"
 #include <Graphics.hpp>
+#include "VrControls.hpp"
+#include "VrTank.hpp"
+#include "VrThermoMeter.hpp"
+#include "VrPowerMeter.hpp"
 
 #define TS_INIT   (5)
 #define KC_INIT   (4)
@@ -105,6 +115,7 @@
 #define LOGFILE "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
 #define REGKEY    "ebrew"
+#define PHEATER (3000)
 
 // 1 minute = 1/(60*24) part of one day, see TDateTime for details
 #define ONE_MINUTE (6.94444E-04)
@@ -177,9 +188,6 @@ __published:	// IDE-managed Components
         TMenuItem *PrintSetup1;
         TMenuItem *Print1;
         TMenuItem *MenuEditFixParameters;
-        TImage *MainImage;
-        TLabel *Val_gamma;
-        TLabel *Val_ek;
         TLabel *Val_temp;
         TLabel *Val_tset;
         TLabel *Val_Tmlt;
@@ -187,7 +195,6 @@ __published:	// IDE-managed Components
         TAnimTimer *T50msec;
         TMenuItem *MenuViewMash_progress;
         TMenuItem *MenuOptionsI2CSettings;
-        TLabel *Val_TTriac;
         TLabel *Val_Volume;
         TMenuItem *SpargeSettings1;
         TImage *Image1;
@@ -206,6 +213,13 @@ __published:	// IDE-managed Components
         TMenuItem *N2;
         TMenuItem *ReadLogFile1;
         TLabel *P0;
+        TvrThermoMeter *tm_mlt;
+        TVrTank *Tank_MLT;
+        TvrThermoMeter *tm_hlt;
+        TVrTank *Tank_HLT;
+        TVrTank *Tank_Boil;
+        TvrThermoMeter *tm_triac;
+        TVrPowerMeter *Heater;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -247,6 +261,8 @@ public:		// User declarations
         double          tset_hlt;   // HLT reference temperature
         double          tset_mlt;   // MLT reference temperature
         double          Vmlt;       // MLT volume: output of MA5 filter for pressure transducer
+        double          Vhlt;       // HLT volume: estimated from Vmlt
+        double          Vboil;      // Boil volume: estimated from Vmlt
         pid_params      pid_pars;   // struct containing PID parameters
         int             ms_tot;     // tot. nr. of valid temp & time values
         int             ms_idx;     // index in ms[] array

@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.18  2004/01/11 21:49:29  emile
+// - Error corrected: an I2C bus error triggered the Reset_i2C_bus function,
+//   Main_Initialisation was called and ms_idx was set to 0. This got logged
+//   in the log-file. When reading ms_idx from the log-file, it read 0!
+// - During read_log_file: Last mash timer was set to running when in sparging.
+//   Now set all mash timers to time-out when mashing has finished.
+//
 // Revision 1.17  2003/12/21 21:16:59  emile
 // - Old About screen removed, replaced by Version Aware About box. This
 //   new About screen shows the version number (and a nice picture!).
@@ -122,6 +129,10 @@
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 #pragma link "AnimTimer"
+#pragma link "VrControls"
+#pragma link "VrTank"
+#pragma link "VrThermoMeter"
+#pragma link "VrPowerMeter"
 #pragma resource "*.dfm"
 
 TMainForm *MainForm;
@@ -1103,6 +1114,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        } // if
        sprintf(tmp_str,"%4.2f",padc.ad1);  // Display AD1 value to screen
        Val_temp->Caption = tmp_str;
+       tm_hlt->Value->Value = padc.ad1; // update HLT thermometer object
 
        if (swfx.tad2_sw)
        {
@@ -1110,6 +1122,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        } // if
        sprintf(tmp_str,"%4.2f",padc.ad2);  // Display AD2 value to screen
        Val_Tmlt->Caption = tmp_str;
+       tm_mlt->Value->Value = padc.ad2;   // update MLT thermometer object
 
        //---------------------------------------------------
        // Triac Temperature Protection: hysteresis function
@@ -1118,18 +1131,21 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           if (padc.ad3 < ttriac_llim)
           {
-             triac_too_hot = false;
+             triac_too_hot         = false;
+             tm_triac->ColorAfter  = clLime;
+             tm_triac->ColorBefore = clGreen;
           }
        }
        else
        {
           if (padc.ad3 > ttriac_hlim)
           {
-             triac_too_hot = true;
+             triac_too_hot         = true;
+             tm_triac->ColorAfter  = clMaroon;
+             tm_triac->ColorBefore = clRed;
           }
        }
-       sprintf(tmp_str,"%4.1f",padc.ad3); // Display AD3 value on screen
-       Val_TTriac->Caption = tmp_str;     // AD3 = Temp. of Triac
+       tm_triac->Value->Value = padc.ad3; // Update thermometer object
 
        //-------------------------------------
        // Pressure sensor, AD4, Volume of MLT
@@ -1144,6 +1160,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        }
        sprintf(tmp_str,"%4.1f",Vmlt);             // Display MA filter output on screen
        Val_Volume->Caption = tmp_str;             // AD4 = Pressure Transducer
+       Tank_MLT->Position  = Vmlt;
    } // if
    //-----------------------------------------------------------------------
    // Second time-slice: Time switch controller. Enable PI controller
@@ -1173,8 +1190,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          gamma = swfx.gamma_fx; // fix gamma
       } // if
-      sprintf(tmp_str,"%4.1f",gamma);
-      Val_gamma->Caption = tmp_str;
+      // Heater object shows kW (max=3), gamma = 100 % => PHEATER [W]
+      Heater->Value = (gamma * PHEATER) / 100; // Update object on screen
 
       // check if tset_hlt should be increased
       if (pid_pars.mash_control == 0) // 0 = Tad1 (HLT), 1 = Tad2 (MLT)
@@ -1185,14 +1202,15 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          tset_mlt = update_tset(&tset_hlt,padc.ad2,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       } // else
+      tm_mlt->SetPoint->Value = tset_mlt; // Update MLT thermometer object
       if (swfx.tset_sw)
       {
          tset_hlt = swfx.tset_fx; // fix tset
       } // if
+      // Update display with HLT values
       sprintf(tmp_str,"%4.1f",tset_hlt);
       Val_tset->Caption = tmp_str;
-      sprintf(tmp_str,"%4.1f",tset_hlt - padc.ad1);
-      Val_ek->Caption = tmp_str;
+      tm_hlt->SetPoint->Value = tset_hlt; // update HLT thermometer object
    } // else if
    //-----------------------------------------------------------------------
    // Fourth time-slice: Output values to I2C LED Displays every TS seconds.
@@ -1756,4 +1774,5 @@ void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
    delete Reg; // Delete Registry object to prevent memory leak
 } // TMainForm::ReadLogFile1Click()
 //---------------------------------------------------------------------------
+
 
