@@ -14,6 +14,12 @@
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
   $Log$
+  Revision 1.3  2004/04/25 14:02:17  emile
+  - Added a 'type C' PID controller, function pid_reg3(). Possible to select
+    this from the PID settings dialog screen. Left the old one in for
+    compatibility. New registry variable PID_Model.
+  - Gamma added to log-file, so that the PID controller can be tuned.
+
   Revision 1.2  2002/12/30 13:33:45  emile
   - Headers with CVS tags added to every source file
   - Restore Settings function is added
@@ -124,10 +130,11 @@ void init_pid3(pid_params *p)
    else
    {
       p->k0 = p->kc * p->ts / p->ti;
-      p->k1 = p->kc * (-1.0 - (p->td / p->ts));
-      p->k2 = p->kc * (1.0 + (2.0 * p->td / p->ts));
-      p->k3 = p->kc * -1.0 * p->td / p->ts;
    } // else
+
+   p->k1 = p->kc * (-1.0 - (p->td / p->ts));
+   p->k2 = p->kc * (1.0 + (2.0 * p->td / p->ts));
+   p->k3 = p->kc * -1.0 * p->td / p->ts;
 } // init_pid3()
 
 void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg)

@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.30  2004/04/25 14:02:17  emile
+// - Added a 'type C' PID controller, function pid_reg3(). Possible to select
+//   this from the PID settings dialog screen. Left the old one in for
+//   compatibility. New registry variable PID_Model.
+// - Gamma added to log-file, so that the PID controller can be tuned.
+//
 // Revision 1.29  2004/04/19 21:55:49  emile
 // - Added calibration offsets and MA-filters for Thlt and Tmlt:
 //   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
@@ -710,9 +716,9 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
           Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
           // Measurements
-          Reg->WriteInteger("MA_THLT",1);      // Order MA filter Thlt
+          Reg->WriteInteger("MA_THLT",5);      // Order MA filter Thlt
           Reg->WriteFloat("THLT_OFFSET",0.0); // Offset for Thlt
-          Reg->WriteInteger("MA_TMLT",1);      // Order MA filter Tmlt
+          Reg->WriteInteger("MA_TMLT",5);      // Order MA filter Tmlt
           Reg->WriteFloat("TMLT_OFFSET",0.0); // Offset for Tmlt
           Reg->WriteInteger("MA_VMLT",1);      // Order MA filter Vmlt
           volumes.Vhlt_start = 90; // Starting volume of HLT
