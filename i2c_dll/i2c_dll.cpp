@@ -8,6 +8,12 @@
 //            Basic. It is meant to directly access the I2C Hardware.
 // ------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2004/02/22 10:03:46  emile
+// - Added various CVS keywords to file-headers
+// - ADS7828 code and defines replaced by LM92_3
+// - Added clock_reg_val variable to i2c_init to allow for clock rate adjustments.
+//   (this is not finished yet).
+//
 // Revision 1.11  2004/02/01 14:24:26  emile
 // - Setting the SCL clock to 90 kHz resulted in frequent lock-ups of the I2C
 //   bus. fscl is now set back again to 9.8 kHz (0x1A).
@@ -526,6 +532,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
   Returns  : Error: I2C_NOERR : No error
                     I2C_ARGS  : Wrong value for address
                     I2C_PT    : PortTalk error (NT, 2000, XP only)
+             The static byte clock_reg_S2 is set
   ------------------------------------------------------------------*/
 {
    int err  = I2C_NOERR; // error return-value
@@ -563,6 +570,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_start(void)
 /*------------------------------------------------------------------
   Purpose  : Initialises the I2C bus.
   Variables: None
+             The static byte clock_reg_S2 is used
   Returns  : Error: I2C_NOERR : No error
                     I2C_BB    : I2C bus is still busy
                     I2C_BERR  : I2C bus error occurred
@@ -571,35 +579,33 @@ extern "C" __declspec(dllexport) int __stdcall i2c_start(void)
    int err = I2C_NOERR; // error return-value
    byte x; // temp. variable
 
-   // Disable Serial Interface, next. reg. = SO' (own address)
-   write_S1(0x00);
+   write_S1(0x00);   // Disable Serial Interface, next. reg. = SO' (own address)
    pauze();
-   // Set effective own address S0' to a non-zero value
-   write_S023(0xFF);
+   write_S023(0xFF); // Set effective own address S0' to a non-zero value
    pauze();
-   // Load next byte into clock-register S2
-   write_S1(0x20);
+   write_S1(0x20);   // Load next byte into clock-register S2
    pauze();
-   // fclk = 8 MHz (7.16 MHz on PCB), fscl = 11 kHz (9.8 kHz on PCB)
-   write_S023(0x1A);
+   //--------------------------------------------------------------------
+   // The var. clock_reg_S2 (set in i2c_init) contains the value for the
+   // clock register S2 of the PCF8584. It controls the SCL frequency.
+   //--------------------------------------------------------------------
+   write_S023(clock_reg_S2);
    pauze();
-   // Enable Serial Interface, load next byte into S0 (Data)
-   write_S1(0x40);
+   write_S1(0x40); // Enable Serial Interface, load next byte into S0 (Data)
    pauze();
-   // Check if I2C bus is busy (Bus-Busy bit is 1)
-   x = read_S1();
+   x = read_S1();  // Check if I2C bus is busy (Bus-Busy bit is 1)
    pauze();
    if ((x & BBb) == 0x00)
    {
       err = I2C_BB; // return error is I2C bus busy
    }
    else
-   {  // Load S0 with address & R/W_ bit
-      write_S023(0x00);
-      ic_adr = 0x00; // save address & R/W_ bit
+   {
+      write_S023(0x00); // Load S0 with address & R/W_ bit
+      ic_adr = 0x00;    // save address & R/W_ bit
       pauze();
       // Load next byte in S0 (data), generate START + address
-      // remain in MST/TRM mode
+      // remain in MST/TRM (Master/Transmitter) mode
       write_S1(0x44);
       last_start = TRUE; // set flag: last action was START
       pauze();
