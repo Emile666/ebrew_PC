@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.25  2004/02/22 12:56:44  emile
+// - SCL clock frequency now adjustable. Following changes are made:
+//   - New Registry value: FSCL_PRESCALER
+//   - Hardware Setting screen now contains a Combobox with frequencies
+//
 // Revision 1.24  2004/02/21 23:11:20  emile
 // - Changed behaviour after I2C Bus reset to a more silent one. Resulted in:
 //   - Addition of checkbox "Give message on successful reset after I2C error"
@@ -169,6 +174,8 @@
 #include <Dialogs.hpp>
 
 #include "i2c_dll.h"
+extern byte fscl_values[]; // defined in i2c_dll.cpp
+
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 #pragma link "AnimTimer"
@@ -318,23 +325,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    char st[1024];       // string for MessageBox
    int  i;              // temp. variable
    int  x1;             // Temp. var. for I2C HW base address
-   int  fscl_prescaler; // index into PCF8584 prescaler values
-   //---------------------------------------------------------------------------
-   // The PCF8584 uses register S2 to set the proper SCL frequency. It contains
-   // bytes S4,S3,S2 (control CLK frequency) and S1, S0 (control fscl).
-   // This results in the following modes (assume CLK = 12 MHz):
-   //
-   // Div_by     Reg_S2     fscl(kHz)     Div_by     Reg_S2     fscl(kHz)
-   //   8192   11111 (0x1F)   1.46           512   10110 (0x16)  22.44
-   //   5120   11011 (0x1B)   2.34           384   10010 (0x12)  31.25
-   //   4096   10111 (0x17)   2.93           256   00010 (0x02)  46.88
-   //   3072   10011 (0x13)   3.91           160   11001 (0x19)  75.00
-   //   2048   00011 (0x03)   5.86           128   10101 (0x15)  93.75
-   //   1024   11110 (0x1E)  11.72            96   10001 (0x11) 125.00
-   //    640   11010 (0x1A)  18.75
-   //---------------------------------------------------------------------------
-   byte fscl_values[] = {0x1F, 0x1B, 0x17, 0x13, 0x03, 0x1E, 0x1A,
-                         0x16, 0x12, 0x02, 0x19, 0x15, 0x11};
+   int  fscl_prescaler; // index into PCF8584 prescaler values, see i2c_dll.cpp
 
    //----------------------------------------
    // Initialise all variables from Registry
@@ -762,8 +753,8 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
    char s[80];
 
    T50msec->Enabled = false; // Disable Interrupt Timer
-   ShowDataGraphs->GraphTimer->Enabled = false; // Start Graph Update timer
-   ViewMashProgress->UpdateTimer->Enabled = false; // Start Mash Progress Update timer
+   ShowDataGraphs->GraphTimer->Enabled = false; // Stop Graph Update timer
+   ViewMashProgress->UpdateTimer->Enabled = false; // Stop Mash Progress Update timer
    Sleep(51);                // Make sure that Timer is disabled
    delete ShowDataGraphs;    // close modeless dialog
    ShowDataGraphs = 0;       // null the pointer
@@ -807,7 +798,7 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
       //err = WriteInstrLCD(0x01); // clear display
       //err = WriteInstrLCD(0x08); // Display OFF, Blink OFF, Cursor Off
    } // if
-   if ((hw_status >= 0) && !err)
+   if ((hw_status > 0) && !err)
    {
       err = i2c_stop(); // Stop I2C Communication
       if (err)
@@ -1077,6 +1068,8 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                // New I2C HW Base Address or SCL prescaler was changed,
                // call i2c_stop() and init I2C Bus communication again.
                //--------------------------------------------------------
+               T50msec->Enabled = false; // Disable Interrupt Timer
+               Sleep(51);                // Make sure that Timer is disabled
                if (i2c_stop() != I2C_NOERR)
                {  // i2c bus locked, i2c_stop() did not work
                   MessageBox(NULL,"i2c_stop() not successful: Cycle power Off -> On, then press OK button.","ERROR",MB_OK);
@@ -1127,6 +1120,9 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
 {
    char tmp_str[80];    // temp string for calculations
    char err_txt[40];    // temp string for error message
+
+   T50msec->Enabled = false; // Disable Interrupt Timer
+   Sleep(51);                // Make sure that Timer is disabled
 
    switch (err)
    {
