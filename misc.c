@@ -6,6 +6,11 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.6  2003/06/01 13:40:45  emile
+  - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
+  - Switch/fix for std state added for easier testing
+  - Vmash value added to 'Options|Sparge & STD Settings' dialog screen.
+
   Revision 1.5  2003/06/01 11:53:48  emile
   - tset has been renamed in tset_hlt for more clearance
   - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
@@ -443,8 +448,8 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts)
    return ret;
 } // read_input_file
 
-void update_tset(double *tset, double temp, double offset,
-                 maisch_schedule ms[], int *ms_idx, int ms_total)
+double update_tset(double *tset, double temp, double offset,
+                   maisch_schedule ms[], int *ms_idx, int ms_total)
 /*------------------------------------------------------------------
   Purpose  : This function checks if tset should be increased, based
              on the maisch schedule defined in ms[]. When the temp.
@@ -467,7 +472,7 @@ void update_tset(double *tset, double temp, double offset,
       ms[] : Array containing the maisch schedule
     ms_idx : index in the array [0 .. ms_total-1]
   ms_total : max. index in the array
-  Returns  : No values are returned
+  Returns  : MLT reference temp. (= value from mash scheme)
   ------------------------------------------------------------------*/
 {
    if (*ms_idx < ms_total)
@@ -504,6 +509,7 @@ void update_tset(double *tset, double temp, double offset,
          *tset += offset; /* add double offset */
       } // else
    } /* if */
+   return ms[*ms_idx].temp; /* return ref. temp. for MLT */
 } /* update_tset() */
 
 int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
@@ -584,7 +590,7 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
       case S05_SPARGING_REST:
            if (++std->timer1 >= sps->sp_time_ticks)
            {
-              if (std->sp_idx < sps->sp_batches - 1)
+              if (std->sp_idx < sps->sp_batches)
               {
                  std->ebrew_std = S06_PUMP_FROM_MLT_TO_BOIL; // Pump to BOIL again
               } // if

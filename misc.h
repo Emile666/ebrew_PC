@@ -6,6 +6,11 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.6  2003/06/01 13:40:45  emile
+// - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
+// - Switch/fix for std state added for easier testing
+// - Vmash value added to 'Options|Sparge & STD Settings' dialog screen.
+//
 // Revision 1.5  2003/06/01 11:53:48  emile
 // - tset has been renamed in tset_hlt for more clearance
 // - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
@@ -224,8 +229,8 @@ typedef struct _ma
 
 int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts);
-void update_tset(double *tset, double temp, double offset,
-                 maisch_schedule ms[], int *ms_idx, int ms_total);
+double update_tset(double *tset, double temp, double offset,
+                   maisch_schedule ms[], int *ms_idx, int ms_total);
 int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
                unsigned int *kleppen, maisch_schedule ms[], int ms_idx, int ms_total,
                sparge_struct *sps, std_struct *std, int pid_on, int std_fx);

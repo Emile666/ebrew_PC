@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2003/06/29 20:47:43  emile
+// - Changes in Main_Initialisation(). Single exit-point, all code is evaluated,
+//   even if i2c_init() or i2c_start() fail. Done for easier debugging.
+// - Time-switch debugged, now works properly.
+//
 // Revision 1.10  2003/06/29 13:11:35  emile
 // - Time switch function added (PID options screen). The PID controller is
 //   enabled when the predefined date and time have been met.
@@ -377,8 +382,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
       (pid_pars.mash_control == 0) ? fprintf(fd,"(Thlt)\n") : fprintf(fd,"(Tmlt)\n");
       fprintf(fd,"Vref1 = %3d, Vref2 = %3d, Vref3 = %3d, Vref4 = %3d, DAC-value = %3d\n\n",
                  padc.vref1,padc.vref2,padc.vref3,padc.vref4,padc.dac);
-      fprintf(fd,"Time-stamp Gamma    Tset    Tad1    Tad2 TTriac   Vmlt PID_on ms_idx\n");
-      fprintf(fd,"[hh:mm:ss]  [%]     [°C]    [°C]    [°C]  [°C]    [L]  [0|1]  [0..ms_tot]\n");
+      fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt PID ms_ ebrew\n");
+      fprintf(fd,"[hh:mm:ss]  [°C]    [°C]     [°C]   [°C]   [°C]    [L]  _on idx _std\n");
       fprintf(fd,"-------------------------------------------------------------------------\n");
       fclose(fd);
    } // else
@@ -919,9 +924,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
           padc.ad3 = 0.0; // Triac temperature
           padc.ad4 = 0.0; // Pressure transducer
        } // else
-       //-----------
-       // DEBUG LM76
-       //-----------
+       //-----------------------------------------------------------------------
+       // If a LM76/LM92 is connected, overwrite the LM35 values on AD1 and AD2
+       //-----------------------------------------------------------------------
        if (hw_status & LM76_1_OK)
        {
           padc.ad1 = lm76_read(0); // Read HLT temp. from LM76 device
@@ -955,7 +960,6 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        else
        {
           Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
-          Vmlt /= 10.0;                              // Convert from [E-1 L] to [L]
        }
        sprintf(tmp_str,"%4.1f",Vmlt);             // Display MA filter output on screen
        Val_Volume->Caption = tmp_str;             // AD4 = Pressure Transducer
@@ -1027,11 +1031,11 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       // check if tset_hlt should be increased
       if (pid_pars.mash_control == 0) // 0 = Tad1 (HLT), 1 = Tad2 (MLT)
       {
-         update_tset(&tset_hlt,padc.ad1,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
+         tset_mlt = update_tset(&tset_hlt,padc.ad1,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       }
       else
       {
-         update_tset(&tset_hlt,padc.ad2,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
+         tset_mlt = update_tset(&tset_hlt,padc.ad2,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       } // else
       if (swfx.tset_sw)
       {

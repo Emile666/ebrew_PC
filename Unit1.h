@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2003/06/29 20:47:43  emile
+// - Changes in Main_Initialisation(). Single exit-point, all code is evaluated,
+//   even if i2c_init() or i2c_start() fail. Done for easier debugging.
+// - Time-switch debugged, now works properly.
+//
 // Revision 1.9  2003/06/29 13:11:35  emile
 // - Time switch function added (PID options screen). The PID controller is
 //   enabled when the predefined date and time have been met.
@@ -178,6 +183,7 @@ public:		// User declarations
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output
         double          tset_hlt;   // HLT reference temperature
+        double          tset_mlt;   // MLT reference temperature
         double          Vmlt;       // MLT volume: output of MA5 filter for pressure transducer
         pid_params      pid_pars;   // struct containing PID parameters
         int             ms_tot;     // tot. nr. of valid temp & time values

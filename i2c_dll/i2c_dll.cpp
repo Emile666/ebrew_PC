@@ -24,6 +24,10 @@
 //                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
 //                        - PortTalk interface added (nt_in(), nt_out())
 // $Log$
+// Revision 1.4  2002/12/09 21:25:14  emile
+// - TRUE / FALSE now conditionally defined.
+// - lm76_read() could not handle negative temperatures. Fixed.
+//
 // Revision 1.3  2002/11/18 18:34:02  emile
 // - MAX6626 constants replaced by LM76 constants.
 // - lm76_read() function added.
@@ -934,21 +938,23 @@ extern "C" __declspec(dllexport) void __stdcall init_adc(adda_t *p)
   Purpose  : This function calculates the conversion constant for the
              four AD Converters. Input is Vrefx (x = 1..4), output is
              adxc (x=1..4).
-             Note that the ref. voltage is approx. 1.848 Volt for all ADC.
+             Note that the ref. voltage is approx. 1.848 Volt for all ADCs.
+             The value of every Vrefx is always as [E-1 unity], with unity
+             being Litres or °C.
 
              AD1..AD3: Every LM35 output (10 mV/°C) is amplified by 2 approx.
                        So the effective Vref would be close to 90 °C, but
                        should be calibrated for every AD channel.
-             AD4     : Pressure transducer, just divide by 2^8 = 256 
+             AD4     : Pressure transducer,
   Variables: p: pointer to a struct that will contain the values.
   Returns  : None
   ------------------------------------------------------------------*/
 {
-   // 8 bit AD = 256 steps; 10.0 -> E-1 mV
+   // 8 bit AD = 256 steps; 10.0 -> E-1
    p->ad1c = (double)(p->vref1) / 2560.0;
    p->ad2c = (double)(p->vref2) / 2560.0;
    p->ad3c = (double)(p->vref3) / 2560.0;
-   p->ad4c = (double)(p->vref4) /  256.0;
+   p->ad4c = (double)(p->vref4) / 2560.0;
 } // init_adc()
 
 /*------------------------------------------------------------------
@@ -1145,13 +1151,8 @@ extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc)
       res  = i2c_address(LM76_2_BASE);
       res |= i2c_read(LM76_2_BASE | RWb,buffer,2); // read 2 bytes from LM76 register 0
    } // else
-   //---------------------------------------------------------------------------
-   // NOTE: For some strange reason the BCB compiler does not correctly compile
-   //       the << (SHL) and >> (SHR) operators. Therefore we are forced to use
-   //       multiplication here!
-   //---------------------------------------------------------------------------
    temp_int = buffer[0];      // store {Sign, MSB, bit 10..5} at bits temp_int bits 7..0
-   temp_int *= 256;           // SHL 8, Sign now at bit 15
+   temp_int <<= 8;            // SHL 8, Sign now at bit 15
    temp_int &= 0xff00;        // Clear bits 7..0
    temp_int |= buffer[1];     // Add bits D4..D0 to temp_int bits 7..3
    temp_int &= 0xFFF8;        // Clear Crit High & Low bits
@@ -1161,7 +1162,8 @@ extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc)
       temp_int &= ~LM76_SIGNb;        // Clear sign bit
       temp_int  = LM76_FS - temp_int; // Convert two complement number
    } // if
-   temp = (double)temp_int / 128.0; // SHR 3 (= 8) + multiply by 0.0625 (= 1/16)
+   temp_int >>= 7;          // SHR 3 (= 8) + multiply by 0.0625 (= 1/16)
+   temp = (double)temp_int;
    if (sign)
    {
       temp = -temp; // negate number
