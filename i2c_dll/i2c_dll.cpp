@@ -9,6 +9,12 @@
 //        Basic. It is meant to directly access the I2C Hardware.
 // ------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2003/09/24 21:01:26  emile
+// - lm92_read() function: no second read if first read already returns with an error.
+// - Reset_I2C_Bus() function added. Called when lm92_read() returns with an error.
+// - LED Display update: time-slice now every second (was every TS seconds)
+// - hw_status is set to 0 if i2c_start() returns with an error
+//
 // Revision 1.8  2003/09/15 20:37:31  emile
 // - LM76 constants renamed in LM92 constants
 // - Pump Popupmenu added (same as already done for the valves)
@@ -111,7 +117,7 @@ USERES("i2c_dll.res");
 
 // Time-out value for wait_byte() routine, in pauze() ticks
 //---------------------------------------------------------
-#define TO_VAL (50)
+#define TO_VAL (100)
 
 typedef unsigned char byte;
 
@@ -554,8 +560,8 @@ extern "C" __declspec(dllexport) int __stdcall i2c_start(void)
    // Load next byte into clock-register S2
    write_S1(0x20);
    pauze();
-   // fclk = 8 MHz (7.16 MHz on PCB), fscl = 11 kHz (9.8 kHz on PCB)
-   write_S023(0x1A);
+   // fclk = 8 MHz (7.16 MHz on PCB), fscl = 90 kHz (80.6 kHz on PCB)
+   write_S023(0x18);
    pauze();
    // Enable Serial Interface, load next byte into S0 (Data)
    write_S1(0x40);
