@@ -9,6 +9,10 @@
 //           the I2C Hardware.
 // ----------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2004/02/25 09:40:18  emile
+// - Several comments added and updated.
+// - fscl_values[] + comments added to i2c_dll.cpp
+//
 // Revision 1.7  2004/02/22 10:03:46  emile
 // - Added various CVS keywords to file-headers
 // - ADS7828 code and defines replaced by LM92_3
@@ -122,6 +126,16 @@
 #define LM92_2_TXT       "Temp. Sensor 2\tLM92\t0x94 : %s Present\n"
 #define LM92_3_TXT       "Temp. Sensor 3\tLM92\t0x96 : %s Present\n"
 #define FM24C08_TXT      "EEPROM Device\tFM24C08\t0xA0 : %s Present\n"
+
+//------------------------------------------------------------
+// The macro CLOSE_PORTTALK is used by the i2c_stop() routine
+//------------------------------------------------------------
+#define CLOSE_PORTTALK         if (win_nt && pt_opened) \
+                               {                        \
+                                  ClosePortTalk();      \
+                                  pt_opened = FALSE;    \
+                               }                        \
+                               return err
 
 //------------------------------------------------------------------
 // This struct is needed for the PCF8591 ADC/DAC. For every channel,

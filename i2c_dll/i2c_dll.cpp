@@ -36,6 +36,10 @@
 //           The DLL is built with Borland C++ Builder 4.0.
 // ----------------------------------------------------------------------------
 // $Log$
+// Revision 1.14  2004/02/25 09:40:18  emile
+// - Several comments added and updated.
+// - fscl_values[] + comments added to i2c_dll.cpp
+//
 // Revision 1.13  2004/02/22 10:16:02  emile
 // - i2c_start(): clock_reg_S2 is used instead of hard-coded 0x1A value.
 //
@@ -295,6 +299,7 @@ static byte last_start;   // TRUE = Last action on bus was start
 static byte ic_adr;       // Currently addressed IC and R/W_ bit
 
 static byte win_nt;       // TRUE = Windows NT, 2000, XP; FALSE = Win 95,98,ME
+static byte pt_opened;    // TRUE = PortTalk device is opened successfully
 static byte i2c_method;   // [ISA_CARD, LPT_CARD]
 static byte clock_reg_S2; // Init. value for S2 clock register of PCF8584
 static int  S023;         // Registers S0, S2 and S3 of PCF8584
@@ -589,13 +594,23 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
              The static byte clock_reg_S2 is set
   ------------------------------------------------------------------*/
 {
-   int err  = I2C_NOERR; // error return-value
+   int err   = I2C_NOERR; // error return-value
 
-   win_nt = win_ver;
-   if (win_nt && (OpenPortTalk() == -1))
+   win_nt    = win_ver;
+   pt_opened = FALSE; // init. to PortTalk device NOT opened
+
+   if (win_nt)
    {
-      return I2C_PT;
-   }
+      if (OpenPortTalk() == -1)
+      {
+         return I2C_PT;
+      }
+      else
+      {
+         pt_opened = TRUE; //true = PortTalk device opened
+      } // else
+   } // if
+
    switch (address)
    {
       case 0x300: case 0x310:
@@ -881,16 +896,14 @@ extern "C" __declspec(dllexport) int __stdcall i2c_stop(void)
    err = wait_byte();   // wait for on-going actions
    if (err != I2C_NOERR)
    {
-      if (win_nt) ClosePortTalk();
-      return err; // exit if error
+      CLOSE_PORTTALK;  // MACRO, defined in i2c_dll.h
    } // if
    if ((ic_adr & RWb) == RWb) // Is slave still transmitting?
    {
       err = terminate_read(); // If so, terminate transmission
       if (err != I2C_NOERR)
       {
-         if (win_nt) ClosePortTalk();
-         return err; // exit if error
+         CLOSE_PORTTALK;   // MACRO, defined in i2c_dll.h
       } // if
    } // if
    write_S1(0x42);         // set STOP condition through S1 register
@@ -900,8 +913,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_stop(void)
    err = i2c_berr_check(); // check for I2C bus-error
    write_S1(0x00);         // turn serial interface OFF
    pauze();
-   if (win_nt) ClosePortTalk();
-   return err;             // return error-code
+   CLOSE_PORTTALK;         // MACRO, defined in i2c_dll.h
 } // i2c_stop()
 
 extern "C" __declspec(dllexport) int __stdcall set_led(int number, int dp, int which_led, int visibility)
