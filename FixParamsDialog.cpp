@@ -5,6 +5,9 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2003/06/01 14:08:06  emile
+// - Same as previous log entry: CVS and BCB got confused => saved old files.
+//
 // Revision 1.2  2002/12/30 13:33:44  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -86,4 +89,15 @@ void __fastcall TFix_Params::STD_MEditClick(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 
+void __fastcall TFix_Params::CB_vmltClick(TObject *Sender)
+{
+   Vmlt_MEdit->Enabled = CB_vmlt->Checked;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TFix_Params::Vmlt_MEditClick(TObject *Sender)
+{
+   Vmlt_MEdit->SelectAll();
+}
+//---------------------------------------------------------------------------
 

@@ -5,6 +5,9 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2003/06/01 14:08:06  emile
+// - Same as previous log entry: CVS and BCB got confused => saved old files.
+//
 // Revision 1.3  2003/06/01 13:37:42  emile
 // - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
 // - Switch/fix for std state added for easier testing
@@ -47,6 +50,9 @@ __published:	// IDE-managed Components
         TMaskEdit *Tad2_MEdit;
         TCheckBox *CB_std;
         TMaskEdit *STD_MEdit;
+        TCheckBox *CB_vmlt;
+        TMaskEdit *Vmlt_MEdit;
+        TLabel *Label3;
         void __fastcall CB_GammaClick(TObject *Sender);
         void __fastcall CB_TsetClick(TObject *Sender);
         void __fastcall Gamma_MEditClick(TObject *Sender);
@@ -57,6 +63,8 @@ __published:	// IDE-managed Components
         void __fastcall Tad2_MEditDblClick(TObject *Sender);
         void __fastcall CB_stdClick(TObject *Sender);
         void __fastcall STD_MEditClick(TObject *Sender);
+        void __fastcall CB_vmltClick(TObject *Sender);
+        void __fastcall Vmlt_MEditClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TFix_Params(TComponent* Owner);

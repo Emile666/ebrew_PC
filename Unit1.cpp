@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2003/06/01 14:08:06  emile
+// - Same as previous log entry: CVS and BCB got confused => saved old files.
+//
 // Revision 1.7  2003/06/01 13:37:42  emile
 // - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
 // - Switch/fix for std state added for easier testing
@@ -661,6 +664,11 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
    {
       ptmp->STD_MEdit->Text = AnsiString(swfx.std_fx); // Set fix value
    } // if
+   ptmp->CB_vmlt->Checked = swfx.vmlt_sw; // Set Checkbox for Vmlt
+   if (swfx.vmlt_sw)
+   {
+      ptmp->Vmlt_MEdit->Text = AnsiString(swfx.vmlt_fx); // Set fix value
+   } // if
 
    if (ptmp->ShowModal() == 0x1) // mrOK
    {
@@ -701,6 +709,12 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
             swfx.std_fx = 0; // reset to a save value
          }
       } // if
+      // Get Vmlt value
+      swfx.vmlt_sw = ptmp->CB_vmlt->Checked;
+      if (swfx.vmlt_sw)
+      {
+         swfx.vmlt_fx = ptmp->Vmlt_MEdit->Text.ToDouble();
+      }
    } // if
    delete ptmp;
    ptmp = 0; // NULL the pointer
@@ -935,8 +949,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
 
        sprintf(tmp_str,"%4.1f",padc.ad3);         // Display AD3 value on screen
        Val_TTriac->Caption = tmp_str;             // AD3 = Temp. of Triac
-       Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
-       Vmlt /= 10.0;                              // Convert from [E-1 L] to [L]
+
+       if (swfx.vmlt_sw)
+       {
+          Vmlt = swfx.vmlt_fx;
+       }
+       else
+       {
+          Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
+          Vmlt /= 10.0;                              // Convert from [E-1 L] to [L]
+       }
        sprintf(tmp_str,"%4.1f",Vmlt);             // Display MA filter output on screen
        Val_Volume->Caption = tmp_str;             // AD4 = Pressure Transducer
    } // if

@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2003/06/01 14:08:06  emile
+// - Same as previous log entry: CVS and BCB got confused => saved old files.
+//
 // Revision 1.6  2003/06/01 11:53:48  emile
 // - tset has been renamed in tset_hlt for more clearance
 // - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
@@ -80,6 +83,8 @@ typedef struct _swfx_struct
    double tad2_fx;  // Fix value for Tad2 [E-1 Celsius]
    bool   std_sw;   // Switch value for STD state
    int    std_fx;   // Fix value for STD state
+   bool   vmlt_sw;  // Switch value for Vmlt
+   double vmlt_fx;  // Fix value for Vmlt
 } swfx_struct;
 
 //---------------------------------------------------------------------------
