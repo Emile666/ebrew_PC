@@ -9,6 +9,11 @@
 //        Basic. It is meant to directly access the I2C Hardware.
 // ------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2004/01/06 19:09:30  emile
+// - Changes in speed to allow correct operation on faster PCs
+//   - TO_VAL from 50 to 100
+//   - SCL clock frequency from 11 kHz to 81 kHz
+//
 // Revision 1.9  2003/09/24 21:01:26  emile
 // - lm92_read() function: no second read if first read already returns with an error.
 // - Reset_I2C_Bus() function added. Called when lm92_read() returns with an error.
@@ -560,8 +565,8 @@ extern "C" __declspec(dllexport) int __stdcall i2c_start(void)
    // Load next byte into clock-register S2
    write_S1(0x20);
    pauze();
-   // fclk = 8 MHz (7.16 MHz on PCB), fscl = 90 kHz (80.6 kHz on PCB)
-   write_S023(0x18);
+   // fclk = 8 MHz (7.16 MHz on PCB), fscl = 11 kHz (9.8 kHz on PCB)
+   write_S023(0x1A);
    pauze();
    // Enable Serial Interface, load next byte into S0 (Data)
    write_S1(0x40);
