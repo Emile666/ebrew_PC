@@ -8,22 +8,11 @@
 // Doel : I2C DLL, which can be used by both Visual C++ and Visual
 //        Basic. It is meant to directly access the I2C Hardware.
 // ------------------------------------------------------------------
-// Gewijzigd :
-//
-// Datum    Auteur Versie & Omschrijving
-// ------------------------------------------------------------------
-// 14-06-02 LGT    V1.00: First version for Ronald Rakke
-// 01-07-02 LGT    V1.01: init_adc()/read_adc(): 4 channels working
-//                        set_led(): visibility [1..7] parameter added
-// 02-07-02 LGT    V1.02: - eewrite(): i2c_stop()+i2c_start() added to
-//                                     initiate write to eeprom
-//                        - eewrite(), eeread(): page xover (>16) check added
-//			  - TO_VAL: 500 -> 50
-// 14-09-02 LGT    V1.03  - VREF_INIT from 900 -> 930
-//                        - DAC enabled (dac added to adda_t struct,
-//                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
-//                        - PortTalk interface added (nt_in(), nt_out())
 // $Log$
+// Revision 1.6  2003/07/11 21:01:20  emile
+// Bad-fix solved: do NOT temp_int >>= 7, since this looses the numbers behind
+//                 the comma. leave to (double)temp_int / 128.0 instead.
+//
 // Revision 1.5  2003/07/11 18:34:53  emile
 // - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
 // - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
@@ -44,6 +33,19 @@
 // Revision 1.2  2002/09/18 17:05:35  emile
 // Added cvs tags
 //
+// Date    Author Version & Description
+// ------------------------------------------------------------------
+// 14-09-02 LGT    V1.03  - VREF_INIT from 900 -> 930
+//                        - DAC enabled (dac added to adda_t struct,
+//                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
+//                        - PortTalk interface added (nt_in(), nt_out())
+// 02-07-02 LGT    V1.02: - eewrite(): i2c_stop()+i2c_start() added to
+//                                     initiate write to eeprom
+//                        - eewrite(), eeread(): page xover (>16) check added
+//			  - TO_VAL: 500 -> 50
+// 01-07-02 LGT    V1.01: init_adc()/read_adc(): 4 channels working
+//                        set_led(): visibility [1..7] parameter added
+// 14-06-02 LGT    V1.00: First version for Ronald Rakke
 // ==================================================================
 #include <stdio.h>
 #include <windows.h>
