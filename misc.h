@@ -6,6 +6,11 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.4  2003/01/04 22:35:50  emile
+// - Restore Settings function now restores all relevant variables (not just
+//   the mashing variables). Several separate functions are created to
+//   support this.
+//
 // Revision 1.3  2002/12/30 20:21:59  emile
 // - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
 // - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
@@ -81,6 +86,7 @@ typedef struct _maisch_schedule
 
 typedef struct _sparge_struct
 {
+   /* Sparge Settings */
    int    sp_batches;      // Total number of sparge batches
    int    sp_time;         // Time between two sparge batches in minutes
    int    mash_vol;        // Total mashing volume in litres
@@ -89,6 +95,13 @@ typedef struct _sparge_struct
    int    sp_time_ticks;   // sp_time in TS ticks
    int    boil_time_ticks; // boil_time in TS ticks
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
+   /* STD Settings */
+   double tmlt_hlimit;     // Temp. offset high limit
+   double tmlt_llimit;     // Temp. offset low limit
+   double vmlt_empty;      // MLT is empty below this volume
+   int    to_xsec;         // Timeout value for state 8
+   int    to3;             // Timeout value for state 10 -> 11
+   int    to4;             // Timout value for state 11 -> 10
 } sparge_struct;
 
 typedef struct _std_struct
@@ -136,18 +149,20 @@ typedef struct _ma
 #define S05_SPARGING_REST          (5)
 #define S06_PUMP_FROM_MLT_TO_BOIL  (6)
 #define S07_PUMP_FROM_HLT_TO_MLT   (7)
-#define S08_DELAY_1SEC             (8)
+#define S08_DELAY_xSEC             (8)
 #define S09_EMPTY_MLT              (9)
 #define S10_BOILING               (10)
 #define S11_EMPTY_HEAT_EXCHANGER  (11)
 #define S12_CHILL                 (12)
 
+/*
 #define TMLT_HLIMIT           (0.5)
 #define TMLT_LLIMIT           (0.0)
 #define TIMEOUT_1SEC          (1)
 #define VMLT_EMPTY            (3.0)
 #define TIMEOUT3              (300)
 #define TIMEOUT4              (20)
+*/
 
 //--------------------------------------------------------------------------
 // #defines for the valves. Each valve can be set manually or automatically
@@ -202,9 +217,9 @@ int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts);
 void update_tset(double *tset, double temp, double offset,
                  maisch_schedule ms[], int *ms_idx, int ms_total);
-int  update_std(double vmlt, double tmlt, unsigned int *kleppen,
-                 maisch_schedule ms[], int ms_idx, int ms_total,
-                 sparge_struct *sps, std_struct *std, int pid_on);
+int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
+               unsigned int *kleppen, maisch_schedule ms[], int ms_idx,
+               int ms_total, sparge_struct *sps, std_struct *std, int pid_on);
 void init_ma(ma *p, int N);
 double moving_average(ma *p, double x);
 

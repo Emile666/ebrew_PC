@@ -6,6 +6,11 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.4  2003/01/04 22:35:50  emile
+  - Restore Settings function now restores all relevant variables (not just
+    the mashing variables). Several separate functions are created to
+    support this.
+
   Revision 1.3  2002/12/30 20:21:59  emile
   - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
   - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
@@ -348,7 +353,7 @@ int decode_log_file(FILE *fd, log_struct p[])
    } while (!feof(fd));
    CALC_LAST_LINE;
    rval = log_idx; /* return value */
-            /*------------------------------------------------------------------------*/
+   /*------------------------------------------------------------------------*/
    /* 2) Go through the log-file again and add additional information,       */
    /*    such as the begin- and end-time, ms_idx and std_state.              */
    /*------------------------------------------------------------------------*/
@@ -492,9 +497,9 @@ void update_tset(double *tset, double temp, double offset,
    } /* if */
 } /* update_tset() */
 
-int update_std(double vmlt, double tmlt, unsigned int *kleppen,
-                 maisch_schedule ms[], int ms_idx, int ms_total,
-                 sparge_struct *sps, std_struct *std, int pid_on)
+int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
+               unsigned int *kleppen, maisch_schedule ms[], int ms_idx,
+               int ms_total, sparge_struct *sps, std_struct *std, int pid_on)
 /*------------------------------------------------------------------
   Purpose  : This function contains the State Transition Diagram (STD)
              for the ebrew program.
@@ -505,6 +510,8 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
   Variables:
       vmlt : The volume (L) of the Mash/Lauter Tun (MLT)
       tmlt : The actual temperature of the MLT
+      thlt : The actual temperature of the HLT
+  tset_hlt : The reference temperature for the HLT
   *kleppen : Every bit represent a valve (1=ON, 0=OFF):
              Bits 15..8: 0 = Auto, 1 = Manual Override for valves V7-V1
              Bits  7..1: Valves V7-V1
@@ -532,7 +539,7 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
            } // if
            break;
       case S01_WAIT_FOR_HLT_TEMP:
-           if (ms[0].timer != NOT_STARTED) // HLT TEMP is OK
+           if (thlt >= tset_hlt) // HLT TEMP is OK
            {
               std->ebrew_std = S02_FILL_MLT;
            } // if
@@ -552,13 +559,13 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
               std->timer1    = sps->sp_time_ticks; // timer1 -> TIME-OUT
               std->ebrew_std = S05_SPARGING_REST;
            }
-           else if (tmlt > ms[ms_idx].temp + TMLT_HLIMIT)
+           else if (tmlt > ms[ms_idx].temp + sps->tmlt_hlimit)
            {
               std->ebrew_std = S04_BYPASS_HEAT_EXCHANGER;
            } // else if
            break;
       case S04_BYPASS_HEAT_EXCHANGER:
-           if ((tmlt < ms[ms_idx].temp + TMLT_LLIMIT) ||
+           if ((tmlt < ms[ms_idx].temp + sps->tmlt_llimit) ||
                ((ms_idx >= ms_total - 1) && // Mashing finished?
                 (ms[ms_idx].timer >= ms[ms_idx].time)))
            {
@@ -582,7 +589,7 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
            if (vmlt < std->vmash - sps->sp_vol_batch)
            {
               std->timer2    = 0; // init. 1 sec. timer
-              std->ebrew_std = S08_DELAY_1SEC;
+              std->ebrew_std = S08_DELAY_xSEC;
            } // if
            break;
       case S07_PUMP_FROM_HLT_TO_MLT:
@@ -593,14 +600,14 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
               std->ebrew_std = S05_SPARGING_REST;
            } // if
            break;
-      case S08_DELAY_1SEC:
-           if (++std->timer2 >= TIMEOUT_1SEC)
+      case S08_DELAY_xSEC:
+           if (++std->timer2 >= sps->to_xsec)
            {
               std->ebrew_std = S07_PUMP_FROM_HLT_TO_MLT;
            } // if
            break;
       case S09_EMPTY_MLT:
-           if (vmlt < VMLT_EMPTY)
+           if (vmlt < sps->vmlt_empty)
            {
               std->timer3    = 0; // init. timer for transition to 'Empty Heat Exchanger'
               std->timer5    = 0; // init. timer for boiling time
@@ -609,7 +616,7 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
            break;
       case S10_BOILING:
            ++std->timer5;
-           if ((std->timer3 != NOT_STARTED) && (++std->timer3 >= TIMEOUT3))
+           if ((std->timer3 != NOT_STARTED) && (++std->timer3 >= sps->to3))
            {
               std->timer4    = 0;
               std->ebrew_std = S11_EMPTY_HEAT_EXCHANGER;
@@ -621,7 +628,7 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
            break;
       case S11_EMPTY_HEAT_EXCHANGER:
            ++std->timer5;
-           if (++std->timer4 >= TIMEOUT4)
+           if (++std->timer4 >= sps->to4)
            {
               std->timer3    = NOT_STARTED; // disable timer3
               std->ebrew_std = S10_BOILING;

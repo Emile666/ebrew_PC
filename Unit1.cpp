@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2003/01/05 14:31:21  emile
+// - Bug-fix: Pressing the top-right Close button of EBrew now activates the
+//   MenuFileExitClick method. This was not the case yet, which resulted in
+//   a termination of EBrew without the I2C bus properly closed.
+//
 // Revision 1.4  2003/01/04 22:35:49  emile
 // - Restore Settings function now restores all relevant variables (not just
 //   the mashing variables). Several separate functions are created to
@@ -134,13 +139,13 @@ void __fastcall TMainForm::Restore_Settings(void)
          {
             case S05_SPARGING_REST:        std.timer1 = x;
                                            break;
-            case S08_DELAY_1SEC:           std.timer2 = x;
+            case S08_DELAY_xSEC:           std.timer2 = x;
                                            break;
             case S10_BOILING:              if (p1[k].max_std > S10_BOILING)
                                            {
                                               std.timer3 = NOT_STARTED;
-                                              std.timer4 = TIMEOUT4;
-                                              std.timer5 = x + TIMEOUT3 + TIMEOUT4;
+                                              std.timer4 = sp.to4;
+                                              std.timer5 = x + sp.to3 + sp.to4;
                                            }
                                            else
                                            {
@@ -150,7 +155,7 @@ void __fastcall TMainForm::Restore_Settings(void)
                                            }
                                            break;
             case S11_EMPTY_HEAT_EXCHANGER: std.timer4 = x;
-                                           std.timer5 = x + TIMEOUT3;
+                                           std.timer5 = x + sp.to3;
                                            break;
             default:                       break;
          } // switch
@@ -322,11 +327,13 @@ void __fastcall TMainForm::Main_Initialisation(void)
             // ebrew program was terminated abnormally. Open a dialog box,
             // present entries from the log file and ask to restore settings
             // of a particular log-file entry. If yes, restore settings.
+            // NB: Make sure that Init_Sparge_Settings is called prior to
+            //     calling Restore_Settings()!
             //--------------------------------------------------------------
             Restore_Settings();
          } // if i
          Reg->WriteInteger("ms_idx",ms_idx); // update registry setting
-         tset = ms[ms_idx].temp; // Set tset value
+         tset_hlt = ms[ms_idx].temp; // Set tset value for HLT
          Reg->CloseKey();        // Close the Registry
          delete Reg;
       } // if
@@ -431,12 +438,19 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
           Reg->WriteInteger("TOffset",3);       // HLT - MLT heat loss
           Reg->WriteInteger("Mash_Control",1);  // 0 = Tad1, 1 = Tad2
           Reg->WriteInteger("I2C_Base",0x378);  // I2C HW Base Address
-
+          // Init values for Sparge Settings
           Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
           Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
           Reg->WriteInteger("MASH_VOL",30);     // Total Mash Volume (L)
           Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
           Reg->WriteInteger("BOIL_TIME",90);    // Total Boil Time (min.)
+          // Init values for STD
+          Reg->WriteFloat("TMLT_HLIMIT",0.5); // TMLT_HLIMIT [E-1 C]
+          Reg->WriteFloat("TMLT_LLIMIT",0.0); // TMLT_LLIMIT [E-1 C]
+          Reg->WriteFloat("VMLT_EMPTY", 3.0); // Vmlt_EMPTY [L]
+          Reg->WriteInteger("TO_XSEC",1);     // TIMEOUT_xSEC [sec]
+          Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
+          Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
        } // if
        Reg->CloseKey();
        delete Reg;
@@ -612,7 +626,7 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
    {
       ptmp->Gamma_MEdit->Text = AnsiString(swfx.gamma_fx); // Set fix value
    } // if
-   // Set Ref. Temp (Tset)
+   // Set Ref. Temp (Tset_hlt)
    ptmp->CB_Tset->Checked = swfx.tset_sw; // Set Checkbox for Tset
    if (swfx.tset_sw)
    {
@@ -637,7 +651,7 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
       {
          swfx.gamma_fx = ptmp->Gamma_MEdit->Text.ToDouble();
       } // if
-      // Get Ref. Temp (Tset)
+      // Get Ref. Temp (Tset_hlt)
       swfx.tset_sw = ptmp->CB_Tset->Checked;
       if (swfx.tset_sw)
       {
@@ -907,26 +921,26 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       // Now update the LEDs with the proper values
       if (hw_status & LED1_OK)
       {
-         switch(led1) // 0=Tad1, 1=Tad2, 2=Tset
+         switch(led1) // 0=Tad1, 1=Tad2, 2=Tset_hlt
          {
             case 0: err  = set_led((int)(100.0 * padc.ad1),2,1,led1_vis); // set LED1 with DP at pos.2
                     break;
             case 1: err  = set_led((int)(100.0 * padc.ad2),2,1,led1_vis); // set LED1 with DP at pos.2
                     break;
-            case 2: err  = set_led((int)(100.0 * tset),2,1,led1_vis); // set LED1 with DP at pos.2
+            case 2: err  = set_led((int)(100.0 * tset_hlt),2,1,led1_vis); // set LED1 with DP at pos.2
                     break;
             default: break;
          } // switch
       } // if
       if (hw_status & LED2_OK)
       {
-         switch(led2) // 0=Tad1, 1=Tad2, 2=Tset
+         switch(led2) // 0=Tad1, 1=Tad2, 2=Tset_hlt
          {
             case 0: err  = set_led((int)(100.0 * padc.ad1),2,2,led2_vis); // set LED2 with DP at pos.2
                     break;
             case 1: err  = set_led((int)(100.0 * padc.ad2),2,2,led2_vis); // set LED2 with DP at pos.2
                     break;
-            case 2: err  = set_led((int)(100.0 * tset),2,2,led2_vis); // set LED2 with DP at pos.2
+            case 2: err  = set_led((int)(100.0 * tset_hlt),2,2,led2_vis); // set LED2 with DP at pos.2
                     break;
             default: break;
          } // switch
@@ -934,12 +948,12 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    } // else if
    //--------------------------------------------------------------------------
    // Fourth time-slice: Calculate Gamma value with the PID controller.
-   //                    Update Thlt_ref and update values on screen every TS seconds.
+   //                    Update Tset_hlt and update values on screen every TS seconds.
    //--------------------------------------------------------------------------
    else if (tmr.pid_tmr == 4)
    {
       // PID_RB->ItemIndex = 1 => PID Controller On
-      pid_reg2(padc.ad1,&gamma,tset,&pid_pars,PID_RB->ItemIndex); // gamma = pid_reg2(temp)
+      pid_reg2(padc.ad1,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex); // gamma = pid_reg2(temp)
       if (swfx.gamma_sw)
       {
          gamma = swfx.gamma_fx; // fix gamma
@@ -947,22 +961,22 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       sprintf(tmp_str,"%4.1f",gamma);
       Val_gamma->Caption = tmp_str;
 
-      // check if tset should be increased
-      if (pid_pars.mash_control == 0) // 0 = Tad1, 1 = Tad2
+      // check if tset_hlt should be increased
+      if (pid_pars.mash_control == 0) // 0 = Tad1 (HLT), 1 = Tad2 (MLT)
       {
-         update_tset(&tset,padc.ad1,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
+         update_tset(&tset_hlt,padc.ad1,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       }
       else
       {
-         update_tset(&tset,padc.ad2,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
+         update_tset(&tset_hlt,padc.ad2,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       } // else
       if (swfx.tset_sw)
       {
-         tset = swfx.tset_fx; // fix tset
+         tset_hlt = swfx.tset_fx; // fix tset
       } // if
-      sprintf(tmp_str,"%4.1f",tset);
+      sprintf(tmp_str,"%4.1f",tset_hlt);
       Val_tset->Caption = tmp_str;
-      sprintf(tmp_str,"%4.1f",tset - padc.ad1);
+      sprintf(tmp_str,"%4.1f",tset_hlt - padc.ad1);
       Val_ek->Caption = tmp_str;
    } // else if
    //--------------------------------------------------------------------------
@@ -971,7 +985,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //--------------------------------------------------------------------------
    else if (tmr.pid_tmr % 20 == 5)
    {
-      update_std(Vmlt,padc.ad2,&std_out,ms,ms_idx,ms_tot,&sp,&std,PID_RB->ItemIndex);
+      /* Tmlt = AD2, Thlt = AD1 */
+      update_std(Vmlt,padc.ad2,padc.ad1,tset_hlt,&std_out,
+                 ms,ms_idx,ms_tot,&sp,&std,PID_RB->ItemIndex);
       switch (std.ebrew_std)
       {
          case  0: Std_State->Caption = "00. Initialisation"       ; break;
@@ -1167,12 +1183,13 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
 {
   TRegistry *Reg = new TRegistry();
 
-  // Get Sparge Settings from the Registry
+  // Get Sparge  & STD Settings from the Registry
   try
   {
      if (Reg->KeyExists(REGKEY))
      {
         Reg->OpenKey(REGKEY,FALSE);
+        // Sparge Settings
         sp.sp_batches   = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
         sp.sp_time      = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
         sp.mash_vol     = Reg->ReadInteger("MASH_VOL");   // Total Mash Volume (L)
@@ -1187,6 +1204,13 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         //---------------------------------------------------------------
         sp.sp_time_ticks   = sp.sp_time * 60;
         sp.boil_time_ticks = sp.boil_time * 60;
+        // STD Settings
+        sp.tmlt_hlimit = Reg->ReadFloat("TMLT_HLIMIT");
+        sp.tmlt_llimit = Reg->ReadFloat("TMLT_LLIMIT");
+        sp.vmlt_empty  = Reg->ReadFloat("VMLT_EMPTY");
+        sp.to_xsec     = Reg->ReadInteger("TO_XSEC");
+        sp.to3         = Reg->ReadInteger("TO3");
+        sp.to4         = Reg->ReadInteger("TO4");
         Reg->CloseKey(); // Close the Registry
         delete Reg;
      } // if
@@ -1218,11 +1242,24 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
      if (Reg->KeyExists(REGKEY))
      {
         Reg->OpenKey(REGKEY,FALSE);
+        /*-----------------*/
+        /* Sparge Settings */
+        /*-----------------*/
         ptmp->EBatches->Text  = AnsiString(sp.sp_batches); // Number of Sparge Batches
         ptmp->EBTime->Text    = AnsiString(sp.sp_time);    // Time between two Sparge Batches
         ptmp->EMVol->Text     = AnsiString(sp.mash_vol);   // Total Mash Volume (L)
         ptmp->ESVol->Text     = AnsiString(sp.sp_vol);     // Total Sparge Volume (L)
         ptmp->EBoilTime->Text = AnsiString(sp.boil_time);  // Total Boil Time (min.)
+        /*--------------*/
+        /* STD Settings */
+        /*--------------*/
+        ptmp->Ehlimit->Text     = AnsiString(sp.tmlt_hlimit); // TMLT_HLIMIT [C]
+        ptmp->Ellimit->Text     = AnsiString(sp.tmlt_llimit); // TMLT_LLIMIT [C]
+        ptmp->Evmlt_empty->Text = AnsiString(sp.vmlt_empty);  // Vmlt_EMPTY [L]
+        ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);     // TIMEOUT_xSEC [sec]
+        ptmp->Eto3->Text        = AnsiString(sp.to3);         // TIMEOUT3 [sec]
+        ptmp->Eto4->Text        = AnsiString(sp.to4);         // TIMEOUT4 [sec]
+
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
            Reg->WriteInteger("SP_BATCHES",ptmp->EBatches->Text.ToInt());  // Number of Sparge Batches
@@ -1230,6 +1267,14 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("MASH_VOL",  ptmp->EMVol->Text.ToInt());     // Total Mash Volume (L)
            Reg->WriteInteger("SP_VOL",    ptmp->ESVol->Text.ToInt());     // Total Sparge Volume (L)
            Reg->WriteInteger("BOIL_TIME", ptmp->EBoilTime->Text.ToInt()); // Total Boil Time (min.)
+
+           Reg->WriteFloat("TMLT_HLIMIT", ptmp->Ehlimit->Text.ToDouble());  // TMLT_HLIMIT [C]
+           Reg->WriteFloat("TMLT_LLIMIT", ptmp->Ellimit->Text.ToDouble());  // TMLT_LLIMIT [C]
+           Reg->WriteFloat("VMLT_EMPTY",  ptmp->Evmlt_empty->Text.ToDouble()); // Vmlt_EMPTY [L]
+           Reg->WriteInteger("TO_XSEC",   ptmp->Eto_xsec->Text.ToInt());    // TIMEOUT_xSEC [sec]
+           Reg->WriteInteger("TO3",       ptmp->Eto3->Text.ToInt());        // TIMEOUT3 [sec]
+           Reg->WriteInteger("TO4",       ptmp->Eto4->Text.ToInt());        // TIMEOUT4 [sec]
+
            Init_Sparge_Settings(); // Init. struct with sparge settings with new values
         } // if
         delete ptmp;

@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2003/01/05 14:31:22  emile
+// - Bug-fix: Pressing the top-right Close button of EBrew now activates the
+//   MenuFileExitClick method. This was not the case yet, which resulted in
+//   a termination of EBrew without the I2C bus properly closed.
+//
 // Revision 1.4  2003/01/04 22:35:50  emile
 // - Restore Settings function now restores all relevant variables (not just
 //   the mashing variables). Several separate functions are created to
@@ -144,7 +149,7 @@ private:	// User declarations
 public:		// User declarations
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output
-        double          tset;       // HLT reference temperature
+        double          tset_hlt;   // HLT reference temperature
         double          Vmlt;       // MLT volume: output of MA5 filter for pressure transducer
         pid_params      pid_pars;   // struct containing PID parameters
         int             ms_tot;     // tot. nr. of valid temp & time values
