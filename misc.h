@@ -6,6 +6,14 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.3  2002/12/30 20:21:59  emile
+// - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
+// - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
+// - Bug 4 29-12-02 solved: rush through STD. Sparging parameters were not
+//   initialised. New function Init_Sparge_Settings() added.
+// - Sparge variables now added to 'View Mash Progress' screen.
+// - std_struct added for more flexibility of fixing STD values.
+//
 // Revision 1.2  2002/12/30 13:33:45  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -54,6 +62,14 @@ typedef struct _log_struct
    int  lms_idx;        /* Last known value of ms_idx */
    int  tmr_ms_idx;     /* Timer value of ms_idx timer */
    int  std_val;        /* Last known value of std_state */
+   int  start_lstd;     /* The start line number of the latest ebrew_std */
+   int  sp_idx;         /* Number of Sparging cycles */
+   int  mashing_start;  /* Start line of Mashing */
+   int  sparging_start; /* Start line of Sparging */
+   int  boil_start;     /* Start line of Boiling */
+   int  chill_start;    /* Start line of Chilling */
+   int  max_std;        /* Max. value of ebrew_std */
+   double vmash;        /* Value of vmash = Vmlt if ebrew_std 3 -> 5 */
 } log_struct;
 
 typedef struct _maisch_schedule

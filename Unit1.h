@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2002/12/30 20:21:59  emile
+// - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
+// - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
+// - Bug 4 29-12-02 solved: rush through STD. Sparging parameters were not
+//   initialised. New function Init_Sparge_Settings() added.
+// - Sparge variables now added to 'View Mash Progress' screen.
+// - std_struct added for more flexibility of fixing STD values.
+//
 // Revision 1.2  2002/12/30 13:33:45  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -119,6 +127,7 @@ __published:	// IDE-managed Components
 private:	// User declarations
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
+        void __fastcall Restore_Settings(void);
         timer_vars      tmr;        // struct with timer variables
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         ma              str_vmlt;   // Struct for MA5 filter for pressure transducer

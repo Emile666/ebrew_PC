@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2002/12/30 20:21:58  emile
+// - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
+// - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
+// - Bug 4 29-12-02 solved: rush through STD. Sparging parameters were not
+//   initialised. New function Init_Sparge_Settings() added.
+// - Sparge variables now added to 'View Mash Progress' screen.
+// - std_struct added for more flexibility of fixing STD values.
+//
 // Revision 1.2  2002/12/30 13:33:45  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -41,6 +49,112 @@
 
 TMainForm *MainForm;
 //---------------------------------------------------------------------------
+void __fastcall TMainForm::Restore_Settings(void)
+/*------------------------------------------------------------------
+  Purpose  : This function reads all relevant info from the log-file,
+             opens a Dialog screen where the user can select the
+             appropriate log-file entry.
+             The data from this log-file entry is then used to
+             restore the ebrew program to that situation.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   FILE       *fd;       // Log File Descriptor
+   log_struct p1[100];   // Array of structs with log info to fill
+   char       s[80];     // temp. string
+   int        cnt_i = 1; // #items in Combobox
+   int        j;         // temp. variable
+   int        k;         // temp. variable
+   int        x;         // temp. variable
+
+   TRestore_Program_Settings *prps;  // pointer to Form
+
+   if ((fd = fopen(LOGFILE,"r")) == NULL)
+   {
+      MessageBox(NULL,"Could not open log-file for reading","Init. error when trying to restore data",MB_OK);
+   } /* if */
+   else
+   {
+      //--------------------------------------------------------
+      // Read all information from the log-file and try to
+      // reconstruct the previous situation as good as possible
+      //--------------------------------------------------------
+      j = decode_log_file(fd,p1); // read log file with data jusst before chrash
+      fclose(fd);                 // close log-file
+      prps = new TRestore_Program_Settings(this);
+      prps->ComboBox1->Items->Add("Reset to default values (ms_idx=0, sp_idx=0, ebrew_std=0)");
+      for (k = 0; k < j; k++)
+      {
+         if ((p1[k].lms_idx > 0) || (p1[k].std_val > 0))
+         {
+            cnt_i++; // increment #items in Combobox
+            sprintf(s,"%02d %s %s-%s ms_idx=%2d sp_idx=%2d std=%2d",k,
+                                                         p1[k].brew_date,
+                                                         p1[k].btime,
+                                                         p1[k].etime,
+                                                         p1[k].lms_idx,
+                                                         p1[k].sp_idx,
+                                                         p1[k].std_val);
+            prps->ComboBox1->Items->Add(s);
+         } // if
+      } // for k
+      prps->ComboBox1->DropDownCount = cnt_i;
+      prps->ComboBox1->ItemIndex     = 0;
+      if ((prps->ShowModal() == 0x1) && (prps->ComboBox1->ItemIndex > 0)) // mrOK
+      {
+         //-----------------------------------------------------------------
+         // Initialise the various values with the values from the log-file
+         //-----------------------------------------------------------------
+         strncpy(s,prps->ComboBox1->Items->Strings[prps->ComboBox1->ItemIndex].c_str(),2);
+         s[2]             = '\0';    // terminate string
+         k                = atoi(s); // convert to integer
+         //---------------------------
+         // Restore Mashing parameters
+         //---------------------------
+         ms_idx           = p1[k].lms_idx;
+         for (j = 0; j < ms_idx; j++)
+         {
+            ms[j].timer = ms[j].time; // set previous timers to time-out
+         } // for j
+         ms[ms_idx].timer = p1[k].tmr_ms_idx; // restore timer value
+         //----------------------------
+         // Restore Sparging parameters
+         //----------------------------
+         std.ebrew_std = p1[k].std_val; // Current state
+         std.sp_idx    = p1[k].sp_idx;  // Sparging sessions done
+         std.vmash     = p1[k].vmash;   // Vmash value
+         x             = p1[k].eline + 1 - p1[k].start_lstd;
+         x            *= 5;             // Log-file -> 5 sec.: STD called -> 1 sec.
+         switch (std.ebrew_std) // init. timers for states that have timers
+         {
+            case S05_SPARGING_REST:        std.timer1 = x;
+                                           break;
+            case S08_DELAY_1SEC:           std.timer2 = x;
+                                           break;
+            case S10_BOILING:              if (p1[k].max_std > S10_BOILING)
+                                           {
+                                              std.timer3 = NOT_STARTED;
+                                              std.timer4 = TIMEOUT4;
+                                              std.timer5 = x + TIMEOUT3 + TIMEOUT4;
+                                           }
+                                           else
+                                           {
+                                              std.timer3 = x;
+                                              std.timer4 = 0;
+                                              std.timer5 = x;
+                                           }
+                                           break;
+            case S11_EMPTY_HEAT_EXCHANGER: std.timer4 = x;
+                                           std.timer5 = x + TIMEOUT3;
+                                           break;
+            default:                       break;
+         } // switch
+      } // if mrOK
+      delete prps;
+      prps = 0; // NULL the pointer
+   } // else
+} // TMainForm::Restore_Settings()
+
 void __fastcall TMainForm::Main_Initialisation(void)
 /*------------------------------------------------------------------
   Purpose  : This function Initialises all I2C Hardware and checks if
@@ -50,13 +164,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
   ------------------------------------------------------------------*/
 {
    TRegistry *Reg = new TRegistry();
+   FILE *fd;      // Log File Descriptor
    char s[80];    // temp. string
    char s1[20];   // temp. string
    char st[1024]; // string for MessageBox
    int  i;        // temp. variable
-   int  j;        // temp. variable
-   int  k;        // temp. variable
-   FILE *fd;      // Log File Descriptor
    int  x1;       // Temp. var. for I2C HW base address
 
    // Fill pid_pars struct with TS, Kc, Ti & Td values from the Registry
@@ -181,6 +293,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
       //}
    } // if
 
+   //-------------------------------------
    // Read Mash Scheme for maisch.sch file
    //-------------------------------------
    if (!read_input_file(MASH_FILE,ms,&ms_tot,pid_pars.ts))
@@ -189,6 +302,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
        delete Reg;
        return;
    } /* if */
+   Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
+
    try
    {
       if (Reg->KeyExists(REGKEY))
@@ -198,67 +313,13 @@ void __fastcall TMainForm::Main_Initialisation(void)
          i = Reg->ReadInteger("ms_idx");
          if (i < MAX_MS)
          {
-            if ((fd = fopen(LOGFILE,"r")) == NULL)
-            {
-               MessageBox(NULL,"Could not open log-file for reading","Init. error when trying to restore data",MB_OK);
-            } /* if */
-            else
-            {
-               //--------------------------------------------------------
-               // Read all information from the log-file and try to
-               // reconstruct the previous situation as good as possible
-               //--------------------------------------------------------
-               log_struct p1[100]; // Array of structs with log info to fill
-               int cnt_i = 1;      // #items in Combobox
-               TRestore_Program_Settings *prps;  // pointer to Form
-               j = decode_log_file(fd,p1); // read log file with data jusst before chrash
-               fclose(fd);
-               prps = new TRestore_Program_Settings(this);
-               prps->ComboBox1->Items->Add("Reset to default values (ms_idx = 0, ebrew_std = 0)");
-               for (k = 0; k < j; k++)
-               {
-                  if ((p1[k].lms_idx > 0) || (p1[k].std_val > 0))
-                  {
-                     cnt_i++; // increment #items in Combobox
-                     sprintf(s,"%02d %s %s-%s ms_idx=%2d std=%2d",k,
-                                                                  p1[k].brew_date,
-                                                                  p1[k].btime,
-                                                                  p1[k].etime,
-                                                                  p1[k].lms_idx,
-                                                                  p1[k].std_val);
-                     prps->ComboBox1->Items->Add(s);
-                  } // if
-               } // for k
-               prps->ComboBox1->DropDownCount = cnt_i;
-               prps->ComboBox1->ItemIndex     = 0;
-               if ((prps->ShowModal() == 0x1) && (prps->ComboBox1->ItemIndex > 0)) // mrOK
-               {
-                  //-----------------------------------------------------------------
-                  // Initialise the various values with the values from the log-file
-                  //-----------------------------------------------------------------
-                  strncpy(s,prps->ComboBox1->Items->Strings[prps->ComboBox1->ItemIndex].c_str(),2);
-                  s[2]             = '\0';    // terminate string
-                  k                = atoi(s); // convert to integer
-                  ms_idx           = p1[k].lms_idx;
-                  for (j = 0; j < ms_idx; j++)
-                  {
-                     ms[j].timer = ms[j].time; // set previous timers to time-out
-                  } // for j
-                  ms[ms_idx].timer = p1[k].tmr_ms_idx; // restore timer value
-               } // if
-               delete prps;
-               prps = 0; // NULL the pointer
-            } // else
-            //---
-            //sprintf(s,"Power-down detected (ms_idx = %2d), YES to continue, NO to initialise",i);
-            //if (MessageBox(NULL,s,"Mashing phase in progress",MB_YESNO|MB_ICONQUESTION) == IDYES)
-            //{
-            //   ms_idx = i; // set ms_idx to value in registry
-            //   ms[ms_idx].timer = 0; // set timer to running
-            //} // if
-            //else ms_idx = 0; // start with mash scheme from the beginning
-            //---
-         } // if i < MAX_MS
+            //--------------------------------------------------------------
+            // ebrew program was terminated abnormally. Open a dialog box,
+            // present entries from the log file and ask to restore settings
+            // of a particular log-file entry. If yes, restore settings.
+            //--------------------------------------------------------------
+            Restore_Settings();
+         } // if i
          Reg->WriteInteger("ms_idx",ms_idx); // update registry setting
          tset = ms[ms_idx].temp; // Set tset value
          Reg->CloseKey();        // Close the Registry
@@ -272,13 +333,14 @@ void __fastcall TMainForm::Main_Initialisation(void)
       return;
    } // catch
 
+   //-------------
    // Init. timers
    //-------------
-   tmr.isrstate = 1;                 // disable heater
-   tmr.htimer = tmr.ltimer   = 0;    // init. low timer
-   tmr.time_high = tmr.time_low = 0; // init. time bit = 1
-   tmr.alive = tmr.alive_tmr = 0;    // init. alive timers
-   tmr.pid_tmr = 1; // init. timer that controls PID controller timing
+   tmr.isrstate  = 1;                 // disable heater
+   tmr.htimer    = tmr.ltimer   = 0;  // init. low timer
+   tmr.time_high = tmr.time_low = 0;  // init. time bit = 1
+   tmr.alive     = tmr.alive_tmr = 0; // init. alive timers
+   tmr.pid_tmr   = 1; // init. timer that controls PID controller timing
 
    // Init. 5th order Moving Average (MA) filter for pressure transducer
    //-------------------------------------------------------------------
@@ -288,7 +350,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    // Init. the position of all valves & the Pump to OFF (closed).
    // No Manual Override of valves yet.
    //--------------------------------------------------------------------------
-   Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
    std_out = 0x0000;
 
    // Init logfile
@@ -314,12 +375,13 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fclose(fd);
    } // else
 
+   //----------------------------------
    // We came all the way! Start Timers
-   //--------------------------------------------------------
-   T50msec->Enabled = true; // start Interrupt Timer
-   ShowDataGraphs->GraphTimer->Enabled = true; // Start Graph Update timer
+   //----------------------------------
+   T50msec->Enabled                       = true; // start Interrupt Timer
+   ShowDataGraphs->GraphTimer->Enabled    = true; // Start Graph Update timer
    ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
-   PID_RB->Enabled  = true; // Enable PID Controller Radio-buttons
+   PID_RB->Enabled                        = true; // Enable PID Controller Radio-buttons
 } // Main_Initialisation()
 
 //---------------------------------------------------------------------------
