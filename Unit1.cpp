@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2003/07/11 18:34:45  emile
+// - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
+// - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
+// - Log-file header updated
+// - init_adc(): all vref initialisations are now the same (/ 2560).
+//               Removed the / 10 division of AD4 in the main loop, this is
+//               now done in init_adc().
+// - Multiply and division changed into <<= and >>= (in lm76_read())
+//
 // Revision 1.11  2003/06/29 20:47:43  emile
 // - Changes in Main_Initialisation(). Single exit-point, all code is evaluated,
 //   even if i2c_init() or i2c_start() fail. Done for easier debugging.
@@ -79,6 +88,7 @@
 #include "Sparge_Settings.h"
 #include "RestoreSettings.h"
 #include "misc.h"
+#include <Dialogs.hpp>
 
 #include "i2c_dll.h"
 //---------------------------------------------------------------------------
@@ -107,10 +117,20 @@ void __fastcall TMainForm::Restore_Settings(void)
    int        x;         // temp. variable
 
    TRestore_Program_Settings *prps;  // pointer to Form
+   TOpenDialog *Dlg;                 // pointer to File-Dialog
 
-   if ((fd = fopen(LOGFILE,"r")) == NULL)
+   Dlg = new TOpenDialog(this);
+   Dlg->Filter = "ebrew log files|ebrew*.txt";
+   Dlg->Title  = "Open an ebrew log file";
+   if (Dlg->Execute() == false)
    {
-      MessageBox(NULL,"Could not open log-file for reading","Init. error when trying to restore data",MB_OK);
+      delete Dlg;
+      return; // exit Restore_Settings function
+   } // if
+
+   if ((fd = fopen(Dlg->FileName.c_str(),"r")) == NULL)
+   {
+      MessageBox(NULL,"Could not open log file for reading","Init. error when trying to restore data",MB_OK);
    } /* if */
    else
    {
@@ -189,9 +209,9 @@ void __fastcall TMainForm::Restore_Settings(void)
             default:                       break;
          } // switch
       } // if mrOK
-      delete prps;
-      prps = 0; // NULL the pointer
+      delete prps;  // prevent memory leaks
    } // else
+   delete Dlg; // prevent memory leaks
 } // TMainForm::Restore_Settings()
 
 void __fastcall TMainForm::Main_Initialisation(void)
@@ -1541,5 +1561,27 @@ void __fastcall TMainForm::FormClose(TObject *Sender, TCloseAction &Action)
 {
    MenuFileExitClick(Sender);
 }
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
+{
+   TRegistry *Reg   = new TRegistry();
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+         Restore_Settings();                 // Read Log File & Restore Settings
+         Reg->WriteInteger("ms_idx",ms_idx); // Update registry setting
+         tset_hlt = ms[ms_idx].temp;         // Set tset value for HLT
+         Reg->CloseKey();                    // Close the Registry
+      } // if
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+   delete Reg; // Delete Registry object to prevent memory leak
+} // TMainForm::ReadLogFile1Click()
 //---------------------------------------------------------------------------
 

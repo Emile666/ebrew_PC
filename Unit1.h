@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2003/07/11 18:34:46  emile
+// - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
+// - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
+// - Log-file header updated
+// - init_adc(): all vref initialisations are now the same (/ 2560).
+//               Removed the / 10 division of AD4 in the main loop, this is
+//               now done in init_adc().
+// - Multiply and division changed into <<= and >>= (in lm76_read())
+//
 // Revision 1.10  2003/06/29 20:47:43  emile
 // - Changes in Main_Initialisation(). Single exit-point, all code is evaluated,
 //   even if i2c_init() or i2c_start() fail. Done for easier debugging.
@@ -153,6 +162,8 @@ __published:	// IDE-managed Components
         TLabel *V3;
         TLabel *V7;
         TLabel *Std_State;
+        TMenuItem *N2;
+        TMenuItem *ReadLogFile1;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -168,6 +179,7 @@ __published:	// IDE-managed Components
         void __fastcall ON1Click(TObject *Sender);
         void __fastcall PopupMenu1Popup(TObject *Sender);
         void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
+        void __fastcall ReadLogFile1Click(TObject *Sender);
 private:	// User declarations
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
