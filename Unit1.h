@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2002/12/30 13:33:45  emile
+// - Headers with CVS tags added to every source file
+// - Restore Settings function is added
+// - "ebrew" registry key now in a define REGKEY
+//
 // ==========================================================================
 
 //---------------------------------------------------------------------------
@@ -22,7 +27,6 @@
 #include <jpeg.hpp>
 #include <ComCtrls.hpp>
 
-//#include "i2c.h"
 #include "misc.h"
 #include "pid_reg.h"
 #include "AnimTimer.h"
@@ -114,6 +118,7 @@ __published:	// IDE-managed Components
         void __fastcall PopupMenu1Popup(TObject *Sender);
 private:	// User declarations
         void __fastcall Main_Initialisation(void);
+        void __fastcall Init_Sparge_Settings(void);
         timer_vars      tmr;        // struct with timer variables
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         ma              str_vmlt;   // Struct for MA5 filter for pressure transducer
@@ -121,7 +126,6 @@ private:	// User declarations
         int             led2;       // 0=Tad1, 1=Tad2, 2=Tset
         int             led1_vis;   // 1..7: LED1 Visibility
         int             led2_vis;   // 1..7: LED2 Visibility
-        sparge_struct   sp;         // Values for Sparging
 public:		// User declarations
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output
@@ -132,7 +136,8 @@ public:		// User declarations
         int             ms_idx;     // index in ms[] array
         int             hw_status;  // I2C HW status, see i2c.h for bit settings
         maisch_schedule ms[MAX_MS]; // struct containing maisch schedule
-        int             std_state;  // current version of STD state
+        sparge_struct   sp;         // Values for Sparging
+        std_struct      std;        // Values for State Transition Diagram
         unsigned int    std_out;    // position of valves
                                     // Bit 0 = Pump, Bit 1..7 = V1..V7
                                     // Bit 8..15: 0 = Auto, 1 = Manual Override

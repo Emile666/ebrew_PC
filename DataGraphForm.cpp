@@ -4,6 +4,11 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2002/12/30 13:33:44  emile
+// - Headers with CVS tags added to every source file
+// - Restore Settings function is added
+// - "ebrew" registry key now in a define REGKEY
+//
 // ==========================================================================
 
 //---------------------------------------------------------------------------
@@ -50,7 +55,7 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
                                                       MainForm->Vmlt,
                                                       MainForm->PID_RB->ItemIndex,
                                                       MainForm->ms_idx,
-                                                      MainForm->std_state);
+                                                      MainForm->std.ebrew_std);
       fclose(fd);
    } /* if */
 

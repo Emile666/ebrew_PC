@@ -6,6 +6,11 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.2  2002/12/30 13:33:45  emile
+  - Headers with CVS tags added to every source file
+  - Restore Settings function is added
+  - "ebrew" registry key now in a define REGKEY
+
   ==================================================================
 */
 #include <stdio.h>
@@ -97,7 +102,7 @@ int decode_log_file(FILE *fd, log_struct p[])
 
    /*----------------------------------------------------------------------------*/
    /* 2) Go through the log-file again. The begin- and end-lines are known.      */
-   /*    Extend this info with the begin- and end-time and ms_idx and std_state. */
+   /*    Extend this info with the begin- and end-time and ms_idx and ebrew_std. */
    /*----------------------------------------------------------------------------*/
    rewind(fd); /* start again at beginning of file */
    log_idx = 0;
@@ -126,7 +131,7 @@ int decode_log_file(FILE *fd, log_struct p[])
             GOTO_COLUMN(9,tmp); /* ms_idx is to be found in column 9 */
             /* Next value to read is ms_idx */
             p[log_idx].lms_idx = atoi(phlp);
-            phlp = strtok(NULL,COLON); /* next value is std_state */
+            phlp = strtok(NULL,COLON); /* next value is ebrew_std */
             p[log_idx].std_val = atoi(phlp);
 
             log_idx++; /* to next log entry */
@@ -138,7 +143,7 @@ int decode_log_file(FILE *fd, log_struct p[])
    /*-------------------------------------------------------------------*/
    /* 3) Go through the log-file AGAIN and fill in the following:       */
    /*    - Latest timer value for mash timers (denoted by ms_idx).      */
-   /*    - Vmash value: This is Vmlt when std_state changes from 3 -> 5 */
+   /*    - Vmash value: This is Vmlt when ebrew_std changes from 3 -> 5 */
    /*-------------------------------------------------------------------*/
    rewind(fd); /* start again at beginning of file */
    log_idx = 0;
@@ -177,11 +182,11 @@ int decode_log_file(FILE *fd, log_struct p[])
 
    /*-------------------------------------------------------------------*/
    /* 4) Go through the log-file AGAIN and, for every log-entry that    */
-   /*    has a std_state > 4, fill in the following:                    */
-   /*    - Vmash value: This is Vmlt when std_state changes from 3 -> 5 */
-   /*    - sp_idx     : The number of cycles that std_state = 5,6,8,7.  */
-   /*    - timer1     : If last state = 5, the time in state 5.         */
-   /*    - timer3     : time in states 10 and 11.                       */
+   /*    has a ebrew_std > 4, fill in the following:                    */
+   /*    - Vmash value: This is Vmlt when ebrew_std changes from 3 -> 5 */
+   /*    - sp_idx     : The number of cycles that ebrew_std = 5,6,8,7.  */
+   /*    - timer1     : If ebrew_std = 5, the time in ebrew_std = 5.    */
+   /*    - timer3     : time in ebrew_std states 10 and 11.             */
    /*-------------------------------------------------------------------*/
    //rewind(fd); /* start again at beginning of file */
    //line_nr = 1;
@@ -271,7 +276,7 @@ void update_tset(double *tset, double temp, double offset,
      4)    Time-out         X          Get next temp. set-point    2 * offset
   Variables:
      *tset : The reference temperature for the PID controller
-      temp : The actual temperature of the HLT
+      temp : The actual temperature of the HLT or MLT
     offset : Temperature offset to add to tset (1X or 2X)
       time : the actual time in TS ticks
       ms[] : Array containing the maisch schedule
@@ -283,7 +288,7 @@ void update_tset(double *tset, double temp, double offset,
    if (*ms_idx < ms_total)
    {
       *tset = ms[*ms_idx].temp + offset; // get ref. temp. from mash scheme
-      if ((ms[*ms_idx].timer == NOT_STARTED) && (temp > ms[*ms_idx].temp))
+      if ((ms[*ms_idx].timer == NOT_STARTED) && (temp >= ms[*ms_idx].temp))
       {
          /* 2) timer has not started yet and ref. temp. has been achieved */
          ms[*ms_idx].timer = 0; /* start timer */
@@ -318,13 +323,14 @@ void update_tset(double *tset, double temp, double offset,
 
 int update_std(double vmlt, double tmlt, unsigned int *kleppen,
                  maisch_schedule ms[], int ms_idx, int ms_total,
-                 sparge_struct *sps, int pid_on)
+                 sparge_struct *sps, std_struct *std, int pid_on)
 /*------------------------------------------------------------------
   Purpose  : This function contains the State Transition Diagram (STD)
              for the ebrew program.
              First: the new state is calculated based upon the conditions.
              Then: the settings of the valves are calculated and returned
              in 'kleppen'.
+             It uses various static variables (see begin of file).
   Variables:
       vmlt : The volume (L) of the Mash/Lauter Tun (MLT)
       tmlt : The actual temperature of the MLT
@@ -336,141 +342,135 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
     ms_idx : index in the array [0 .. ms_total-1]
   ms_total : max. index in the array
        sps : Struct containing all sparge variables
+       std : Struct containing all STD variables
     pid_on : 1 = PID Controller enabled (needed as a condition here)
   Returns  : The values of ebrew_std is returned
   ------------------------------------------------------------------*/
 {
-   static int    ebrew_std; // Current state of STD
-   static int    sp_idx;    // Sparging index [0..sps->sp_batches-1]
-   static int    timer1;    // Timer for state 'Sparging Rest'
-   static int    timer2;    // Timer for state 'Delay_1SEC'
-   static int    timer3;    // Timer for transition to state 'Empty Heat Exchanger'
-   static int    timer4;    // Timer for state 'Empty Heat Exchanger'
-   static int    timer5;    // Timer for boiling time
-   static double vmash;     // MLT volume after mashing is completed
-   unsigned int  klepstand; // Help var. = klepstanden[ebrew_std]
-
+   unsigned int  klepstand; // Help var. = klepstanden[std->ebrew_std]
    unsigned int  klepstanden[] = {0x0000, 0x0024, 0x0015, 0x0013, 0x0023,
                                   0x0013, 0x0093, 0x0017, 0x0013, 0x0083,
                                   0x0010, 0x0013, 0x00c1};
 
-   switch (ebrew_std)
+   switch (std->ebrew_std)
    {
-      case INITIALISATION:
+      case S00_INITIALISATION:
            if (pid_on & 0x01)
            {
-              ebrew_std = WAIT_FOR_HLT_TEMP;
+              std->ebrew_std = S01_WAIT_FOR_HLT_TEMP;
            } // if
            break;
-      case WAIT_FOR_HLT_TEMP:
+      case S01_WAIT_FOR_HLT_TEMP:
            if (ms[0].timer != NOT_STARTED) // HLT TEMP is OK
            {
-              ebrew_std = FILL_MLT;
+              std->ebrew_std = S02_FILL_MLT;
            } // if
            break;
-      case FILL_MLT:
+      case S02_FILL_MLT:
            if (vmlt > sps->mash_vol)
            {
-              ebrew_std = MASH_IN_PROGRESS;
+              std->ebrew_std = S03_MASH_IN_PROGRESS;
            } // if
            break;
-      case MASH_IN_PROGRESS:
+      case S03_MASH_IN_PROGRESS:
            if ((ms_idx >= ms_total - 1) && // Mashing finished?
                (ms[ms_idx].timer >= ms[ms_idx].time))
            {
-              sp_idx    = 0;    // init. sparging index
-              vmash     = vmlt; // remember current MLT volume
-              timer1    = sps->sp_time_ticks; // timer1 -> TIME-OUT
-              ebrew_std = SPARGING_REST;
+              std->sp_idx    = 0;    // init. sparging index
+              std->vmash     = vmlt; // remember current MLT volume
+              std->timer1    = sps->sp_time_ticks; // timer1 -> TIME-OUT
+              std->ebrew_std = S05_SPARGING_REST;
            }
            else if (tmlt > ms[ms_idx].temp + TMLT_HLIMIT)
            {
-              ebrew_std = BYPASS_HEAT_EXCHANGER;
+              std->ebrew_std = S04_BYPASS_HEAT_EXCHANGER;
            } // else if
            break;
-      case BYPASS_HEAT_EXCHANGER:
-           if (tmlt < ms[ms_idx].temp + TMLT_LLIMIT)
+      case S04_BYPASS_HEAT_EXCHANGER:
+           if ((tmlt < ms[ms_idx].temp + TMLT_LLIMIT) ||
+               ((ms_idx >= ms_total - 1) && // Mashing finished?
+                (ms[ms_idx].timer >= ms[ms_idx].time)))
            {
-              ebrew_std = MASH_IN_PROGRESS;
+              std->ebrew_std = S03_MASH_IN_PROGRESS;
            } // if
            break;
-      case SPARGING_REST:
-           if (++timer1 >= sps->sp_time_ticks)
+      case S05_SPARGING_REST:
+           if (++std->timer1 >= sps->sp_time_ticks)
            {
-              if (sp_idx < sps->sp_batches - 1)
+              if (std->sp_idx < sps->sp_batches - 1)
               {
-                 ebrew_std = PUMP_FROM_MLT_TO_BOIL; // Pump to BOIL again
+                 std->ebrew_std = S06_PUMP_FROM_MLT_TO_BOIL; // Pump to BOIL again
               } // if
               else
               {
-                 ebrew_std = EMPTY_MLT; // Finished with Sparging, empty MLT
+                 std->ebrew_std = S09_EMPTY_MLT; // Finished with Sparging, empty MLT
               } // else if
            } // if
            break;
-      case PUMP_FROM_MLT_TO_BOIL:
-           if (vmlt < vmash - sps->sp_vol_batch)
+      case S06_PUMP_FROM_MLT_TO_BOIL:
+           if (vmlt < std->vmash - sps->sp_vol_batch)
            {
-              timer2    = 0; // init. 1 sec. timer
-              ebrew_std = DELAY_1SEC;
+              std->timer2    = 0; // init. 1 sec. timer
+              std->ebrew_std = S08_DELAY_1SEC;
            } // if
            break;
-      case PUMP_FROM_HLT_TO_MLT:
-           if (vmlt > vmash)
+      case S07_PUMP_FROM_HLT_TO_MLT:
+           if (vmlt > std->vmash)
            {
-              sp_idx++;      // Increase #Sparging Sessions done
-              timer1    = 0; // init timer1
-              ebrew_std = SPARGING_REST;
+              std->sp_idx++;      // Increase #Sparging Sessions done
+              std->timer1    = 0; // init timer1
+              std->ebrew_std = S05_SPARGING_REST;
            } // if
            break;
-      case DELAY_1SEC:
-           if (++timer2 >= TIMEOUT_1SEC)
+      case S08_DELAY_1SEC:
+           if (++std->timer2 >= TIMEOUT_1SEC)
            {
-              ebrew_std = PUMP_FROM_HLT_TO_MLT;
+              std->ebrew_std = S07_PUMP_FROM_HLT_TO_MLT;
            } // if
            break;
-      case EMPTY_MLT:
+      case S09_EMPTY_MLT:
            if (vmlt < VMLT_EMPTY)
            {
-              timer3    = 0; // init. timer for transition to 'Empty Heat Exchanger'
-              timer5    = 0; // init. timer for boiling time
-              ebrew_std = BOILING;
+              std->timer3    = 0; // init. timer for transition to 'Empty Heat Exchanger'
+              std->timer5    = 0; // init. timer for boiling time
+              std->ebrew_std = S10_BOILING;
            } // if
            break;
-      case BOILING:
-           ++timer5;
-           if ((timer3 != -1) && (++timer3 >= TIMEOUT3))
+      case S10_BOILING:
+           ++std->timer5;
+           if ((std->timer3 != NOT_STARTED) && (++std->timer3 >= TIMEOUT3))
            {
-              timer4    = 0;
-              ebrew_std = EMPTY_HEAT_EXCHANGER;
+              std->timer4    = 0;
+              std->ebrew_std = S11_EMPTY_HEAT_EXCHANGER;
            } // if
-           else if (timer5 >= sps->boil_time_ticks)
+           else if (std->timer5 >= sps->boil_time_ticks)
            {
-              ebrew_std = CHILL;
+              std->ebrew_std = S12_CHILL;
            } // else if
            break;
-      case EMPTY_HEAT_EXCHANGER:
-           ++timer5;
-           if (++timer4 >= TIMEOUT4)
+      case S11_EMPTY_HEAT_EXCHANGER:
+           ++std->timer5;
+           if (++std->timer4 >= TIMEOUT4)
            {
-              timer3    = -1; // disable timer3
-              ebrew_std = BOILING;
+              std->timer3    = NOT_STARTED; // disable timer3
+              std->ebrew_std = S10_BOILING;
            } // if
            break;
-      case CHILL:
+      case S12_CHILL:
            if (pid_on & 0x02)
            {
-              ebrew_std = INITIALISATION;
+              std->ebrew_std = S00_INITIALISATION;
            } // if
            break;
       default:
-           ebrew_std = INITIALISATION;
+           std->ebrew_std = S00_INITIALISATION;
            break;
    } // switch
 
    //-------------------------------------------------
    // Now calculate the proper settings for the valves
    //-------------------------------------------------
-   klepstand = klepstanden[ebrew_std];
+   klepstand = klepstanden[std->ebrew_std];
    if ((*kleppen & V7M) == 0x0000) // V7 No Manual Override ?
    {
       if (klepstand & V7b) *kleppen |= V7b;
@@ -507,7 +507,7 @@ int update_std(double vmlt, double tmlt, unsigned int *kleppen,
       else                 *kleppen &= ~V1b;
    }
    // No Manual Override for the pump.
-   return ebrew_std; // return the new state of the STD
+   return std->ebrew_std; // return the new state of the STD
 } // update_std()
 
 void init_ma(ma *p, int N)

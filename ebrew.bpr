@@ -41,8 +41,8 @@ USERDEFINES =
 SYSDEFINES = NO_STRICT;USEPACKAGES
 # ---------------------------------------------------------------------------
 CFLAG1 = -Ii2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl \
-  -Od -w -Ve -r- -a8 -4 -k -y -v -vi- -c -b- -w-par -w-inl -Vx -tW -tWM \
-  -D$(SYSDEFINES);$(USERDEFINES)
+  -Od -Hc -H=$(BCB)\lib\vcl40.csm -w -Ve -r- -a8 -4 -k -y -v -vi- -c -b- -w-par \
+  -w-inl -Vx -tW -tWM -D$(SYSDEFINES);$(USERDEFINES)
 PFLAGS = -U"..\..\program files\borland\cbuilder4\Lib";i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\program files\borland\cbuilder4\Lib";"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\lib\obj;$(BCB)\lib;$(DEBUGLIBPATH) \
   -Ii2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl \
   -N2O -N0O -$YD -$W -$O- -v -JPHNE -M
@@ -65,7 +65,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=0
 Release=0
-Build=22
+Build=24
 Debug=0
 PreRelease=0
 Special=0
@@ -77,7 +77,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=E. vd Logt
 FileDescription=E-Brewing
-FileVersion=1.0.0.22
+FileVersion=1.0.0.24
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=
@@ -98,15 +98,16 @@ Item6=..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\in
 Item7=$(BCB)\include;$(BCB)\include\vcl
 
 [HistoryLists\hlLibraryPath]
-Count=8
-Item0=i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item1=..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item2=..\..\..\Programming\bc\c\PSP\REUSE;..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item3=..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item4=..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item5=..\;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item6=..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item7=$(BCB)\lib\obj;$(BCB)\lib
+Count=9
+Item0=..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item1=i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item2=..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item3=..\..\..\Programming\bc\c\PSP\REUSE;..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item4=..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item5=..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item6=..\;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item7=..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item8=$(BCB)\lib\obj;$(BCB)\lib
 
 [HistoryLists\hlDebugSourcePath]
 Count=1

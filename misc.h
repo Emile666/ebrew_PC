@@ -6,6 +6,11 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.2  2002/12/30 13:33:45  emile
+// - Headers with CVS tags added to every source file
+// - Restore Settings function is added
+// - "ebrew" registry key now in a define REGKEY
+//
 // 27-07-02 LGT    moving_average() function added
 // 13-03-02 LGT    Initial version, derived from brew.c
 // ==================================================================
@@ -70,6 +75,18 @@ typedef struct _sparge_struct
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
 } sparge_struct;
 
+typedef struct _std_struct
+{
+   int    ebrew_std; // Current state of STD
+   int    sp_idx;    // Sparging index [0..sps->sp_batches-1]
+   int    timer1;    // Timer for state 'Sparging Rest'
+   int    timer2;    // Timer for state 'Delay_1SEC'
+   int    timer3;    // Timer for transition to state 'Empty Heat Exchanger'
+   int    timer4;    // Timer for state 'Empty Heat Exchanger'
+   int    timer5;    // Timer for boiling time
+   double vmash;     // MLT volume after mashing is completed
+} std_struct;
+
 typedef struct _timer_vars
 {
    int  htimer;    // Timer to count time that heater is on
@@ -91,22 +108,23 @@ typedef struct _ma
    double sum;       // The running sum of the MA filter
 } ma;
 
+//------------------------------------------------------
 // Defines for State Transition Diagram.
 // The STD is called every second => 1 tick == 1 second.
 //------------------------------------------------------
-#define INITIALISATION        (0)
-#define WAIT_FOR_HLT_TEMP     (1)
-#define FILL_MLT              (2)
-#define MASH_IN_PROGRESS      (3)
-#define BYPASS_HEAT_EXCHANGER (4)
-#define SPARGING_REST         (5)
-#define PUMP_FROM_MLT_TO_BOIL (6)
-#define PUMP_FROM_HLT_TO_MLT  (7)
-#define DELAY_1SEC            (8)
-#define EMPTY_MLT             (9)
-#define BOILING               (10)
-#define EMPTY_HEAT_EXCHANGER  (11)
-#define CHILL                 (12)
+#define S00_INITIALISATION         (0)
+#define S01_WAIT_FOR_HLT_TEMP      (1)
+#define S02_FILL_MLT               (2)
+#define S03_MASH_IN_PROGRESS       (3)
+#define S04_BYPASS_HEAT_EXCHANGER  (4)
+#define S05_SPARGING_REST          (5)
+#define S06_PUMP_FROM_MLT_TO_BOIL  (6)
+#define S07_PUMP_FROM_HLT_TO_MLT   (7)
+#define S08_DELAY_1SEC             (8)
+#define S09_EMPTY_MLT              (9)
+#define S10_BOILING               (10)
+#define S11_EMPTY_HEAT_EXCHANGER  (11)
+#define S12_CHILL                 (12)
 
 #define TMLT_HLIMIT           (0.5)
 #define TMLT_LLIMIT           (0.0)
@@ -170,7 +188,7 @@ void update_tset(double *tset, double temp, double offset,
                  maisch_schedule ms[], int *ms_idx, int ms_total);
 int  update_std(double vmlt, double tmlt, unsigned int *kleppen,
                  maisch_schedule ms[], int ms_idx, int ms_total,
-                 sparge_struct *sps, int pid_on);
+                 sparge_struct *sps, std_struct *std, int pid_on);
 void init_ma(ma *p, int N);
 double moving_average(ma *p, double x);
 

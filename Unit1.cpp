@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2002/12/30 13:33:45  emile
+// - Headers with CVS tags added to every source file
+// - Restore Settings function is added
+// - "ebrew" registry key now in a define REGKEY
+//
 // ==========================================================================
 
 //---------------------------------------------------------------------------
@@ -209,7 +214,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
                j = decode_log_file(fd,p1); // read log file with data jusst before chrash
                fclose(fd);
                prps = new TRestore_Program_Settings(this);
-               prps->ComboBox1->Items->Add("Reset to default values (ms_idx = 0, std_state = 0)");
+               prps->ComboBox1->Items->Add("Reset to default values (ms_idx = 0, ebrew_std = 0)");
                for (k = 0; k < j; k++)
                {
                   if ((p1[k].lms_idx > 0) || (p1[k].std_val > 0))
@@ -283,6 +288,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    // Init. the position of all valves & the Pump to OFF (closed).
    // No Manual Override of valves yet.
    //--------------------------------------------------------------------------
+   Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
    std_out = 0x0000;
 
    // Init logfile
@@ -898,9 +904,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //--------------------------------------------------------------------------
    else if (tmr.pid_tmr % 20 == 5)
    {
-      std_state = update_std(Vmlt, padc.ad2, &std_out, ms, ms_idx,
-                             ms_tot, &sp, PID_RB->ItemIndex);
-      switch (std_state)
+      update_std(Vmlt,padc.ad2,&std_out,ms,ms_idx,ms_tot,&sp,&std,PID_RB->ItemIndex);
+      switch (std.ebrew_std)
       {
          case  0: Std_State->Caption = "00. Initialisation"       ; break;
          case  1: Std_State->Caption = "01. Wait for HLT Temp."   ; break;
@@ -1085,17 +1090,15 @@ void __fastcall TMainForm::MenuViewData_graphsClick(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 
-void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
+void __fastcall TMainForm::Init_Sparge_Settings(void)
 /*------------------------------------------------------------------
-  Purpose  : This is the function which is called whenever the user
-             presses 'Options | Sparge Settings'.
+  Purpose  : This function Initialises the sparge struct with the
+             values from the Registry. Call this method during power-up
+             and after a change in Sparge Settings parameters.
   Returns  : None
   ------------------------------------------------------------------*/
 {
-  TSpargeSettings *ptmp;
-  ptmp = new TSpargeSettings(this);
   TRegistry *Reg = new TRegistry();
-  int i; // temp. variable
 
   // Get Sparge Settings from the Registry
   try
@@ -1103,42 +1106,64 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
      if (Reg->KeyExists(REGKEY))
      {
         Reg->OpenKey(REGKEY,FALSE);
-        i = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
-        ptmp->EBatches->Text = AnsiString(i);
-        i = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
-        ptmp->EBTime->Text = AnsiString(i);
-        i = Reg->ReadInteger("MASH_VOL");   // Total Mash Volume (L)
-        ptmp->EMVol->Text = AnsiString(i);
-        i = Reg->ReadInteger("SP_VOL");     // Total Sparge Volume (L)
-        ptmp->ESVol->Text = AnsiString(i);
-        i = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
-        ptmp->EBoilTime->Text = AnsiString(i);
+        sp.sp_batches   = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
+        sp.sp_time      = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
+        sp.mash_vol     = Reg->ReadInteger("MASH_VOL");   // Total Mash Volume (L)
+        sp.sp_vol       = Reg->ReadInteger("SP_VOL");     // Total Sparge Volume (L)
+        sp.boil_time    = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
+        sp.sp_vol_batch = ((double)(sp.sp_vol)) / sp.sp_batches;
+        //---------------------------------------------------------------
+        // Now calculate the internal values for the timers. Since the
+        // State Transition Diagram is called every second, every 'tick'
+        // is therefore a second.
+        // SP_TIME [min.], BOIL_TIME [min.]
+        //---------------------------------------------------------------
+        sp.sp_time_ticks   = sp.sp_time * 60;
+        sp.boil_time_ticks = sp.boil_time * 60;
+        Reg->CloseKey(); // Close the Registry
+        delete Reg;
+     } // if
+  } // try
+  catch (ERegistryException &E)
+  {
+     ShowMessage(E.Message);
+     delete Reg;
+     return;
+  } // catch
+} // TMainForm::Init_Sparge_Settings()
+
+void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
+/*------------------------------------------------------------------
+  Purpose  : This is the function which is called whenever the user
+             presses 'Options | Sparge Settings'.
+             Is assumes the Init_Sparge_Settings() has been called
+             during Initialisation and that the struct sp is f
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+  TSpargeSettings *ptmp;
+  ptmp = new TSpargeSettings(this);
+  TRegistry *Reg = new TRegistry();
+
+  // Get Sparge Settings from the Registry
+  try
+  {
+     if (Reg->KeyExists(REGKEY))
+     {
+        Reg->OpenKey(REGKEY,FALSE);
+        ptmp->EBatches->Text  = AnsiString(sp.sp_batches); // Number of Sparge Batches
+        ptmp->EBTime->Text    = AnsiString(sp.sp_time);    // Time between two Sparge Batches
+        ptmp->EMVol->Text     = AnsiString(sp.mash_vol);   // Total Mash Volume (L)
+        ptmp->ESVol->Text     = AnsiString(sp.sp_vol);     // Total Sparge Volume (L)
+        ptmp->EBoilTime->Text = AnsiString(sp.boil_time);  // Total Boil Time (min.)
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
-           i = ptmp->EBatches->Text.ToInt(); // Number of Sparge Batches
-           sp.sp_batches = i;
-           Reg->WriteInteger("SP_BATCHES",i);
-           i = ptmp->EBTime->Text.ToInt();   // Time (min.) between two Sparge Batches
-           sp.sp_time = i;
-           Reg->WriteInteger("SP_TIME",i);
-           i = ptmp->EMVol->Text.ToInt();    // Total Mash Volume (L)
-           sp.mash_vol = i;
-           Reg->WriteInteger("MASH_VOL",i);
-           i = ptmp->ESVol->Text.ToInt();    // Total Sparge Volume (L)
-           sp.sp_vol = i;
-           Reg->WriteInteger("SP_VOL",i);
-           i = ptmp->EBoilTime->Text.ToInt();  // Time (min.) between two Sparge Batches
-           sp.boil_time = i;
-           Reg->WriteInteger("BOIL_TIME",i);
-           sp.sp_vol_batch = ((double)(sp.sp_vol)) / sp.sp_batches;
-           //---------------------------------------------------------------
-           // Now calculate the internal values for the timers. Since the
-           // State Transition Diagram is called every second, every 'tick'
-           // is therefore a second.
-           // SP_TIME [min.], BOIL_TIME [min.]
-           //---------------------------------------------------------------
-           sp.sp_time_ticks   = sp.sp_time * 60;
-           sp.boil_time_ticks = sp.boil_time * 60;
+           Reg->WriteInteger("SP_BATCHES",ptmp->EBatches->Text.ToInt());  // Number of Sparge Batches
+           Reg->WriteInteger("SP_TIME",   ptmp->EBTime->Text.ToInt());    // Time (min.) between two Sparge Batches
+           Reg->WriteInteger("MASH_VOL",  ptmp->EMVol->Text.ToInt());     // Total Mash Volume (L)
+           Reg->WriteInteger("SP_VOL",    ptmp->ESVol->Text.ToInt());     // Total Sparge Volume (L)
+           Reg->WriteInteger("BOIL_TIME", ptmp->EBoilTime->Text.ToInt()); // Total Boil Time (min.)
+           Init_Sparge_Settings(); // Init. struct with sparge settings with new values
         } // if
         delete ptmp;
         ptmp = 0; // NULL the pointer
