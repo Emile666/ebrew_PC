@@ -6,6 +6,16 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.24  2004/05/05 15:44:15  emile
+// - Main Screen picture update
+// - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
+// - STD update: calculation of volumes should be correct now
+// - Parameter added for early start of mash timer. Registry var. TOffset2
+// - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
+// - Some screens updated with hints (also of labels)
+// - Bug-fix: unnecessary delay after change in gamma. Is corrected now
+// - Help via menu now also works
+//
 // Revision 1.23  2004/04/19 21:55:49  emile
 // - Added calibration offsets and MA-filters for Thlt and Tmlt:
 //   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
@@ -332,7 +342,6 @@ private:	// User declarations
         void __fastcall Reset_I2C_Bus(int i2c_bus_id, int err);
         void __fastcall Generate_IO_Signals(void);
         timer_vars      tmr;        // struct with timer variables
-        swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         ma              str_vmlt;   // Struct for MA5 filter for MLT volume
         ma              str_thlt;   // Struct for MA5 filter for HLT temperature
         ma              str_tmlt;   // Struct for MA5 filter for MLT temperature
@@ -354,6 +363,7 @@ private:	// User declarations
         double          thlt_offset;      // calibration offset to add to Thlt measurement
         double          tmlt_offset;      // calibration offset to add to Tmlt measurement
 public:		// User declarations
+        swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output
         double          tset_hlt;   // HLT reference temperature
@@ -362,8 +372,6 @@ public:		// User declarations
         double          tmlt;       // MLT actual temperature
         double          ttriac;     // Triac electronics actual temperature
         pid_params      pid_pars;   // struct containing PID parameters
-        int             ms_tot;     // tot. nr. of valid temp & time values
-        int             ms_idx;     // index in ms[] array
         int             hw_status;  // I2C HW status, see i2c.h for bit settings
         maisch_schedule ms[MAX_MS]; // struct containing maisch schedule
         sparge_struct   sp;         // Values for Sparging

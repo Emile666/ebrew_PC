@@ -5,6 +5,16 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2004/05/05 15:44:15  emile
+// - Main Screen picture update
+// - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
+// - STD update: calculation of volumes should be correct now
+// - Parameter added for early start of mash timer. Registry var. TOffset2
+// - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
+// - Some screens updated with hints (also of labels)
+// - Bug-fix: unnecessary delay after change in gamma. Is corrected now
+// - Help via menu now also works
+//
 // Revision 1.5  2004/03/10 10:10:38  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -63,10 +73,6 @@ __published:	// IDE-managed Components
         TEdit *ESVol;
         TEdit *EBoilTime;
         TLabel *Label5;
-        TLabel *Label6;
-        TEdit *Ehlimit;
-        TLabel *Label7;
-        TEdit *Ellimit;
         TLabel *Label8;
         TEdit *Eto_xsec;
         TLabel *Label9;
@@ -81,12 +87,20 @@ __published:	// IDE-managed Components
         TLabel *Label15;
         TLabel *Label16;
         TLabel *Label17;
-        TLabel *Label18;
-        TLabel *Label19;
         TLabel *Label20;
         TLabel *Label21;
         TLabel *Label22;
         TLabel *Label23;
+        TLabel *Label6;
+        TLabel *Label7;
+        TEdit *Eph_time;
+        TLabel *Label18;
+        TLabel *Label19;
+        TLabel *Label24;
+        TLabel *Label25;
+        TLabel *Label26;
+        TEdit *Offs_Edit;
+        TEdit *Offs2_Edit;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

@@ -6,6 +6,16 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.32  2004/05/05 15:44:15  emile
+// - Main Screen picture update
+// - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
+// - STD update: calculation of volumes should be correct now
+// - Parameter added for early start of mash timer. Registry var. TOffset2
+// - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
+// - Some screens updated with hints (also of labels)
+// - Bug-fix: unnecessary delay after change in gamma. Is corrected now
+// - Help via menu now also works
+//
 // Revision 1.31  2004/04/26 13:30:22  emile
 // Bug-fix: init_pid3() did not calculate correctly when Ti = 0. Corrected.
 //
@@ -302,18 +312,18 @@ void __fastcall TMainForm::Restore_Settings(void)
          //---------------------------
          // Restore Mashing parameters
          //---------------------------
-         ms_idx           = p1[k].lms_idx;
-         for (j = 0; j < ms_idx; j++)
+         std.ms_idx       = p1[k].lms_idx;
+         for (j = 0; j < std.ms_idx; j++)
          {
             ms[j].timer = ms[j].time; // set previous timers to time-out
          } // for j
          if (p1[k].std_val >= S05_SPARGING_REST)
          {
-            ms[ms_idx].timer = ms[ms_idx].time; // set to time-out if mashing is finished
+            ms[std.ms_idx].timer = ms[std.ms_idx].time; // set to time-out if mashing is finished
          }
          else
          {
-            ms[ms_idx].timer = p1[k].tmr_ms_idx; // do a best guess for the timer value
+            ms[std.ms_idx].timer = p1[k].tmr_ms_idx; // do a best guess for the timer value
          } // else
          //----------------------------
          // Restore Sparging parameters
@@ -483,10 +493,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
          pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
          pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
-         pid_pars.temp_offset  = Reg->ReadFloat("TOffset");
-         pid_pars.temp_offset2 = Reg->ReadFloat("TOffset2");
-         pid_pars.mash_control = Reg->ReadInteger("Mash_Control"); // 0 = Thlt, 1 = Tmlt
-         pid_pars.pid_model    = Reg->ReadInteger("PID_Model"); // 0 = Type A, 1 = Type C
+         pid_pars.pid_model = Reg->ReadInteger("PID_Model"); // 0 = Type A, 1 = Type C
 
          led1 = Reg->ReadInteger("LED1"); // Read led1 from registry
          led2 = Reg->ReadInteger("LED2"); // Read led2 from registry
@@ -545,8 +552,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
 
    //-------------------------------------
    // Read Mash Scheme for maisch.sch file
+   // Mash scheme is used in the STD
+   // Sample time of STD is 1 second
    //-------------------------------------
-   if (!read_input_file(MASH_FILE,ms,&ms_tot,pid_pars.ts))
+   if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,INIT_TIMERS))
    {
        MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
    } /* if */
@@ -571,9 +580,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
             //--------------------------------------------------------------
             Restore_Settings();
          } // if i
-         Reg->WriteInteger("ms_idx",ms_idx); // update registry setting
-         tset_hlt = ms[ms_idx].temp; // Set tset value for HLT
-         Reg->CloseKey();        // Close the Registry
+         Reg->WriteInteger("ms_idx",std.ms_idx); // update registry setting
+         //tset_hlt = ms[std.ms_idx].temp;         // Set tset value for HLT
+         Reg->CloseKey();                        // Close the Registry
       } // if
    } // try
    catch (ERegistryException &E)
@@ -612,9 +621,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
       strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
       s[4] = '\0';
       fprintf(fd,"ebrew CVS Revision %s\n",s);
-      fprintf(fd,"hw_status = 0x%02X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,ms_tot,fscl_prescaler);
-      fprintf(fd,"Temp Offset = %4.1f, Mash progress controlled by ",pid_pars.temp_offset);
-      (pid_pars.mash_control == 0) ? fprintf(fd,"Thlt\n") : fprintf(fd,"Tmlt\n");
+      fprintf(fd,"hw_status = 0x%02X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,
+                                                                          std.ms_tot,
+                                                                          fscl_prescaler);
+      fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f ",sp.temp_offset,sp.temp_offset2);
       fprintf(fd,"Vref1 = %3d, Vref2 = %3d, Vref3 = %3d, Vref4 = %3d, DAC-value = %3d\n\n",
                  padc.vref1,padc.vref2,padc.vref3,padc.vref4,padc.dac);
       fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt PID ms_ ebrew Gamma\n");
@@ -665,7 +675,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("Td",TD_INIT);       // Td constant
           Reg->WriteFloat("TOffset",1.0);      // HLT - MLT heat loss
           Reg->WriteFloat("TOffset2",-0.5);    // offset for early start of mash timers
-          Reg->WriteInteger("Mash_Control",1); // 0 = Thlt, 1 = Tmlt
           Reg->WriteInteger("PID_Model",0);    // Type A PID Controller
 
           //-------------------------------------------------------
@@ -709,8 +718,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
           Reg->WriteInteger("BOIL_TIME",90);    // Total Boil Time (min.)
           // Init values for STD
-          Reg->WriteFloat("TMLT_HLIMIT",0.5); // TMLT_HLIMIT [E-1 C]
-          Reg->WriteFloat("TMLT_LLIMIT",0.0); // TMLT_LLIMIT [E-1 C]
+          Reg->WriteInteger("PREHEAT_TIME",0);// PREHEAT_TIME [sec]
           Reg->WriteFloat("VMLT_EMPTY", 3.0); // Vmlt_EMPTY [L]
           Reg->WriteInteger("TO_XSEC",1);     // TIMEOUT_xSEC [sec]
           Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
@@ -737,6 +745,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
        delete Reg;
        return;
     } // catch
+    Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
     //----------------------------------------
     // Init. volumes. Should be done only once
     //----------------------------------------
@@ -748,7 +757,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
     {  // Vboil is not measured but calculated from Vmlt
        volumes.Vboil  = VBOIL_START;
     }
-    Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
     power_up_flag = false; // power-up is finished
 } // TMainForm::TMainForm()
 //---------------------------------------------------------------------------
@@ -777,9 +785,6 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->Kc_Edit->Text        = AnsiString(Reg->ReadFloat("Kc"));
          ptmp->Ti_Edit->Text        = AnsiString(Reg->ReadFloat("Ti"));
          ptmp->Td_Edit->Text        = AnsiString(Reg->ReadFloat("Td"));
-         ptmp->Offs_Edit->Text      = AnsiString(Reg->ReadFloat("TOffset"));
-         ptmp->Offs2_Edit->Text     = AnsiString(Reg->ReadFloat("TOffset2"));
-         ptmp-> RG1->ItemIndex      = Reg->ReadInteger("Mash_Control");
          ptmp->PID_Model->ItemIndex = Reg->ReadInteger("PID_Model");
          ptmp->RG2->ItemIndex       = time_switch; // Value of time-switch [off, on]
          if (time_switch)
@@ -799,12 +804,6 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteFloat("Ti",pid_pars.ti);
             pid_pars.td = ptmp->Td_Edit->Text.ToDouble();
             Reg->WriteFloat("Td",pid_pars.td);
-            pid_pars.temp_offset = ptmp->Offs_Edit->Text.ToDouble();
-            Reg->WriteFloat("TOffset",pid_pars.temp_offset);
-            pid_pars.temp_offset2 = ptmp->Offs2_Edit->Text.ToDouble();
-            Reg->WriteFloat("TOffset2",pid_pars.temp_offset2);
-            pid_pars.mash_control = ptmp->RG1->ItemIndex;
-            Reg->WriteInteger("Mash_Control",pid_pars.mash_control);
             pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
             Reg->WriteInteger("PID_Model",pid_pars.pid_model);
             if (pid_pars.pid_model == 0)
@@ -984,47 +983,7 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
 
    if (ptmp->ShowModal() == 0x1) // mrOK
    {
-      // Get PID Output (Gamma)
-      swfx.gamma_sw = ptmp->CB_Gamma->Checked;
-      if (swfx.gamma_sw)
-      {
-         swfx.gamma_fx = ptmp->Gamma_MEdit->Text.ToDouble();
-      } // if
-      // Get Ref. Temp (Tset_hlt)
-      swfx.tset_hlt_sw = ptmp->CB_Tset->Checked;
-      if (swfx.tset_hlt_sw)
-      {
-         swfx.tset_hlt_fx = ptmp->Tset_MEdit->Text.ToDouble();
-      } // if
-      // Get Thlt
-      swfx.thlt_sw = ptmp->CB_Tad1->Checked;
-      if (swfx.thlt_sw)
-      {
-        swfx.thlt_fx = ptmp->Tad1_MEdit->Text.ToDouble();
-      } // if
-      // Get Tmlt
-      swfx.tmlt_sw = ptmp->CB_Tad2->Checked;
-      if (swfx.tmlt_sw)
-      {
-         swfx.tmlt_fx = ptmp->Tad2_MEdit->Text.ToDouble();
-      } // if
-      // Get STD state
-      swfx.std_sw = ptmp->CB_std->Checked;
-      if (swfx.std_sw)
-      {
-         // Value must be between 0 and 12
-         swfx.std_fx = ptmp->STD_MEdit->Text.ToInt();
-         if (swfx.std_fx < 0 || swfx.std_fx > S12_CHILL)
-         {
-            swfx.std_fx = 0; // reset to a safe value
-         }
-      } // if
-      // Get Vmlt value
-      swfx.vmlt_sw = ptmp->CB_vmlt->Checked;
-      if (swfx.vmlt_sw)
-      {
-         swfx.vmlt_fx = ptmp->Vmlt_MEdit->Text.ToDouble();
-      }
+      ptmp->Apply_ButtonClick(this);
    } // if
    delete ptmp;
    ptmp = 0; // NULL the pointer
@@ -1523,21 +1482,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       tmr.time_low  = pid_pars.ts_ticks - tmr.time_high;
 
       // check if tset_hlt should be increased
-      if (pid_pars.mash_control == 0) // 0 = Thlt, 1 = Tmlt
-      {
-         tset_mlt = update_tset(&tset_hlt,thlt,pid_pars.temp_offset,
-                                pid_pars.temp_offset2,ms,&ms_idx,ms_tot);
-      }
-      else
-      {
-         tset_mlt = update_tset(&tset_hlt,tmlt,pid_pars.temp_offset,
-                                pid_pars.temp_offset2,ms,&ms_idx,ms_tot);
-      } // else
-
-      if (swfx.tset_hlt_sw)
-      {
-         tset_hlt = swfx.tset_hlt_fx; // fix tset_hlt
-      } // if
+      //if (pid_pars.mash_control == 0) // 0 = Thlt, 1 = Tmlt
+      //{
+      //   tset_mlt = update_tset(&tset_hlt,thlt,pid_pars.temp_offset,
+      //                          pid_pars.temp_offset2,ms,&ms_idx,ms_tot);
+      //}
+      //else
+      //{
+      //   tset_mlt = update_tset(&tset_hlt,tmlt,pid_pars.temp_offset,
+      //                          pid_pars.temp_offset2,ms,&ms_idx,ms_tot);
+      //} // else
    } // else if
 
    //-----------------------------------------------------------------------
@@ -1589,8 +1543,13 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          std_tmp = -1;
       }
-      update_std(&volumes, tmlt, thlt, tset_hlt, &std_out, ms, ms_idx,
-                 ms_tot, &sp, &std, PID_RB->ItemIndex, std_tmp);
+      update_std(&volumes, tmlt, thlt, &tset_mlt, &tset_hlt, &std_out,
+                 ms, &sp, &std, PID_RB->ItemIndex, std_tmp);
+
+      if (swfx.tset_hlt_sw)
+      {
+         tset_hlt = swfx.tset_hlt_fx; // fix tset_hlt
+      } // if
       //-----------------------------------------------------------------
       // Now output all valve bits to DIG_IO_MSB_BASE (if it is present).
       // NOTE: The pump bit is output to DIG_IO_LSB_IO!
@@ -1638,9 +1597,10 @@ void __fastcall TMainForm::MenuEditMashSchemeClick(TObject *Sender)
    if (ptmp->ShowModal() == 0x1) // mrOK
    {
       ptmp->Memo1->Lines->SaveToFile(MASH_FILE); // Write to File
-      // Read Mash Scheme again
-      //-----------------------
-      if (!read_input_file(MASH_FILE,ms,&ms_tot,pid_pars.ts))
+      //-----------------------------------------------------
+      // Read Mash Scheme again, but do not init. mash timers
+      //-----------------------------------------------------
+      if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,NO_INIT_TIMERS))
       {
           MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
       } /* if */
@@ -1688,6 +1648,10 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
      if (Reg->KeyExists(REGKEY))
      {
         Reg->OpenKey(REGKEY,FALSE);
+        // Mash Settings
+        sp.temp_offset  = Reg->ReadFloat("TOffset");
+        sp.temp_offset2 = Reg->ReadFloat("TOffset2");
+        sp.ph_timer     = Reg->ReadInteger("PREHEAT_TIME");
         // Sparge Settings
         sp.sp_batches   = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
         sp.sp_time      = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
@@ -1704,12 +1668,10 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.sp_time_ticks   = sp.sp_time * 60;
         sp.boil_time_ticks = sp.boil_time * 60;
         // STD Settings
-        sp.tmlt_hlimit = Reg->ReadFloat("TMLT_HLIMIT");
-        sp.tmlt_llimit = Reg->ReadFloat("TMLT_LLIMIT");
-        sp.vmlt_empty  = Reg->ReadFloat("VMLT_EMPTY");
-        sp.to_xsec     = Reg->ReadInteger("TO_XSEC");
-        sp.to3         = Reg->ReadInteger("TO3");
-        sp.to4         = Reg->ReadInteger("TO4");
+        sp.vmlt_empty   = Reg->ReadFloat("VMLT_EMPTY");
+        sp.to_xsec      = Reg->ReadInteger("TO_XSEC");
+        sp.to3          = Reg->ReadInteger("TO3");
+        sp.to4          = Reg->ReadInteger("TO4");
         Reg->CloseKey(); // Close the Registry
         delete Reg;
      } // if
@@ -1741,6 +1703,12 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
      if (Reg->KeyExists(REGKEY))
      {
         Reg->OpenKey(REGKEY,FALSE);
+        /*---------------*/
+        /* Mash Settings */
+        /*---------------*/
+        ptmp->Offs_Edit->Text  = AnsiString(sp.temp_offset);
+        ptmp->Offs2_Edit->Text = AnsiString(sp.temp_offset2);
+        ptmp->Eph_time->Text   = AnsiString(sp.ph_timer);  // PREHEAT_TIME [sec]
         /*-----------------*/
         /* Sparge Settings */
         /*-----------------*/
@@ -1752,8 +1720,6 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         /*--------------*/
         /* STD Settings */
         /*--------------*/
-        ptmp->Ehlimit->Text     = AnsiString(sp.tmlt_hlimit); // TMLT_HLIMIT [C]
-        ptmp->Ellimit->Text     = AnsiString(sp.tmlt_llimit); // TMLT_LLIMIT [C]
         ptmp->Evmlt_empty->Text = AnsiString(sp.vmlt_empty);  // Vmlt_EMPTY [L]
         ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);     // TIMEOUT_xSEC [sec]
         ptmp->Eto3->Text        = AnsiString(sp.to3);         // TIMEOUT3 [sec]
@@ -1761,18 +1727,19 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
+           Reg->WriteFloat("TOffset"       ,ptmp->Offs_Edit->Text.ToDouble());
+           Reg->WriteFloat("TOffset2"      ,ptmp->Offs2_Edit->Text.ToDouble());
+           Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());    // PREHEAT_TIME [sec]
            Reg->WriteInteger("SP_BATCHES",ptmp->EBatches->Text.ToInt());  // Number of Sparge Batches
            Reg->WriteInteger("SP_TIME",   ptmp->EBTime->Text.ToInt());    // Time (min.) between two Sparge Batches
            Reg->WriteInteger("MASH_VOL",  ptmp->EMVol->Text.ToInt());     // Total Mash Volume (L)
            Reg->WriteInteger("SP_VOL",    ptmp->ESVol->Text.ToInt());     // Total Sparge Volume (L)
            Reg->WriteInteger("BOIL_TIME", ptmp->EBoilTime->Text.ToInt()); // Total Boil Time (min.)
 
-           Reg->WriteFloat("TMLT_HLIMIT", ptmp->Ehlimit->Text.ToDouble());  // TMLT_HLIMIT [C]
-           Reg->WriteFloat("TMLT_LLIMIT", ptmp->Ellimit->Text.ToDouble());  // TMLT_LLIMIT [C]
-           Reg->WriteFloat("VMLT_EMPTY",  ptmp->Evmlt_empty->Text.ToDouble()); // Vmlt_EMPTY [L]
-           Reg->WriteInteger("TO_XSEC",   ptmp->Eto_xsec->Text.ToInt());    // TIMEOUT_xSEC [sec]
-           Reg->WriteInteger("TO3",       ptmp->Eto3->Text.ToInt());        // TIMEOUT3 [sec]
-           Reg->WriteInteger("TO4",       ptmp->Eto4->Text.ToInt());        // TIMEOUT4 [sec]
+           Reg->WriteFloat("VMLT_EMPTY",    ptmp->Evmlt_empty->Text.ToDouble()); // Vmlt_EMPTY [L]
+           Reg->WriteInteger("TO_XSEC",     ptmp->Eto_xsec->Text.ToInt());    // TIMEOUT_xSEC [sec]
+           Reg->WriteInteger("TO3",         ptmp->Eto3->Text.ToInt());        // TIMEOUT3 [sec]
+           Reg->WriteInteger("TO4",         ptmp->Eto4->Text.ToInt());        // TIMEOUT4 [sec]
            Init_Sparge_Settings(); // Init. struct with sparge settings with new values
         } // if
         delete ptmp;
@@ -1941,10 +1908,10 @@ void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
       if (Reg->KeyExists(REGKEY))
       {
          Reg->OpenKey(REGKEY,FALSE);
-         Restore_Settings();                 // Read Log File & Restore Settings
-         Reg->WriteInteger("ms_idx",ms_idx); // Update registry setting
-         tset_hlt = ms[ms_idx].temp;         // Set tset value for HLT
-         Reg->CloseKey();                    // Close the Registry
+         Restore_Settings();                     // Read Log File & Restore Settings
+         Reg->WriteInteger("ms_idx",std.ms_idx); // Update registry setting
+         tset_hlt = ms[std.ms_idx].temp;         // Set tset value for HLT
+         Reg->CloseKey();                        // Close the Registry
       } // if
    } // try
    catch (ERegistryException &E)
@@ -2003,7 +1970,7 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
       case  1: Std_State->Caption = "01. Wait for HLT Temp."   ; break;
       case  2: Std_State->Caption = "02. Fill MLT"             ; break;
       case  3: Std_State->Caption = "03. Mash in Progress"     ; break;
-      case  4: Std_State->Caption = "04. Bypass Heat Exchanger"; break;
+      case  4: Std_State->Caption = "04. Mash Timer Running"   ; break;
       case  5: Std_State->Caption = "05. Sparging Rest"        ; break;
       case  6: Std_State->Caption = "06. Pump from MLT to Boil"; break;
       case  7: Std_State->Caption = "07. Pump from HLT to MLT" ; break;
@@ -2012,6 +1979,7 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
       case 10: Std_State->Caption = "10. Boiling"              ; break;
       case 11: Std_State->Caption = "11. Empty Heat Exchanger" ; break;
       case 12: Std_State->Caption = "12. Chill"                ; break;
+      case 13: Std_State->Caption = "13. Mash PreHeat HLT"     ; break;
       default: break;
    } // switch
    //----------------------------------------------------------------------
@@ -2098,15 +2066,13 @@ void __fastcall TMainForm::FormCreate(TObject *Sender)
 
 void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
 {
-   int button;
-
    //---------------------------------------------------------------------------
    // Stop all I2C bus communication, then restart and print all devices found.
    // Next: continue with ebrew program by calling Main_Initialisation().
    //---------------------------------------------------------------------------
    if (i2c_stop() != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
-      button = Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
+      Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
       exit_ebrew(); // Exit ebrew program
    }
    else
@@ -2114,7 +2080,7 @@ void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
       Start_I2C_Communication(-1); // print all I2C devices found
       if (i2c_stop() != I2C_NOERR)
       {  // i2c bus locked, i2c_stop() did not work
-         button = Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
+         Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
          exit_ebrew(); // Exit ebrew program
       }
       else
@@ -2132,11 +2098,9 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
   Returns  : None
   ------------------------------------------------------------------*/
 {
-   char *endp; // temp. pointer for strtol() function
-   char s[80]; // temp. array
-
    TRegistry *Reg = new TRegistry();
    TMeasurements *ptmp;
+   int vhlt_start_old; // previous value of Vhlt_start;
 
    ptmp = new TMeasurements(this);
 
@@ -2160,6 +2124,7 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          // HLT Volume
          //------------------
          volumes.Vhlt_start             = Reg->ReadInteger("VHLT_START");
+         vhlt_start_old                 = volumes.Vhlt_start; // save value
          ptmp->Vhlt_init_Edit->Text     = AnsiString(volumes.Vhlt_start);
          volumes.Vhlt_simulated         = Reg->ReadBool("VHLT_SIMULATED");
          ptmp->Vhlt_simulated->Checked  = volumes.Vhlt_simulated;
@@ -2202,6 +2167,11 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
             volumes.Vhlt_simulated = ptmp->Vhlt_simulated->Checked;
             Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
+            if (volumes.Vhlt_simulated && (volumes.Vhlt_start != vhlt_start_old))
+            {
+               // Update Vhlt if start value has changed and Vhlt is simulated
+               volumes.Vhlt += volumes.Vhlt_start - vhlt_start_old;
+            } // if
             //------------------
             // MLT Volume
             //------------------
@@ -2249,4 +2219,9 @@ void __fastcall TMainForm::HowtoUseHelp1Click(TObject *Sender)
    Application->HelpCommand(HELP_HELPONHELP,0);
 }
 //---------------------------------------------------------------------------
+
+
+
+
+
 

@@ -42,8 +42,8 @@ USERDEFINES =
 SYSDEFINES = NO_STRICT;USEPACKAGES
 # ---------------------------------------------------------------------------
 CFLAG1 = -I$(BCB)\Lib\tiw;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl \
-  -Od -Hc -H=$(BCB)\lib\vcl40.csm -w -Ve -r- -a8 -4 -k -y -v -vi- -c -b- -w-par \
-  -w-inl -Vx -tW -tWM -D$(SYSDEFINES);$(USERDEFINES)
+  -Od -Hc -H=$(BCB)\lib\vcl40.csm -wstv -wstu -w-par -wnod -w-inl -Ve -r- -a8 -4 \
+  -k -y -v -vi- -c -b- -Vx -tW -tWM -D$(SYSDEFINES);$(USERDEFINES)
 PFLAGS = -U"\\pc-emile\c\program files\borland\cbuilder4\Lib";$(BCB)\Projects\Lib;$(BCB)\Lib\tiw;"..\..\program files\borland\cbuilder4\Lib";i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\program files\borland\cbuilder4\Lib";"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\lib\obj;$(BCB)\lib;$(DEBUGLIBPATH) \
   -I$(BCB)\Lib\tiw;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl \
   -N2O -N0O -$YD -$W -$O- -v -JPHNE -M
@@ -66,7 +66,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=1
 Release=0
-Build=46
+Build=59
 Debug=0
 PreRelease=0
 Special=0
@@ -78,7 +78,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=de Boezem
 FileDescription=ebrew automates the HERMS home-brewery, web-site: www.vandelogt.nl
-FileVersion=1.1.0.46
+FileVersion=1.1.0.59
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=

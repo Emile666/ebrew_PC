@@ -5,6 +5,16 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2004/05/05 15:44:15  emile
+// - Main Screen picture update
+// - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
+// - STD update: calculation of volumes should be correct now
+// - Parameter added for early start of mash timer. Registry var. TOffset2
+// - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
+// - Some screens updated with hints (also of labels)
+// - Bug-fix: unnecessary delay after change in gamma. Is corrected now
+// - Help via menu now also works
+//
 // Revision 1.5  2004/03/10 10:10:39  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -85,32 +95,43 @@ void __fastcall TViewMashProgress::CloseButtonClick(TObject *Sender)
 
 void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
 {
-   int i;
-   char s[120];
-   double cnv = MainForm->pid_pars.ts / 60.0; // convert 5 sec. ticks into minutes
+   int    i;
+   char   s[120];
+   double x;
 
    if (ViewMashProgress)
    {
       ViewMashProgress->Memo1->Lines->Clear();
-      ViewMashProgress->Memo1->Lines->Add("Index\tTemp.\tTime\tTimer\tStatus");
+      ViewMashProgress->Memo1->Lines->Add("Mash  Temp. Time PH-Time Timer   Timer");
+      ViewMashProgress->Memo1->Lines->Add("Index [°C]  [sec] [sec]  [sec]   Status");
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
-      for (i = 0; i < MainForm->ms_tot; i++)
+      //------------------------------------------------------------------
+      // Sample time of ms[] update is 1 second.
+      // Time of ms[i].time was converted to seconds in read_input_file().
+      //------------------------------------------------------------------
+      for (i = 0; i < MainForm->std.ms_tot; i++)
       {
-         sprintf(s,"%3d\t%6.0f\t%6.0f\t%6.0f\t",i,
+         x = MainForm->ms[i].time - MainForm->sp.ph_timer;
+         if (x < 0.0)
+         {
+            x = 0.0;
+         } // if
+         sprintf(s,"%3d %5.0f %6.0f %6.0f %6.0f ",i,
                    MainForm->ms[i].temp,
-                   MainForm->ms[i].time * cnv,
-                   MainForm->ms[i].timer == NOT_STARTED ? 0.0 : MainForm->ms[i].timer * cnv);
+                   MainForm->ms[i].time,
+                   x,
+                   MainForm->ms[i].timer == NOT_STARTED ? 0.0 : MainForm->ms[i].timer);
          PRINT_TIMER_STATUS(MainForm->ms[i].timer, MainForm->ms[i].time);
       } // for
 
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
       sprintf(s,"ebrew_std = %d, ms_idx = %d, sp_idx = %d",MainForm->std.ebrew_std,
-                                                           MainForm->ms_idx,
+                                                           MainForm->std.ms_idx,
                                                            MainForm->std.sp_idx);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer1 (state 05-> 06) = %d/%d sec.",MainForm->std.timer1,MainForm->sp.sp_time_ticks);
+      sprintf(s,"Timer1 (state 05->06) = %d/%d sec.",MainForm->std.timer1,MainForm->sp.sp_time_ticks);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer2 (state 08-> 07) = %d/%d sec.",MainForm->std.timer2,MainForm->sp.to_xsec);
+      sprintf(s,"Timer2 (state 08->07) = %d/%d sec.",MainForm->std.timer2,MainForm->sp.to_xsec);
       ViewMashProgress->Memo1->Lines->Add(s);
       sprintf(s,"Timer3 (state 10->11) = %d/%d sec.",MainForm->std.timer3,MainForm->sp.to3);
       ViewMashProgress->Memo1->Lines->Add(s);

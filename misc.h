@@ -6,6 +6,16 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.10  2004/05/05 15:44:16  emile
+// - Main Screen picture update
+// - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
+// - STD update: calculation of volumes should be correct now
+// - Parameter added for early start of mash timer. Registry var. TOffset2
+// - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
+// - Some screens updated with hints (also of labels)
+// - Bug-fix: unnecessary delay after change in gamma. Is corrected now
+// - Help via menu now also works
+//
 // Revision 1.9  2004/01/31 16:01:05  emile
 // - Init. HW High/Low limit temp. changed to 70/50 C respectively.
 // - Added code for calculation/simulation of Vhlt and Vboil
@@ -73,6 +83,8 @@
 extern "C" {
 #endif
 
+#include <stdio.h>
+
 #ifndef FALSE
 #define FALSE        (0)
 #endif
@@ -125,6 +137,10 @@ typedef struct _maisch_schedule
 
 typedef struct _sparge_struct
 {
+   /* Mash Settings */
+   double temp_offset;     // Offset to add to Tset to compensate for HLT-MLT losses
+   double temp_offset2;    // Offset to add to Tmlt for early start of mash timers
+   int    ph_timer;        // Mash pre-heat timer
    /* Sparge Settings */
    int    sp_batches;      // Total number of sparge batches
    int    sp_time;         // Time between two sparge batches in minutes
@@ -135,8 +151,6 @@ typedef struct _sparge_struct
    int    boil_time_ticks; // boil_time in TS ticks
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
    /* STD Settings */
-   double tmlt_hlimit;     // Temp. offset high limit
-   double tmlt_llimit;     // Temp. offset low limit
    double vmlt_empty;      // MLT is empty below this volume
    int    to_xsec;         // Timeout value for state 8
    int    to3;             // Timeout value for state 10 -> 11
@@ -146,6 +160,8 @@ typedef struct _sparge_struct
 typedef struct _std_struct
 {
    int    ebrew_std; // Current state of STD
+   int    ms_tot;    // tot. nr. of valid temp & time values
+   int    ms_idx;    // index in ms[] array
    int    sp_idx;    // Sparging index [0..sps->sp_batches-1]
    int    timer1;    // Timer for state 'Sparging Rest'
    int    timer2;    // Timer for state 'Delay_1SEC'
@@ -190,6 +206,12 @@ typedef struct _volume_struct
    int    Vboil_simulated; // true = Vboil is not measured, but calculated
 } volume_struct;
 
+//------------------------------
+// Defines for read_input_file()
+//------------------------------
+#define INIT_TIMERS    (1)
+#define NO_INIT_TIMERS (0)
+
 //------------------------------------------------------
 // Defines for State Transition Diagram.
 // The STD is called every second => 1 tick == 1 second.
@@ -198,7 +220,8 @@ typedef struct _volume_struct
 #define S01_WAIT_FOR_HLT_TEMP      (1)
 #define S02_FILL_MLT               (2)
 #define S03_MASH_IN_PROGRESS       (3)
-#define S04_BYPASS_HEAT_EXCHANGER  (4)
+#define S04_MASH_TIMER_RUNNING     (4)
+#define S13_MASH_PREHEAT_HLT      (13)
 #define S05_SPARGING_REST          (5)
 #define S06_PUMP_FROM_MLT_TO_BOIL  (6)
 #define S07_PUMP_FROM_HLT_TO_MLT   (7)
@@ -263,11 +286,11 @@ typedef struct _volume_struct
 #define P00ATXT "PUMP OFF (A)"
 
 int decode_log_file(FILE *fd, log_struct p[]);
-int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts);
-double update_tset(double *tset, double temp, double offset, double offset2,
-                   maisch_schedule ms[], int *ms_idx, int ms_total);
-int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
-               unsigned int *kleppen, maisch_schedule ms[], int ms_idx, int ms_total,
+int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int init);
+//double update_tset(double *tset, double temp, double offset, double offset2,
+//                   maisch_schedule ms[], int *ms_idx, int ms_total);
+int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
+               double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
                sparge_struct *sps, std_struct *std, int pid_on, int std_fx);
 void init_ma(ma *p, int N, double init_val);
 double moving_average(ma *p, double x);

@@ -5,6 +5,16 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.4  2004/05/05 15:44:16  emile
+  - Main Screen picture update
+  - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
+  - STD update: calculation of volumes should be correct now
+  - Parameter added for early start of mash timer. Registry var. TOffset2
+  - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
+  - Some screens updated with hints (also of labels)
+  - Bug-fix: unnecessary delay after change in gamma. Is corrected now
+  - Help via menu now also works
+
   Revision 1.3  2004/04/25 14:02:17  emile
   - Added a 'type C' PID controller, function pid_reg3(). Possible to select
     this from the PID settings dialog screen. Left the old one in for
@@ -42,9 +52,6 @@ typedef struct _pid_params
    double k2; // k2 value for PID controller
    double k3; // k3 value for PID controller
    int    ts_ticks; // ticks for timer
-   double temp_offset; // Offset to add to Tset to compensate for HLT-MLT losses
-   double temp_offset2; // Offset to add to Tmlt for early start of mash timers
-   int    mash_control; // 0 = Thlt, 1 = Tmlt
    int    pid_model;    // 0 = Type A (pid_reg2), 1 = Type C (pid_reg3)
 } pid_params; // struct pid_params
 

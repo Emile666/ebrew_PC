@@ -5,6 +5,16 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2004/05/05 15:44:15  emile
+// - Main Screen picture update
+// - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
+// - STD update: calculation of volumes should be correct now
+// - Parameter added for early start of mash timer. Registry var. TOffset2
+// - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
+// - Some screens updated with hints (also of labels)
+// - Bug-fix: unnecessary delay after change in gamma. Is corrected now
+// - Help via menu now also works
+//
 // Revision 1.5  2004/04/25 14:02:17  emile
 // - Added a 'type C' PID controller, function pid_reg3(). Possible to select
 //   this from the PID settings dialog screen. Left the old one in for
@@ -64,9 +74,6 @@ __published:
         TLabel *Label2;
         TEdit *Td_Edit;
         TLabel *Label3;
-        TRadioGroup *RG1;
-        TLabel *Label4;
-        TEdit *Offs_Edit;
         TMaskEdit *Date_Edit;
         TMaskEdit *Time_Edit;
         TRadioGroup *RG2;
@@ -77,10 +84,6 @@ __published:
         TLabel *Label6;
         TLabel *Label7;
         TLabel *Label8;
-        TLabel *Label9;
-        TLabel *Label10;
-        TEdit *Offs2_Edit;
-        TLabel *Label11;
         void __fastcall RG2Click(TObject *Sender);
         void __fastcall Button3Click(TObject *Sender);
 private:

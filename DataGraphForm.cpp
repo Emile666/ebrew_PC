@@ -4,6 +4,12 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2004/04/25 14:02:17  emile
+// - Added a 'type C' PID controller, function pid_reg3(). Possible to select
+//   this from the PID settings dialog screen. Left the old one in for
+//   compatibility. New registry variable PID_Model.
+// - Gamma added to log-file, so that the PID controller can be tuned.
+//
 // Revision 1.8  2004/03/10 10:10:37  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -107,7 +113,7 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
                                                       MainForm->ttriac,
                                                       MainForm->volumes.Vmlt,
                                                       MainForm->PID_RB->ItemIndex,
-                                                      MainForm->ms_idx,
+                                                      MainForm->std.ms_idx,
                                                       MainForm->std.ebrew_std,
                                                       MainForm->gamma);
       fclose(fd);
