@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.23  2004/02/15 14:48:53  emile
+// - HLT and MLT Thermometer objects on screen: max. value is 90 degrees.
+// - Error handling improved:
+//   - added error detection for WriteIOByte, read_adc and set_led routines.
+//   - Error message now also includes text of I2C error
+//
 // Revision 1.22  2004/02/01 14:47:13  emile
 // - Rebuild with new i2c_dll version. The SCL clock frequency is now reset
 //   to 10 kHz again (the 90 kHz caused frequent lock-ups of the I2C bus)
@@ -310,6 +316,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
       {
          Reg->OpenKey(REGKEY,FALSE);
          x1 = Reg->ReadInteger("I2C_Base");    // Read HW IO address as an int.
+         known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
          i = Reg->ReadInteger("TS");  // Read TS from registry
          pid_pars.ts = (double)i;
          i = Reg->ReadInteger("Kc");      // Read Kc from registry
@@ -344,6 +351,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
          volumes.Vhlt_simulated  = Reg->ReadBool("VHLT_SIMULATED");
          volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
+         cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG"); // display message
 
          Reg->CloseKey();      // Close the Registry
          init_adc(&padc);      // Calculate ADC conversion constants
@@ -413,7 +421,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
                         PR_HW_STAT(FM24C08_OK);    // FM24C08 EEPROM
                         sprintf(s,FM24C08_TXT,s1);
                         strcat(st,s);
-                        MessageBox(NULL,st,"Results of I2C Hardware Check",MB_OK);
+                        if (hw_status != known_hw_devices)
+                        {  // Print only if HW device configuration has changed
+                           MessageBox(NULL,st,"Results of I2C Hardware Check",MB_OK);
+                        }
                         break; /* NO_ERR */
       } // switch
    } // else
@@ -433,12 +444,14 @@ void __fastcall TMainForm::Main_Initialisation(void)
       {
          Reg->OpenKey(REGKEY,FALSE);
          i = Reg->ReadInteger("ms_idx");
-         if (i < MAX_MS)
+         if ((i < MAX_MS) && (power_up_flag == true))
          {
             //--------------------------------------------------------------
             // ebrew program was terminated abnormally. Open a dialog box,
             // present entries from the log file and ask to restore settings
             // of a particular log-file entry. If yes, restore settings.
+            // Only restore after power-down, no restore after successful
+            // of I2C bus (after I2C bus error occurred).
             // NB: Make sure that Init_Sparge_Settings is called prior to
             //     calling Restore_Settings()!
             //--------------------------------------------------------------
@@ -519,6 +532,8 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
    ShowDataGraphs   = new TShowDataGraphs(this);   // create modeless Dialog
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
+   power_up_flag    = true; // indicate that program power-up is active
+
    try
     {
        if (!Reg->KeyExists(REGKEY))
@@ -552,7 +567,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
 
           ttriac_hlim = 70; // Upper limit for triac temp.
           Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
-          ttriac_llim = 50; // Lower limit for triac temp.
+          ttriac_llim = 60; // Lower limit for triac temp.
           Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
           volumes.Vhlt_start = 90; // Starting volume of HLT
           Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
@@ -560,6 +575,11 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
           Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
           volumes.Vboil_simulated = true;
           Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
+          cb_i2c_err_msg          = true;
+          Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
+          known_hw_devices = DIG_IO_LSB_OK | LED1_OK | LED2_OK   | LED3_OK |
+                             LED4_OK       | ADDA_OK | LM92_1_OK | LM92_2_OK;
+          Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
 
           // Init values for mash scheme variables
           Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
@@ -605,6 +625,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
        volumes.Vboil  = VBOIL_START;
     }
     Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
+    power_up_flag = false; // power-up is finished
 } // TMainForm::TMainForm()
 //---------------------------------------------------------------------------
 
@@ -880,7 +901,7 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
 void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
 /*------------------------------------------------------------------
   Purpose  : This is the function which is called whenever the user
-             presses 'Options | I2C Settings'.
+             presses 'Options | Hardware Settings'.
   Returns  : None
   ------------------------------------------------------------------*/
 {
@@ -901,8 +922,10 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
       if (Reg->KeyExists(REGKEY))
       {
          Reg->OpenKey(REGKEY,FALSE);
-         x1 = Reg->ReadInteger("I2C_Base");    // Read HW IO address as an int.
+         x1 = Reg->ReadInteger("I2C_Base");  // Read HW IO address as an int.
          ptmp->HW_Base_Edit->Text = IntToHex(x1,3);
+         known_hw_devices            = Reg->ReadInteger("KNOWN_HW_DEVICES");
+         ptmp->Hw_devices_Edit->Text = IntToHex(known_hw_devices,3);
          led1 = Reg->ReadInteger("LED1");     // Read LED1 from registry
          ptmp->RG1->ItemIndex = led1;         // Set radio-button
          led2 = Reg->ReadInteger("LED2");     // Read LED2 from registry
@@ -937,11 +960,16 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          ptmp->Vhlt_simulated->Checked = volumes.Vhlt_simulated;
          volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
          ptmp->Vboil_simulated->Checked = volumes.Vboil_simulated;
+         cb_i2c_err_msg = Reg->ReadBool("CB_I2C_ERR_MSG");
+         ptmp->cb_i2c_err_msg->Checked = cb_i2c_err_msg;
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
-            strcpy(s,ptmp->HW_Base_Edit->Text.c_str()); // retrieve hex value
-            x2 = (int)(strtol(s,&endp,16)); // convert to integer
+            strcpy(s,ptmp->HW_Base_Edit->Text.c_str());    // retrieve hex value
+            x2 = (int)(strtol(s,&endp,16));                // convert to integer
+            strcpy(s,ptmp->Hw_devices_Edit->Text.c_str()); // retrieve hex value
+            known_hw_devices = (int)(strtol(s,&endp,16));  // convert to integer
+            Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
 
             //-------------------------------------------------------
             // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
@@ -988,6 +1016,9 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
             Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
             volumes.Vboil_simulated = ptmp->Vboil_simulated->Checked;
             Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
+            cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
+            Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
+
             if (x2 != x1)
             {
                Reg->WriteInteger("I2C_Base",x2); // save new I2C address
@@ -1060,12 +1091,16 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
    if (i2c_stop() != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
       MessageBox(NULL,"i2c_stop() not successful: Cycle power Off -> On, then press OK button.",tmp_str,MB_OK);
+      MenuFileExitClick(this); // Exit ebrew program
    }
    else
    {
-      MessageBox(NULL,"i2c_stop() successful: Press OK button to continue reset process",tmp_str,MB_OK);
+      if (cb_i2c_err_msg)
+      {
+         MessageBox(NULL,"i2c_stop() successful: Press OK button to continue reset process",tmp_str,MB_OK);
+      } // if
+      Main_Initialisation(); // continue with init. process
    } // else
-   Main_Initialisation(); // continue with init. process
 } // TMainForm::Reset_I2C_bus()
 
 void __fastcall TMainForm::T50msec2Timer(TObject *Sender)

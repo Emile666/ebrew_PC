@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.19  2004/02/15 14:48:54  emile
+// - HLT and MLT Thermometer objects on screen: max. value is 90 degrees.
+// - Error handling improved:
+//   - added error detection for WriteIOByte, read_adc and set_led routines.
+//   - Error message now also includes text of I2C error
+//
 // Revision 1.18  2004/02/01 14:47:14  emile
 // - Rebuild with new i2c_dll version. The SCL clock frequency is now reset
 //   to 10 kHz again (the 90 kHz caused frequent lock-ups of the I2C bus)
@@ -286,6 +292,9 @@ private:	// User declarations
         int             ttriac_hlim; // High limit for Triac Temp. Protection
         int             ttriac_llim; // Low  limit for Triac Temp. Protection
         bool            triac_too_hot; // true = Triac is overheated
+        bool            cb_i2c_err_msg; // true = give error message on successful I2C reset
+        bool            power_up_flag;  // true = power-up
+        int             known_hw_devices; // list of known I2C hardware devices  
 public:		// User declarations
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output

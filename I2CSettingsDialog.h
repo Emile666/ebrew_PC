@@ -5,6 +5,13 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2004/01/31 16:01:04  emile
+// - Init. HW High/Low limit temp. changed to 70/50 C respectively.
+// - Added code for calculation/simulation of Vhlt and Vboil
+// - Hardware dialog updated: 3 new controls added for Vhlt and Vboil simulation
+// - Registry key no longer in ebrew but in Software\\ebrew
+// - First attempt to catch CVS version ID in source code
+//
 // Revision 1.3  2003/09/15 20:37:21  emile
 // - LM76 constants renamed in LM92 constants
 // - Pump Popupmenu added (same as already done for the valves)
@@ -80,6 +87,10 @@ __published:	// IDE-managed Components
         TCheckBox *Vboil_simulated;
         TEdit *Vhlt_init_Edit;
         TLabel *Label8;
+        TCheckBox *cb_i2c_err_msg;
+        TLabel *Label9;
+        TLabel *Label10;
+        TEdit *Hw_devices_Edit;
 private:	// User declarations
 public:		// User declarations
         __fastcall TI2C_Settings(TComponent* Owner);
