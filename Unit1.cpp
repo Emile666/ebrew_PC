@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.21  2004/01/31 21:28:24  emile
+// - cvs revision number now added to About Screen
+// - Hints added to objects on MainForm
+// - vol_hlt, vol_mlt and vol_boil display objects added
+// - rename of various display objects for consistency
+//
 // Revision 1.20  2004/01/31 16:01:05  emile
 // - Init. HW High/Low limit temp. changed to 70/50 C respectively.
 // - Added code for calculation/simulation of Vhlt and Vboil
@@ -1045,7 +1051,6 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
 {
    int        value = 0x00;  // init. byte to write to DIG_IO_LSB_BASE
    int        err = 0;       // error return value, needed for SET_LED macro
-   char       tmp_str[80];   // temp string for calculations
    TDateTime  td_now;        // holds current date and time
 
    switch (tmr.isrstate)
@@ -1157,17 +1162,11 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           padc.ad1 = (double)swfx.tad1_fx;
        } // if
-       sprintf(tmp_str,"%4.2f",padc.ad1); // Display AD1 value to screen
-       Val_Thlt->Caption    = tmp_str;
-       tm_hlt->Value->Value = padc.ad1;   // update HLT thermometer object
 
        if (swfx.tad2_sw)
        {
           padc.ad2 = (double)swfx.tad2_fx;
        } // if
-       sprintf(tmp_str,"%4.2f",padc.ad2); // Display AD2 value to screen
-       Val_Tmlt->Caption    = tmp_str;
-       tm_mlt->Value->Value = padc.ad2;   // update MLT thermometer object
 
        //---------------------------------------------------
        // Triac Temperature Protection: hysteresis function
@@ -1176,21 +1175,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           if (padc.ad3 < ttriac_llim)
           {
-             triac_too_hot         = false;
-             tm_triac->ColorAfter  = clLime;
-             tm_triac->ColorBefore = clGreen;
+             triac_too_hot = false;
           }
        }
        else
        {
           if (padc.ad3 > ttriac_hlim)
           {
-             triac_too_hot         = true;
-             tm_triac->ColorAfter  = clMaroon;
-             tm_triac->ColorBefore = clRed;
+             triac_too_hot = true;
           }
        }
-       tm_triac->Value->Value = padc.ad3; // Update thermometer object
 
        //-------------------------------------
        // Pressure sensor, AD4, Volume of MLT
@@ -1203,9 +1197,6 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           volumes.Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
        }
-       sprintf(tmp_str,"%4.1f",volumes.Vmlt); // Display MA filter output on screen
-       Vol_MLT->Caption   = tmp_str;          // AD4 = Pressure Transducer
-       Tank_MLT->Position = volumes.Vmlt;
    } // if
    //-----------------------------------------------------------------------
    // Second time-slice: Time switch controller. Enable PI controller
@@ -1235,8 +1226,6 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          gamma = swfx.gamma_fx; // fix gamma
       } // if
-      // Heater object shows kW (max=3), gamma = 100 % => PHEATER [W]
-      Heater->Value = (gamma * PHEATER) / 100; // Update object on screen
 
       // check if tset_hlt should be increased
       if (pid_pars.mash_control == 0) // 0 = Tad1 (HLT), 1 = Tad2 (MLT)
@@ -1247,17 +1236,11 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          tset_mlt = update_tset(&tset_hlt,padc.ad2,pid_pars.temp_offset,ms,&ms_idx,ms_tot);
       } // else
-      sprintf(tmp_str,"%4.1f",tset_mlt);
-      Val_Tset_mlt->Caption   = tmp_str;
-      tm_mlt->SetPoint->Value = tset_mlt; // Update MLT thermometer object
 
       if (swfx.tset_sw)
       {
          tset_hlt = swfx.tset_fx; // fix tset
       } // if
-      sprintf(tmp_str,"%4.1f",tset_hlt);
-      Val_Tset_hlt->Caption = tmp_str;
-      tm_hlt->SetPoint->Value = tset_hlt; // update HLT thermometer object
    } // else if
    //-----------------------------------------------------------------------
    // Fourth time-slice: Output values to I2C LED Displays every TS seconds.
@@ -1289,34 +1272,6 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       /* Tmlt = AD2, Thlt = AD1 */
       update_std(&volumes,padc.ad2,padc.ad1,tset_hlt,&std_out,
                  ms,ms_idx,ms_tot,&sp,&std,PID_RB->ItemIndex,std_tmp);
-      switch (std.ebrew_std)
-      {
-         case  0: Std_State->Caption = "00. Initialisation"       ; break;
-         case  1: Std_State->Caption = "01. Wait for HLT Temp."   ; break;
-         case  2: Std_State->Caption = "02. Fill MLT"             ; break;
-         case  3: Std_State->Caption = "03. Mash in Progress"     ; break;
-         case  4: Std_State->Caption = "04. Bypass Heat Exchanger"; break;
-         case  5: Std_State->Caption = "05. Sparging Rest"        ; break;
-         case  6: Std_State->Caption = "06. Pump from MLT to Boil"; break;
-         case  7: Std_State->Caption = "07. Pump from HLT to MLT" ; break;
-         case  8: Std_State->Caption = "08. Delay"                ; break;
-         case  9: Std_State->Caption = "09. Empty MLT"            ; break;
-         case 10: Std_State->Caption = "10. Boiling"              ; break;
-         case 11: Std_State->Caption = "11. Empty Heat Exchanger" ; break;
-         case 12: Std_State->Caption = "12. Chill"                ; break;
-         default: break;
-      } // switch
-      //----------------------------------------------------------------------
-      // Now update tank objects (volumes). MLT is already done (time-slice 1)
-      //----------------------------------------------------------------------
-      Tank_HLT->Position  = volumes.Vhlt;
-      sprintf(tmp_str,"%4.1f",volumes.Vhlt);
-      Vol_HLT->Caption = tmp_str;
-
-      Tank_Boil->Position = volumes.Vboil;
-      sprintf(tmp_str,"%4.1f",volumes.Vboil);
-      Vol_Boil->Caption = tmp_str;
-
       //-----------------------------------------------------------------
       // Now output all valve bits to DIG_IO_MSB_BASE (if it is present).
       // NOTE: The pump bit is output to DIG_IO_LSB_IO!
@@ -1325,72 +1280,6 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          WriteIOByte((byte)(std_out & 0x00FE),MSB_IO);
       } // if
-   } // else if
-   //--------------------------------------------------------------------------
-   // Sixth time-slice: Update the Captions for all valves (they might have
-   //                   changed as a result of the call too update_std().
-   //                   The change in Manual Override settings is taken care of
-   //                   in the PopupMemu. Therefore only update the valve captions
-   //                   in Auto Mode in case of a bit change.
-   //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 6)
-   {
-      switch (std_out & (P0M | P0b))
-      {
-         case P0M | P0b: P0->Caption = P01MTXT; break;
-         case P0M      : P0->Caption = P00MTXT; break;
-         case P0b      : P0->Caption = P01ATXT; break;
-         default       : P0->Caption = P00ATXT; break;
-      } // switch
-      switch (std_out & (V1M | V1b))
-      {
-         case V1M | V1b: V1->Caption = V11MTXT; break;
-         case V1M      : V1->Caption = V10MTXT; break;
-         case V1b      : V1->Caption = V11ATXT; break;
-         default       : V1->Caption = V10ATXT; break;
-      } // switch
-      switch (std_out & (V2M | V2b))
-      {
-         case V2M | V2b: V2->Caption = V21MTXT; break;
-         case V2M      : V2->Caption = V20MTXT; break;
-         case V2b      : V2->Caption = V21ATXT; break;
-         default       : V2->Caption = V20ATXT; break;
-      } // switch
-      switch (std_out & (V3M | V3b))
-      {
-         case V3M | V3b: V3->Caption = V31MTXT; break;
-         case V3M      : V3->Caption = V30MTXT; break;
-         case V3b      : V3->Caption = V31ATXT; break;
-         default       : V3->Caption = V30ATXT; break;
-      } // switch
-      switch (std_out & (V4M | V4b))
-      {
-         case V4M | V4b: V4->Caption = V41MTXT; break;
-         case V4M      : V4->Caption = V40MTXT; break;
-         case V4b      : V4->Caption = V41ATXT; break;
-         default       : V4->Caption = V40ATXT; break;
-      } // switch
-      switch (std_out & (V5M | V5b))
-      {
-         case V5M | V5b: V5->Caption = V51MTXT; break;
-         case V5M      : V5->Caption = V50MTXT; break;
-         case V5b      : V5->Caption = V51ATXT; break;
-         default       : V5->Caption = V50ATXT; break;
-      } // switch
-      switch (std_out & (V6M | V6b))
-      {
-         case V6M | V6b: V6->Caption = V61MTXT; break;
-         case V6M      : V6->Caption = V60MTXT; break;
-         case V6b      : V6->Caption = V61ATXT; break;
-         default       : V6->Caption = V60ATXT; break;
-      } // switch
-      switch (std_out & (V7M | V7b))
-      {
-         case V7M | V7b: V7->Caption = V71MTXT; break;
-         case V7M      : V7->Caption = V70MTXT; break;
-         case V7b      : V7->Caption = V71ATXT; break;
-         default       : V7->Caption = V70ATXT; break;
-      } // switch
    } // else if
    //--------------------------------------------------------------------------
    // Last time-slice
@@ -1833,6 +1722,144 @@ void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
 } // TMainForm::ReadLogFile1Click()
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
+{
+   char tmp_str[80];   // temp string for calculations
 
+   sprintf(tmp_str,"%4.2f",padc.ad1); // Display AD1 value to screen
+   Val_Thlt->Caption    = tmp_str;
+   tm_hlt->Value->Value = padc.ad1;   // update HLT thermometer object
 
+   sprintf(tmp_str,"%4.2f",padc.ad2); // Display AD2 value to screen
+   Val_Tmlt->Caption    = tmp_str;
+   tm_mlt->Value->Value = padc.ad2;   // update MLT thermometer object
+
+   tm_triac->Value->Value = padc.ad3; // Update thermometer object
+   //---------------------------------------------------
+   // Triac Temperature Protection: hysteresis function
+   //---------------------------------------------------
+   if (triac_too_hot)
+   {
+      tm_triac->ColorAfter  = clMaroon;
+      tm_triac->ColorBefore = clRed;
+   }
+   else
+   {
+      tm_triac->ColorAfter  = clLime;
+      tm_triac->ColorBefore = clGreen;
+   }
+
+   sprintf(tmp_str,"%4.1f",volumes.Vmlt); // Display MA filter output on screen
+   Vol_MLT->Caption   = tmp_str;          // AD4 = Pressure Transducer
+   Tank_MLT->Position = volumes.Vmlt;
+
+   // Heater object shows kW (max=3), gamma = 100 % => PHEATER [W]
+   Heater->Value = (gamma * PHEATER) / 100; // Update object on screen
+
+   sprintf(tmp_str,"%4.1f",tset_mlt);
+   Val_Tset_mlt->Caption   = tmp_str;
+   tm_mlt->SetPoint->Value = tset_mlt; // Update MLT thermometer object
+
+   sprintf(tmp_str,"%4.1f",tset_hlt);
+   Val_Tset_hlt->Caption = tmp_str;
+   tm_hlt->SetPoint->Value = tset_hlt; // update HLT thermometer object
+
+   switch (std.ebrew_std)
+   {
+      case  0: Std_State->Caption = "00. Initialisation"       ; break;
+      case  1: Std_State->Caption = "01. Wait for HLT Temp."   ; break;
+      case  2: Std_State->Caption = "02. Fill MLT"             ; break;
+      case  3: Std_State->Caption = "03. Mash in Progress"     ; break;
+      case  4: Std_State->Caption = "04. Bypass Heat Exchanger"; break;
+      case  5: Std_State->Caption = "05. Sparging Rest"        ; break;
+      case  6: Std_State->Caption = "06. Pump from MLT to Boil"; break;
+      case  7: Std_State->Caption = "07. Pump from HLT to MLT" ; break;
+      case  8: Std_State->Caption = "08. Delay"                ; break;
+      case  9: Std_State->Caption = "09. Empty MLT"            ; break;
+      case 10: Std_State->Caption = "10. Boiling"              ; break;
+      case 11: Std_State->Caption = "11. Empty Heat Exchanger" ; break;
+      case 12: Std_State->Caption = "12. Chill"                ; break;
+      default: break;
+   } // switch
+   //----------------------------------------------------------------------
+   // Now update tank objects (volumes). MLT is already done (time-slice 1)
+   //----------------------------------------------------------------------
+   Tank_HLT->Position  = volumes.Vhlt;
+   sprintf(tmp_str,"%4.1f",volumes.Vhlt);
+   Vol_HLT->Caption = tmp_str;
+
+   Tank_Boil->Position = volumes.Vboil;
+   sprintf(tmp_str,"%4.1f",volumes.Vboil);
+   Vol_Boil->Caption = tmp_str;
+
+   //--------------------------------------------------------------------------
+   // Update the Captions for all valves (they might have
+   // changed as a result of the call to update_std().
+   // The change in Manual Override settings is taken care of
+   // in the PopupMemu. Therefore only update the valve captions
+   // in Auto Mode in case of a bit change.
+   //--------------------------------------------------------------------------
+   switch (std_out & (P0M | P0b))
+   {
+      case P0M | P0b: P0->Caption = P01MTXT; break;
+      case P0M      : P0->Caption = P00MTXT; break;
+      case P0b      : P0->Caption = P01ATXT; break;
+      default       : P0->Caption = P00ATXT; break;
+   } // switch
+   switch (std_out & (V1M | V1b))
+   {
+      case V1M | V1b: V1->Caption = V11MTXT; break;
+      case V1M      : V1->Caption = V10MTXT; break;
+      case V1b      : V1->Caption = V11ATXT; break;
+      default       : V1->Caption = V10ATXT; break;
+   } // switch
+   switch (std_out & (V2M | V2b))
+   {
+      case V2M | V2b: V2->Caption = V21MTXT; break;
+      case V2M      : V2->Caption = V20MTXT; break;
+      case V2b      : V2->Caption = V21ATXT; break;
+      default       : V2->Caption = V20ATXT; break;
+   } // switch
+   switch (std_out & (V3M | V3b))
+   {
+      case V3M | V3b: V3->Caption = V31MTXT; break;
+      case V3M      : V3->Caption = V30MTXT; break;
+      case V3b      : V3->Caption = V31ATXT; break;
+      default       : V3->Caption = V30ATXT; break;
+   } // switch
+   switch (std_out & (V4M | V4b))
+   {
+      case V4M | V4b: V4->Caption = V41MTXT; break;
+      case V4M      : V4->Caption = V40MTXT; break;
+      case V4b      : V4->Caption = V41ATXT; break;
+      default       : V4->Caption = V40ATXT; break;
+   } // switch
+   switch (std_out & (V5M | V5b))
+   {
+      case V5M | V5b: V5->Caption = V51MTXT; break;
+      case V5M      : V5->Caption = V50MTXT; break;
+      case V5b      : V5->Caption = V51ATXT; break;
+      default       : V5->Caption = V50ATXT; break;
+   } // switch
+   switch (std_out & (V6M | V6b))
+   {
+      case V6M | V6b: V6->Caption = V61MTXT; break;
+      case V6M      : V6->Caption = V60MTXT; break;
+      case V6b      : V6->Caption = V61ATXT; break;
+      default       : V6->Caption = V60ATXT; break;
+   } // switch
+   switch (std_out & (V7M | V7b))
+   {
+      case V7M | V7b: V7->Caption = V71MTXT; break;
+      case V7M      : V7->Caption = V70MTXT; break;
+      case V7b      : V7->Caption = V71ATXT; break;
+      default       : V7->Caption = V70ATXT; break;
+   } // switch
+} // ebrew_idle_handler()
+
+void __fastcall TMainForm::FormCreate(TObject *Sender)
+{
+   Application->OnIdle = ebrew_idle_handler;
+} // TMainForm::FormCreate()
+//---------------------------------------------------------------------------
 

@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.17  2004/01/31 21:28:24  emile
+// - cvs revision number now added to About Screen
+// - Hints added to objects on MainForm
+// - vol_hlt, vol_mlt and vol_boil display objects added
+// - rename of various display objects for consistency
+//
 // Revision 1.16  2004/01/31 16:01:05  emile
 // - Init. HW High/Low limit temp. changed to 70/50 C respectively.
 // - Added code for calculation/simulation of Vhlt and Vboil
@@ -250,7 +256,9 @@ __published:	// IDE-managed Components
         void __fastcall PopupMenu1Popup(TObject *Sender);
         void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
         void __fastcall ReadLogFile1Click(TObject *Sender);
+        void __fastcall FormCreate(TObject *Sender);
 private:	// User declarations
+        void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
         void __fastcall Restore_Settings(void);
