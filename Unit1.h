@@ -6,6 +6,17 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.20  2004/02/21 23:11:20  emile
+// - Changed behaviour after I2C Bus reset to a more silent one. Resulted in:
+//   - Addition of checkbox "Give message on successful reset after I2C error"
+//     in Hardware Settings. New registry variable "CB_I2C_ERR_MSG".
+//   - Print Hardware status dialog screen only if hardware configuration has
+//     changed. Added "I2C Devices present" textbox in Hardware Settings.
+//     New registry variable "KNOWN_HW_DEVICES"
+//   - Restore_Settings only after power-down/power-up (added 'power_up_flag').
+// - Exit ebrew if I2C reset was unsuccessful
+// - TTRIAC_LLIM default value set to 60 instead of 50
+//
 // Revision 1.19  2004/02/15 14:48:54  emile
 // - HLT and MLT Thermometer objects on screen: max. value is 90 degrees.
 // - Error handling improved:
@@ -181,6 +192,11 @@
      }                                                                         \
   }
 
+//------------------------------------------------------------------------------
+// The text I2C_STOP_ERR_TXT is printed whenever i2c_stop() was not successful
+//------------------------------------------------------------------------------
+#define I2C_STOP_ERR_TXT "i2c_stop() not successful: Cycle power Off -> On, then press OK button"
+
 typedef struct _swfx_struct
 {
    bool   tset_sw;  // Switch valye for tset
@@ -212,7 +228,7 @@ __published:	// IDE-managed Components
         TMenuItem *SearchforHelpOn1;
         TMenuItem *Contents1;
         TMenuItem *MenuOptionsPIDSettings;
-        TMenuItem *MenuViewLogFile;
+        TMenuItem *MenuView_I2C_HW_Devices;
         TMenuItem *MenuViewData_graphs;
         TMenuItem *MenuEditMashScheme;
         TMenuItem *File2;
@@ -272,11 +288,14 @@ __published:	// IDE-managed Components
         void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
         void __fastcall ReadLogFile1Click(TObject *Sender);
         void __fastcall FormCreate(TObject *Sender);
+        void __fastcall MenuView_I2C_HW_DevicesClick(TObject *Sender);
 private:	// User declarations
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
+        void __fastcall Start_I2C_Communication(int known_status);
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
         void __fastcall Restore_Settings(void);
+        void __fastcall exit_ebrew(void);
         void __fastcall Reset_I2C_Bus(int i2c_bus_id, int err);
         timer_vars      tmr;        // struct with timer variables
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
@@ -289,12 +308,13 @@ private:	// User declarations
         int             led2_vis;   // 1..7: LED2 Visibility
         int             led3_vis;   // 1..7: LED3 Visibility
         int             led4_vis;   // 1..7: LED4 Visibility
-        int             ttriac_hlim; // High limit for Triac Temp. Protection
-        int             ttriac_llim; // Low  limit for Triac Temp. Protection
-        bool            triac_too_hot; // true = Triac is overheated
+        int             ttriac_hlim;    // High limit for Triac Temp. Protection
+        int             ttriac_llim;    // Low  limit for Triac Temp. Protection
+        bool            triac_too_hot;  // true = Triac is overheated
         bool            cb_i2c_err_msg; // true = give error message on successful I2C reset
         bool            power_up_flag;  // true = power-up
         int             known_hw_devices; // list of known I2C hardware devices  
+        int             fscl_prescaler;   // index into PCF8584 prescaler values, see i2c_dll.cpp
 public:		// User declarations
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output

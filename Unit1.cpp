@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.26  2004/02/25 10:07:38  emile
+// - fscl_values[] now moved to i2c_dll.cpp
+// - bug-fix in exit routine: no i2c_stop error message if hw_status == 0
+// - disable t50msec interrupt routine first before calling i2c_stop()
+//
 // Revision 1.25  2004/02/22 12:56:44  emile
 // - SCL clock frequency now adjustable. Following changes are made:
 //   - New Registry value: FSCL_PRESCALER
@@ -310,6 +315,111 @@ void __fastcall TMainForm::Restore_Settings(void)
    delete Dlg; // prevent memory leaks
 } // TMainForm::Restore_Settings()
 
+void __fastcall TMainForm::Start_I2C_Communication(int known_status)
+/*------------------------------------------------------------------
+  Purpose  : This function starts I2C communication, reports any
+             errors found and perform a check on which I2C hardware
+             devices are present.
+  Variables: known_status: if the hardware status does not match this
+                           variable, a messagebox with the actual
+                           hardware status is printed on the screen.
+  Returns  : None
+             The global variable 'hw_status' is given a value
+  ------------------------------------------------------------------*/
+{
+   TRegistry *Reg = new TRegistry();
+   char s[80];          // temp. string
+   char s1[20];         // temp. string
+   char st[1024];       // string for MessageBox
+   int  x1;             // Hardware base address from Registry
+
+   //--------------------------------------------
+   // Get variables for i2c_init() from Registry
+   //--------------------------------------------
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+         x1 = Reg->ReadInteger("I2C_Base");    // Read HW IO address as an int.
+         fscl_prescaler = Reg->ReadInteger("FSCL_PRESCALER");
+         if ((fscl_prescaler < 0) || (fscl_prescaler > 12))
+         {
+            fscl_prescaler = 5; // set fscl to 11.72 kHz
+            Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
+         } // if
+      } // if
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+   Reg->CloseKey(); // Close the Registry
+   delete Reg;      // Delete Registry object to prevent memory leak
+
+   hw_status = i2c_init(x1,TRUE,fscl_values[fscl_prescaler]);
+   if (hw_status != I2C_NOERR)
+   {
+     sprintf(s,"Error in i2c_init(0x%x)",x1);
+     MessageBox(NULL,I2C_ARGS_MSG,s,MB_OK);
+   } // if
+   else
+   {
+     hw_status = i2c_start(); // Start I2C Communication
+     switch (hw_status)
+     {
+        case I2C_BB  : MessageBox(NULL,I2C_BB_MSG,"Error in i2c_start()",MB_OK);
+                       hw_status = 0; // set to 'No Devices present'
+                       break;
+        case I2C_BERR: MessageBox(NULL,I2C_BERR_MSG,"Error in i2c_start()",MB_OK);
+                       hw_status = 0; // set to 'No Devices present'
+                       break;
+        default      : //-------------------------------------------------
+                       // No error, check the individual Hardware Devices.
+                       //-------------------------------------------------
+                       check_i2c_hw(&hw_status); // check all hardware
+                       // Print information using a MessageBox
+                       PR_HW_STAT(LCD_OK);       // LCD Display
+                       sprintf(st,LCD_TXT,s1);
+                       PR_HW_STAT(DIG_IO_LSB_OK); // IO Port LSB
+                       sprintf(s,DIG_IO_LSB_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(DIG_IO_MSB_OK); // IO Port MSB
+                       sprintf(s,DIG_IO_MSB_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(LED1_OK);       // LED1
+                       sprintf(s,LED1_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(LED2_OK);       // LED2
+                       sprintf(s,LED2_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(LED3_OK);       // LED3
+                       sprintf(s,LED3_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(LED4_OK);       // LED4
+                       sprintf(s,LED4_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(ADDA_OK);       // PCF8591 AD-DA Converter
+                       sprintf(s,ADDA_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(LM92_1_OK);     // LM92 Temp. Sensor
+                       sprintf(s,LM92_1_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(LM92_2_OK);     // LM92 Temp. Sensor
+                       sprintf(s,LM92_2_TXT,s1);
+                       strcat(st,s);
+                       PR_HW_STAT(FM24C08_OK);    // FM24C08 EEPROM
+                       sprintf(s,FM24C08_TXT,s1);
+                       strcat(st,s);
+                       if (hw_status != known_status)
+                       {  // Print only if HW device configuration has changed
+                          MessageBox(NULL,st,"Results of I2C Hardware Check",MB_OK);
+                       }
+                       break; /* NO_ERR */
+     } // switch
+   } // else
+} // TMainForm::Start_I2C_Communication()
+
 void __fastcall TMainForm::Main_Initialisation(void)
 /*------------------------------------------------------------------
   Purpose  : This function Initialises all I2C Hardware and checks if
@@ -320,12 +430,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
 {
    TRegistry *Reg = new TRegistry();
    FILE *fd;            // Log File Descriptor
-   char s[80];          // temp. string
-   char s1[20];         // temp. string
-   char st[1024];       // string for MessageBox
    int  i;              // temp. variable
-   int  x1;             // Temp. var. for I2C HW base address
-   int  fscl_prescaler; // index into PCF8584 prescaler values, see i2c_dll.cpp
+   char s[40];          // Temp. string
 
    //----------------------------------------
    // Initialise all variables from Registry
@@ -335,14 +441,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
       if (Reg->KeyExists(REGKEY))
       {
          Reg->OpenKey(REGKEY,FALSE);
-         x1 = Reg->ReadInteger("I2C_Base");    // Read HW IO address as an int.
          known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
-         fscl_prescaler   = Reg->ReadInteger("FSCL_PRESCALER");
-         if ((fscl_prescaler < 0) || (fscl_prescaler > 12))
-         {
-            fscl_prescaler = 5; // set fscl to 11.72 kHz
-            Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
-         } // if
          i = Reg->ReadInteger("TS");  // Read TS from registry
          pid_pars.ts = (double)i;
          i = Reg->ReadInteger("Kc");  // Read Kc from registry
@@ -391,69 +490,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
    } // catch
 
    //----------------------------------------------------------------------
-   // Start I2C Communication: ISA PCB Card with Base Address from Registry
+   // Start I2C Communication and print list of I2C devices found if it
+   // does not match known devices.
    //----------------------------------------------------------------------
-   hw_status = i2c_init(x1,TRUE,fscl_values[fscl_prescaler]);
-   if (hw_status != I2C_NOERR)
-   {
-      sprintf(s,"Error in i2c_init(0x%x)",x1);
-      MessageBox(NULL,I2C_ARGS_MSG,s,MB_OK);
-   } // if
-   else
-   {
-      hw_status = i2c_start(); // Start I2C Communication
-      switch (hw_status)
-      {
-         case I2C_BB  : MessageBox(NULL,I2C_BB_MSG,"Error in i2c_start()",MB_OK);
-                        hw_status = 0; // set to 'No Devices present'
-                        break;
-         case I2C_BERR: MessageBox(NULL,I2C_BERR_MSG,"Error in i2c_start()",MB_OK);
-                        hw_status = 0; // set to 'No Devices present'
-                        break;
-         default      : //-------------------------------------------------
-                        // No error, check the individual Hardware Devices.
-                        //-------------------------------------------------
-                        check_i2c_hw(&hw_status); // check all hardware
-                        // Print information using a MessageBox
-                        PR_HW_STAT(LCD_OK);       // LCD Display
-                        sprintf(st,LCD_TXT,s1);
-                        PR_HW_STAT(DIG_IO_LSB_OK); // IO Port LSB
-                        sprintf(s,DIG_IO_LSB_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(DIG_IO_MSB_OK); // IO Port MSB
-                        sprintf(s,DIG_IO_MSB_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(LED1_OK);       // LED1
-                        sprintf(s,LED1_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(LED2_OK);       // LED2
-                        sprintf(s,LED2_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(LED3_OK);       // LED3
-                        sprintf(s,LED3_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(LED4_OK);       // LED4
-                        sprintf(s,LED4_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(ADDA_OK);       // PCF8591 AD-DA Converter
-                        sprintf(s,ADDA_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(LM92_1_OK);     // LM92 Temp. Sensor
-                        sprintf(s,LM92_1_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(LM92_2_OK);     // LM92 Temp. Sensor
-                        sprintf(s,LM92_2_TXT,s1);
-                        strcat(st,s);
-                        PR_HW_STAT(FM24C08_OK);    // FM24C08 EEPROM
-                        sprintf(s,FM24C08_TXT,s1);
-                        strcat(st,s);
-                        if (hw_status != known_hw_devices)
-                        {  // Print only if HW device configuration has changed
-                           MessageBox(NULL,st,"Results of I2C Hardware Check",MB_OK);
-                        }
-                        break; /* NO_ERR */
-      } // switch
-   } // else
+   Start_I2C_Communication(known_hw_devices);
 
    //-------------------------------------
    // Read Mash Scheme for maisch.sch file
@@ -523,8 +563,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
       getdate(&d1);
       fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
       fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, Ts = %6.2f\n",pid_pars.kc,pid_pars.ti,pid_pars.td,pid_pars.ts);
-      fprintf(fd,"k0 = %6.2f, k1 = %6.2f, k2 = %6.2f\n",pid_pars.k0,pid_pars.k1,pid_pars.k2);
-      fprintf(fd,"hw_status = 0x%2X, ms_tot =%2d\n",hw_status,ms_tot);
+      fprintf(fd,"k0 = %6.2f, k1 = %6.2f, k2 = %6.2f; ",pid_pars.k0,pid_pars.k1,pid_pars.k2);
+      strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
+      s[4] = '\0';
+      fprintf(fd,"ebrew CVS Revision %s\n",s);
+      fprintf(fd,"hw_status = 0x%2X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,ms_tot,fscl_prescaler);
       fprintf(fd,"Temp Offset = %4.1f, Mash progress controlled by Tad%1d ",pid_pars.temp_offset,1+pid_pars.mash_control);
       (pid_pars.mash_control == 0) ? fprintf(fd,"(Thlt)\n") : fprintf(fd,"(Tmlt)\n");
       fprintf(fd,"Vref1 = %3d, Vref2 = %3d, Vref3 = %3d, Vref4 = %3d, DAC-value = %3d\n\n",
@@ -569,7 +612,8 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
           Reg->OpenKey(REGKEY,FALSE);
           Reg->WriteInteger("I2C_Base",0x378);   // I2C HW Base Address
           Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
-          Reg->WriteInteger("FSCL_PRESCALER",5); // set fscl to 11.72 kHz
+          fscl_prescaler = 5;
+          Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler); // set fscl to 11.72 kHz
           // PID Settings Dialog
           Reg->WriteInteger("TS",TS_INIT);  // Set Default value
           Reg->WriteInteger("Kc",KC_INIT);  // Controller gain
@@ -641,6 +685,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
        delete Reg;
        return;
     } // catch
+    //----------------------------------------
     // Init. volumes. Should be done only once
     //----------------------------------------
     if (volumes.Vhlt_simulated)
@@ -748,11 +793,21 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
   Returns  : None
   ------------------------------------------------------------------*/
 {
+   exit_ebrew();
+}
+
+void __fastcall TMainForm::exit_ebrew(void)
+/*------------------------------------------------------------------
+  Purpose  : This is the function which is called whenever the user
+             presses 'File | Exit'.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
    TRegistry *Reg = new TRegistry();
    int err = 0;
    char s[80];
 
-   T50msec->Enabled = false; // Disable Interrupt Timer
+   //T50msec->Enabled = false; // Disable Interrupt Timer
    ShowDataGraphs->GraphTimer->Enabled = false; // Stop Graph Update timer
    ViewMashProgress->UpdateTimer->Enabled = false; // Stop Mash Progress Update timer
    Sleep(51);                // Make sure that Timer is disabled
@@ -800,7 +855,7 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
    } // if
    if ((hw_status > 0) && !err)
    {
-      err = i2c_stop(); // Stop I2C Communication
+      err = i2c_stop(); // Stop I2C Communication, close PortTalk
       if (err)
       {
          sprintf(s,"Error %d while closing I2C Bus",err);
@@ -937,7 +992,6 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
    char *endp; // temp. pointer for strtol() function
    char s[80]; // temp. array
    int  init_needed = false; // temp. flag, TRUE = Main_Initialisation to be called
-   int  fscl_prescaler;      // index into PCF8584 prescaler values
 
    TRegistry *Reg = new TRegistry();
    TI2C_Settings *ptmp;
@@ -1068,12 +1122,10 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                // New I2C HW Base Address or SCL prescaler was changed,
                // call i2c_stop() and init I2C Bus communication again.
                //--------------------------------------------------------
-               T50msec->Enabled = false; // Disable Interrupt Timer
-               Sleep(51);                // Make sure that Timer is disabled
                if (i2c_stop() != I2C_NOERR)
                {  // i2c bus locked, i2c_stop() did not work
-                  MessageBox(NULL,"i2c_stop() not successful: Cycle power Off -> On, then press OK button.","ERROR",MB_OK);
-                  MenuFileExitClick(this); // Exit ebrew program
+                  MessageBox(NULL,I2C_STOP_ERR_TXT,"ERROR",MB_OK);
+                  exit_ebrew(); // Exit ebrew program
                }
                else
                {
@@ -1121,9 +1173,6 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
    char tmp_str[80];    // temp string for calculations
    char err_txt[40];    // temp string for error message
 
-   T50msec->Enabled = false; // Disable Interrupt Timer
-   Sleep(51);                // Make sure that Timer is disabled
-
    switch (err)
    {
       case I2C_BERR:     strcpy(err_txt,I2C_BERR_MSG);
@@ -1144,8 +1193,8 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
    sprintf(tmp_str,"%s while accessing I2C device 0x%2x",err_txt,i2c_bus_id);
    if (i2c_stop() != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
-      MessageBox(NULL,"i2c_stop() not successful: Cycle power Off -> On, then press OK button.",tmp_str,MB_OK);
-      MenuFileExitClick(this); // Exit ebrew program
+      MessageBox(NULL,I2C_STOP_ERR_TXT,tmp_str,MB_OK);
+      exit_ebrew(); // Exit ebrew program
    }
    else
    {
@@ -1820,7 +1869,7 @@ void __fastcall TMainForm::PopupMenu1Popup(TObject *Sender)
 
 void __fastcall TMainForm::FormClose(TObject *Sender, TCloseAction &Action)
 {
-   MenuFileExitClick(Sender);
+   exit_ebrew();
 }
 //---------------------------------------------------------------------------
 
@@ -1987,5 +2036,32 @@ void __fastcall TMainForm::FormCreate(TObject *Sender)
 } // TMainForm::FormCreate()
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
+{
+   int button;
 
+   //---------------------------------------------------------------------------
+   // Stop all I2C bus communication, then restart and print all devices found.
+   // Next: continue with ebrew program by calling Main_Initialisation().
+   //---------------------------------------------------------------------------
+   if (i2c_stop() != I2C_NOERR)
+   {  // i2c bus locked, i2c_stop() did not work
+      button = Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
+      exit_ebrew(); // Exit ebrew program
+   }
+   else
+   {
+      Start_I2C_Communication(-1); // print all I2C devices found
+      if (i2c_stop() != I2C_NOERR)
+      {  // i2c bus locked, i2c_stop() did not work
+         button = Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
+         exit_ebrew(); // Exit ebrew program
+      }
+      else
+      {
+         Main_Initialisation(); // continue with init. process
+      } // else
+   } // else
+} // MenuView_I2C_HW_DevicesClick()
+//---------------------------------------------------------------------------
 
