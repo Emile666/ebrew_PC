@@ -6,6 +6,20 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.25  2004/05/08 14:52:51  emile
+// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+// - View mash progress screen: reorganised, pre-heat timers added, timers are now
+//   in seconds instead of minutes.
+// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+// - 'Apply' Button added to Fix parameters dialog screen.
+// - 'Edit mash scheme' no longer resets the (running) mash timers
+// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+//   also removed.
+// - Changing init. volume of HLT did not result in an update on screen. Corrected.
+//
 // Revision 1.24  2004/05/05 15:44:15  emile
 // - Main Screen picture update
 // - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
@@ -188,6 +202,7 @@
 #include "VrTank.hpp"
 #include "VrThermoMeter.hpp"
 #include "VrPowerMeter.hpp"
+#include <ScktComp.hpp>
 
 #define TS_INIT    (5.0)
 #define KC_INIT   (69.0)
@@ -232,6 +247,16 @@
                                                                          \
   }
 
+//------------------------------
+// Defines for StatusBar object
+//------------------------------
+#define PANEL_TCPIP (0)
+#define PANEL_MASHS (1)
+#define PANEL_MSIDX (2)
+#define PANEL_SPIDX (3)
+#define PANEL_VALVE (4)
+#define PANEL_REVIS (5)
+
 //------------------------------------------------------------------------------
 // The text I2C_STOP_ERR_TXT is printed whenever i2c_stop() was not successful
 //------------------------------------------------------------------------------
@@ -273,8 +298,7 @@ __published:	// IDE-managed Components
         TMenuItem *File2;
         TMenuItem *MenuFileExit;
         TMenuItem *N1;
-        TMenuItem *PrintSetup1;
-        TMenuItem *Print1;
+        TMenuItem *Connect1;
         TMenuItem *MenuEditFixParameters;
         TLabel *Val_Thlt;
         TLabel *Val_Tset_hlt;
@@ -300,7 +324,6 @@ __published:	// IDE-managed Components
         TMenuItem *Auto1;
         TMenuItem *OFF1;
         TMenuItem *ON1;
-        TMenuItem *N2;
         TMenuItem *ReadLogFile1;
         TvrThermoMeter *tm_mlt;
         TVrTank *Tank_MLT;
@@ -311,6 +334,13 @@ __published:	// IDE-managed Components
         TVrPowerMeter *Heater;
         TMenuItem *Measurements;
         TImage *Image1;
+        TStatusBar *StatusBar;
+        TClientSocket *ClientSocket1;
+        TServerSocket *ServerSocket1;
+        TMenuItem *N2;
+        TMenuItem *NetworkListening1;
+        TMenuItem *NetworkDisconnect1;
+        TLabel *PID_dbg;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -332,9 +362,29 @@ __published:	// IDE-managed Components
         void __fastcall MeasurementsClick(TObject *Sender);
         void __fastcall Contents1Click(TObject *Sender);
         void __fastcall HowtoUseHelp1Click(TObject *Sender);
+        void __fastcall ServerSocket1Listen(TObject *Sender,
+          TCustomWinSocket *Socket);
+        void __fastcall Connect1Click(TObject *Sender);
+        void __fastcall NetworkListening1Click(TObject *Sender);
+        void __fastcall NetworkDisconnect1Click(TObject *Sender);
+        void __fastcall ClientSocket1Connect(TObject *Sender,
+          TCustomWinSocket *Socket);
+        void __fastcall ClientSocket1Disconnect(TObject *Sender,
+          TCustomWinSocket *Socket);
+        void __fastcall ServerSocket1ClientDisconnect(TObject *Sender,
+          TCustomWinSocket *Socket);
+        void __fastcall ClientSocket1Connecting(TObject *Sender,
+          TCustomWinSocket *Socket);
+        void __fastcall ServerSocket1ClientConnect(TObject *Sender,
+          TCustomWinSocket *Socket);
+        void __fastcall ClientSocket1Error(TObject *Sender,
+          TCustomWinSocket *Socket, TErrorEvent ErrorEvent,
+          int &ErrorCode);
 private:	// User declarations
+        void __fastcall network_handler(void);
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall Start_I2C_Communication(int known_status);
+        void __fastcall print_mash_scheme_to_statusbar(void);
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
         void __fastcall Restore_Settings(void);
@@ -362,6 +412,7 @@ private:	// User declarations
         int             fscl_prescaler;   // index into PCF8584 prescaler values, see i2c_dll.cpp
         double          thlt_offset;      // calibration offset to add to Thlt measurement
         double          tmlt_offset;      // calibration offset to add to Tmlt measurement
+        bool            cb_pid_dbg;       // true = Show PID Debug label
 public:		// User declarations
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         adda_t          padc;       // struct containing the 4 ADC values in mV
@@ -382,6 +433,9 @@ public:		// User declarations
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
         TDateTime       dt_time_switch;  // object holding date and time
         volume_struct   volumes;         // Struct for Volumes
+        bool            IsServer;        // true = server (not the client)
+        bool            network_init;    // true = network init. to be done
+        bool            network_alive;   // true = network connection is established
         char            *ebrew_revision; // contains CVS revision number
         __fastcall TMainForm(TComponent* Owner);
 };

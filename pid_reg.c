@@ -15,6 +15,13 @@
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
   $Log$
+  Revision 1.5  2004/05/10 20:54:30  emile
+  - Bug-fix: log-file header: '\n' was removed, is corrected now
+  - Hints added to PID dialog screen
+  - Now four PID controllers to choose from. Old ebrew version is still listed,
+    but should not be used anymore. Simulation showed stability problems.
+    Preferably use the type C controller.
+
   Revision 1.4  2004/04/26 13:30:22  emile
   Bug-fix: init_pid3() did not calculate correctly when Ti = 0. Corrected.
 
@@ -33,12 +40,14 @@
 */
 #include "pid_reg.h"
 
-static double ek_1; // e[k-1]  = SP[k-1] - PV[k-1] = Tset_hlt[k-1] - Thlt[k-1]
-static double ek_2; // e[k-2]  = SP[k-2] - PV[k-2] = Tset_hlt[k-2] - Thlt[k-2]
-static double xk_1; // PV[k-1] = Thlt[k-1]
-static double xk_2; // PV[k-2] = Thlt[k-1]
-static double yk_1; // y[k-1]  = Gamma[k-1]
-static double yk_2; // y[k-2]  = Gamma[k-1]
+static double ek_1;  // e[k-1]  = SP[k-1] - PV[k-1] = Tset_hlt[k-1] - Thlt[k-1]
+static double ek_2;  // e[k-2]  = SP[k-2] - PV[k-2] = Tset_hlt[k-2] - Thlt[k-2]
+static double xk_1;  // PV[k-1] = Thlt[k-1]
+static double xk_2;  // PV[k-2] = Thlt[k-1]
+static double yk_1;  // y[k-1]  = Gamma[k-1]
+static double yk_2;  // y[k-2]  = Gamma[k-1]
+static double lpf_1; // lpf[k-1] = LPF output[k-1]
+static double lpf_2; // lpf[k-2] = LPF output[k-2]
 
 void init_pid1(pid_params *p)
 /*------------------------------------------------------------------
@@ -61,6 +70,10 @@ void init_pid1(pid_params *p)
   ------------------------------------------------------------------*/
 {
    p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
+   if (p->ts_ticks > TWENTY_SECONDS)
+   {
+      p->ts_ticks = TWENTY_SECONDS;
+   }
    if (p->ti == 0.0)
    {
       p->k0 = p->kc * (+1.0 + (2.0 * p->td / p->ts));
@@ -119,34 +132,56 @@ void init_pid2(pid_params *p)
   Purpose  : This function initialises the PID controller, based on
              the new Type A PID controller. Update of pid_reg1().
   Variables: p: pointer to struct containing all PID parameters
-                           Ts      Td
-             k0 = Kc.(1 + ---- + 2.--)
-                          2.Ti     Ts
+                           Ts        2.Td
+             k0 = Kc.(1 + ---- + ------------)
+                          2.Ti   Ts + 2.k_lpf
 
-                      Ts   4.Td
-             k1 = Kc.(-- - ----)
-                      Ti    Ts
+                                  Ts.(alfa + 1)       4.Td
+             k1 = Kc.(alfa - 1 + -------------- - ------------)
+                                       2.Ti       Ts + 2.k_lpf
 
-                            Ts    2.Td
-             k2 = Kc.(-1 + ---- + ----)
-                           2.Ti    Ts
+                              alfa.Ts       2.Td
+             k2 = Kc.(-alfa + ------- + ------------)
+                                2.Ti    Ts + 2.k_lpf
+
+                         Ts - 2.k_lpf
+             with alfa = ------------
+                         Ts + 2.k_lpf
 
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
+   double alfa = (p->ts - 2.0 * p->k_lpf) / (p->ts + 2.0 * p->k_lpf); // help variable
+
    p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
+   if (p->ts_ticks > TWENTY_SECONDS)
+   {
+      p->ts_ticks = TWENTY_SECONDS;
+   }
    if (p->ti == 0.0)
    {
-      p->k0 = p->kc * (+1.0 + (2.0 * p->td / p->ts));
-      p->k1 = p->kc * (-4.0 * p->td / p->ts);
-      p->k2 = p->kc * (-1.0 + (2.0 * p->td / p->ts));
+      p->k0 = p->kc * (+1.0 + (2.0 * p->td / (p->ts + 2.0 * p->k_lpf)));
+      p->k1 = p->kc * (alfa - 1.0 - (4.0 * p->td / (p->ts + 2.0 * p->k_lpf)));
+      p->k2 = p->kc * (-alfa + (2.0 * p->td / (p->ts + 2.0 * p->k_lpf)));
    }
    else
    {
-      p->k0 = p->kc * (+1.0 + (p->ts / (2.0 * p->ti)) + (2.0 * p->td / p->ts));
-      p->k1 = p->kc * ((p->ts / p->ti) -4.0 * p->td / p->ts);
-      p->k2 = p->kc * (-1.0 + (p->ts / (2.0 * p->ti)) + (2.0 * p->td / p->ts));
+      p->k0 = p->kc * (+1.0 + (p->ts / (2.0 * p->ti))
+                            + (2.0 * p->td / (p->ts + 2.0 * p->k_lpf))
+                      );
+      p->k1 = p->kc * (alfa - 1.0 +
+                       (p->ts * (alfa + 1.0) / (2.0 * p->ti)) -
+                       4.0 * p->td / (p->ts + 2.0 * p->k_lpf)
+                      );
+      p->k2 = p->kc * (-alfa + (alfa * p->ts / (2.0 * p->ti))
+                                 + (2.0 * p->td / (p->ts + 2.0 * p->k_lpf))
+                      );
    } // else
+   //--------------------------------------------------
+   // y[k] = (1- alfa)*y[k-1] + alfa*y[k-2] + ....
+   //--------------------------------------------------
+   p->lpf1 = 1.0 - alfa;
+   p->lpf2 = alfa;
 } // init_pid2()
 
 void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg)
@@ -169,9 +204,10 @@ void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg)
    ek = tset - xk;  // calculate e[k]
    if (vrg)
    {
-      *yk  = yk_2 + (p->k0 * ek); // y[k] = y[k-2] + k0 * e[k]
-      *yk += (p->k1 * ek_1);      //               + k1 * e[k-1]
-      *yk += (p->k2 * ek_2);      //               + k2 * e[k-2]
+      *yk  = p->lpf1 * yk_1 + p->lpf2 * yk_2; // y[k] = (1-alfa)*y[k-1] + alfa*y[k-2]
+      *yk += p->k0 * ek;                      //  ... + k0 * e[k]
+      *yk += p->k1 * ek_1;                    //  ... + k1 * e[k-1]
+      *yk += p->k2 * ek_2;                    //  ... + k2 * e[k-2]
    }
    else *yk = 0.0;
 
@@ -190,7 +226,6 @@ void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg)
 
    yk_2 = yk_1; // y[k-2] = y[k-1]
    yk_1 = *yk;  // y[k-1] = y[k]
-
 } // pid_reg2()
 
 void init_pid3(pid_params *p)
@@ -199,34 +234,42 @@ void init_pid3(pid_params *p)
              controller.
   Variables: p: pointer to struct containing all PID parameters
 
-                          Ts   Td                       2.Td
-             k0 = Kc.(1 + -- + --)        k1 = -Kc.(1 + ----)
-                          Ti   Ts                        Ts
+                   Kc.Ts
+             k0 =  -----   (for I-term)
+                    Ti
 
                        Td
-             k2 = Kc . --
+             k1 = Kc . --  (for D-term)
                        Ts
 
+             The LPF parameters are also initialised here:
+             lpf[k] = lpf1 * lpf[k-1] + lpf2 * lpf[k-2]
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
    p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
+   if (p->ts_ticks > TWENTY_SECONDS)
+   {
+      p->ts_ticks = TWENTY_SECONDS;
+   }
    if (p->ti == 0.0)
    {
-      p->k0 = p->kc * (1.0 + (p->td / p->ts));
+      p->k0 = 0.0;
    }
    else
    {
-      p->k0 = p->kc * (1.0 + (p->ts / p->ti) + (p->td / p->ts));
+      p->k0 = p->kc * p->ts / p->ti;
    } // else
-   p->k1 = p->kc * (-1.0 - 2.0 * p->td / p->ts);
-   p->k2 = p->kc * p->td / p->ts;
+   p->k1   = p->kc * p->td / p->ts;
+   p->lpf1 = (2.0 * p->k_lpf - p->ts) / (2.0 * p->k_lpf + p->ts);
+   p->lpf2 = p->ts / (2.0 * p->k_lpf + p->ts);
 } // init_pid3()
 
 void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg)
 /*------------------------------------------------------------------
   Purpose  : This function implements the type Allen Bradley Type A PID
-             controller.
+             controller. All terms are dependent on the error signal e[k].
+             The D term is also low-pass filtered.
              This function should be called once every TS seconds.
   Variables:
         xk : The input variable x[k] (= measured temperature)
@@ -237,19 +280,33 @@ void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg)
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
-   double ek; // e[k]
+   double ek;  // e[k]
+   double lpf; //LPF output
 
    ek = tset - xk;  // calculate e[k] = SP[k] - PV[k]
+   //--------------------------------------
+   // Calculate Lowpass Filter for D-term
+   //--------------------------------------
+   lpf = p->lpf1 * lpf_1 + p->lpf2 * (ek + ek_1);
+
    if (vrg)
    {
-      *yk += (p->k0 * ek);   // y[k] = y[k-1] + k0 * e[k]
-      *yk += (p->k1 * ek_1); //               + k1 * e[k-1]
-      *yk += (p->k2 * ek_2); //               + k2 * e[k-2]
+      //-----------------------------------------------------------
+      // Calculate PID controller:
+      // y[k] = y[k-1] + Kc*(e[k] - e[k-1] +
+      //                     Ts*e[k]/Ti +
+      //                     Td/Ts*(lpf[k] - 2*lpf[k-1]+lpf[k-2]))
+      //-----------------------------------------------------------
+      p->pp = p->kc * (ek - ek_1);  // y[k] = y[k-1] + Kc*(e[k] - e[k-1])
+      p->pi = p->k0 * ek;           //      + Kc*Ts/Ti * e[k]
+      p->pd = p->k1 * (lpf - 2.0 * lpf_1 + lpf_2);
+      *yk += p->pp + p->pi + p->pd;
    }
    else *yk = 0.0;
 
-   ek_2  = ek_1; // e[k-2] = e[k-1]
-   ek_1  = ek;   // e[k-1] = e[k]
+   ek_1  = ek;    // e[k-1] = e[k]
+   lpf_2 = lpf_1; // update stores for LPF
+   lpf_1 = lpf;
 
    // limit y[k] to GMA_HLIM and GMA_LLIM
    if (*yk > GMA_HLIM)
@@ -267,37 +324,18 @@ void init_pid4(pid_params *p)
   Purpose  : This function initialises the Allen Bradley Type C PID
              controller.
   Variables: p: pointer to struct containing all PID parameters
-
-                  Kc.Ts                      Td
-             k0 = -----            k1 = -Kc.(-- + 1)
-                    Ti                       Ts
-
-                      2.Td                Kc.Td
-             k2 = Kc.(---- + 1)    k3 = - -----
-                       Ts                   Ts
-
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
-   p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
-   if (p->ti == 0.0)
-   {
-      p->k0 = 0.0;
-   }
-   else
-   {
-      p->k0 = p->kc * p->ts / p->ti;
-   } // else
-
-   p->k1 = p->kc * (-1.0 - (p->td / p->ts));
-   p->k2 = p->kc * (+1.0 + (2.0 * p->td / p->ts));
-   p->k3 = p->kc *  -1.0 * p->td / p->ts;
+   init_pid3(p); // identical to init_pid3()
 } // init_pid4()
 
 void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
 /*------------------------------------------------------------------
   Purpose  : This function initialises the Allen Bradley Type C PID
-             controller.
+             controller, the P and D term are no longer dependent on
+             the set-point, only on PV (which is Thlt).
+             The D term is also low-pass filtered.
              This function should be called once every TS seconds.
   Variables:
         xk : The input variable x[k] (= measured temperature)
@@ -308,20 +346,33 @@ void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
-   double ek; // e[k]
+   double ek;  // e[k]
+   double lpf; //LPF output
 
    ek = tset - xk;  // calculate e[k] = SP[k] - PV[k]
+   //---------------------------------------------------------------
+   // Calculate Lowpass Filter for D-term: use x[k] instead of e[k]!
+   //---------------------------------------------------------------
+   lpf = p->lpf1 * lpf_1 + p->lpf2 * (xk + xk_1);
+
    if (vrg)
    {
-      *yk += (p->k0 * ek);   // y[k] = y[k-1] + k0 * e[k]
-      *yk += (p->k1 * xk);   //               + k1 * PV[k]
-      *yk += (p->k2 * xk_1); //               + k2 * PV[k-1]
-      *yk += (p->k3 * xk_2); //               + k2 * PV[k-2]
+      //-----------------------------------------------------------
+      // Calculate PID controller:
+      // y[k] = y[k-1] - Kc*(PV[k] - PV[k-1] +
+      //                     Ts*e[k]/Ti -
+      //                     Td/Ts*(lpf[k] - 2*lpf[k-1]+lpf[k-2]))
+      //-----------------------------------------------------------
+      p->pp = -p->kc * (xk - xk_1);  // y[k] = y[k-1] - Kc*(PVk - PVk-1)
+      p->pi = p->k0 * ek;            //      + Kc*Ts/Ti * e[k]
+      p->pd = -p->k1 * (lpf - 2.0 * lpf_1 + lpf_2);
+      *yk += p->pp + p->pi + p->pd;
    }
-   else *yk = 0.0;
+   else { *yk = p->pp = p->pi = p->pd = 0.0; }
 
-   xk_2  = xk_1; // PV[k-2] = PV[k-1]
-   xk_1  = xk;   // PV[k-1] = PV[k]
+   xk_1  = xk;    // PV[k-1] = PV[k]
+   lpf_2 = lpf_1; // update stores for LPF
+   lpf_1 = lpf;
 
    // limit y[k] to GMA_HLIM and GMA_LLIM
    if (*yk > GMA_HLIM)

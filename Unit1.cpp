@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.34  2004/05/10 20:54:29  emile
+// - Bug-fix: log-file header: '\n' was removed, is corrected now
+// - Hints added to PID dialog screen
+// - Now four PID controllers to choose from. Old ebrew version is still listed,
+//   but should not be used anymore. Simulation showed stability problems.
+//   Preferably use the type C controller.
+//
 // Revision 1.33  2004/05/08 14:52:51  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -481,6 +488,33 @@ void __fastcall TMainForm::Start_I2C_Communication(int known_status)
    } // else
 } // TMainForm::Start_I2C_Communication()
 
+void __fastcall TMainForm::print_mash_scheme_to_statusbar(void)
+/*------------------------------------------------------------------
+  Purpose  : This function prints the contents of the mash scheme
+             to the correct panel of the StatusBar object.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   char s[255] = "";
+   char s1[50] = "";
+   int  i;
+
+   for (i = 0; i < std.ms_tot ; i++)
+   {
+      sprintf(s1,"%1.0f°(%1.0f)",ms[i].temp,ms[i].time/60);
+      if (i == std.ms_tot - 1)
+      {
+         strcat(s,s1);
+      }
+      else
+      {
+         strcat(s1,", ");
+         strcat(s,s1);
+      } // else
+   } // for
+   StatusBar->Panels->Items[PANEL_MASHS]->Text = AnsiString(s);
+} // TMainForm::print_mash_scheme_to_statusbar()
+
 void __fastcall TMainForm::Main_Initialisation(void)
 /*------------------------------------------------------------------
   Purpose  : This function Initialises all I2C Hardware and checks if
@@ -507,6 +541,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
          pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
          pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
+         pid_pars.k_lpf     = Reg->ReadFloat("K_LPF");
          pid_pars.pid_model = Reg->ReadInteger("PID_Model"); // [0..3]
 
          led1 = Reg->ReadInteger("LED1"); // Read led1 from registry
@@ -574,6 +609,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    {
        MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
    } /* if */
+   print_mash_scheme_to_statusbar();
    Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
 
    try
@@ -666,6 +702,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
   Returns  : None
   ------------------------------------------------------------------*/
 {
+   char s[50];
    ebrew_revision   = "$Revision$";
    ShowDataGraphs   = new TShowDataGraphs(this);   // create modeless Dialog
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
@@ -688,9 +725,11 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("Kc",KC_INIT);       // Controller gain
           Reg->WriteFloat("Ti",TI_INIT);       // Ti constant
           Reg->WriteFloat("Td",TD_INIT);       // Td constant
+          Reg->WriteFloat("K_LPF",0);          // LPF filter time-constant
           Reg->WriteFloat("TOffset",1.0);      // HLT - MLT heat loss
           Reg->WriteFloat("TOffset2",-0.5);    // offset for early start of mash timers
           Reg->WriteInteger("PID_Model",0);    // Type A PID Controller
+          Reg->WriteString("SERVER_NAME","PC-EMILE"); // Server to connect to
 
           //-------------------------------------------------------
           // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
@@ -750,6 +789,8 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
           volumes.Vboil_simulated = true;
           Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
+          cb_pid_dbg = false;
+          PID_dbg->Visible = false;
        } // if
        Reg->CloseKey();
        delete Reg;
@@ -760,6 +801,16 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
        delete Reg;
        return;
     } // catch
+    //-------------------------------------
+    // Set rev. number in Tstatusbar panel
+    //-------------------------------------
+    NetworkDisconnect1Click(NULL);
+    network_init = true;
+    strcpy(s,"ebrew revision ");
+    strncat(s,&ebrew_revision[11],4); // extract the CVS revision number
+    s[19] = '\0';
+    StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(s);
+
     Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
     //----------------------------------------
     // Init. volumes. Should be done only once
@@ -800,8 +851,10 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->Kc_Edit->Text        = AnsiString(Reg->ReadFloat("Kc"));
          ptmp->Ti_Edit->Text        = AnsiString(Reg->ReadFloat("Ti"));
          ptmp->Td_Edit->Text        = AnsiString(Reg->ReadFloat("Td"));
+         ptmp->K_LPF_Edit->Text     = AnsiString(Reg->ReadFloat("K_LPF"));
          ptmp->PID_Model->ItemIndex = Reg->ReadInteger("PID_Model");
          ptmp->RG2->ItemIndex       = time_switch; // Value of time-switch [off, on]
+         ptmp->CB_PID_dbg->Checked  = cb_pid_dbg;   // PID debug info
          if (time_switch)
          {
             ptmp->Date_Edit->Text = DateToStr(dt_time_switch);
@@ -819,6 +872,8 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteFloat("Ti",pid_pars.ti);
             pid_pars.td = ptmp->Td_Edit->Text.ToDouble();
             Reg->WriteFloat("Td",pid_pars.td);
+            pid_pars.k_lpf = ptmp->K_LPF_Edit->Text.ToDouble();
+            Reg->WriteFloat("K_LPF",pid_pars.k_lpf);
             pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
             switch (pid_pars.pid_model)
             {
@@ -830,6 +885,9 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
                         init_pid4(&pid_pars); break; // Allen Bradley Type C controller
             } // switch
             Reg->WriteInteger("PID_Model",pid_pars.pid_model);
+            cb_pid_dbg  = ptmp->CB_PID_dbg->Checked; // PID debug info
+            PID_dbg->Visible = cb_pid_dbg;
+
             time_switch = ptmp->RG2->ItemIndex; // 0 = off, 1 = on
             if (time_switch)
             {
@@ -930,6 +988,7 @@ void __fastcall TMainForm::exit_ebrew(void)
          MessageBox(NULL,s,"ERROR",MB_OK);
       } // if
    } // if
+   NetworkDisconnect1Click(NULL); // close network connections
 
    try
    {
@@ -1343,6 +1402,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
              50 milliseconds. This can be seen as the main control
              loop of the program. It utilises time-slices to divide
              computations over time.
+             After 5 seconds (100 calls) the main control loop
+             starts again
   Returns  : None
   ------------------------------------------------------------------*/
 {
@@ -1355,15 +1416,14 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // This is the main control loop, executed once every 50 msec.
    // Do some time-slicing to reduce #computations in one loop.
    // Every time-slice is executed once every TS seconds.
-   // tmr.pid_tmr runs from 1 to pid_pars.ts_ticks
+   // tmr.pid_tmr runs from 1 to TWENTY_SECONDS
    //--------------------------------------------------------------
-   tmr.pid_tmr++; // increment timer
 
    //----------------------------------------------------------------
    // TIME-SLICE: this time-slice is executed once every second.
    //             Read AD-Converters and call MA filter for Vmlt.
    //----------------------------------------------------------------
-   if (tmr.pid_tmr % 20 == 1)
+   if (tmr.pid_tmr % ONE_SECOND == 1)
    {
        // Read values from all AD Coverters
        if (hw_status & ADDA_OK)
@@ -1415,7 +1475,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // TIME-SLICE: this time-slice is executed once every second.
    //             It reads the LM92 temperature sensor (HLT)
    //----------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 2)
+   else if (tmr.pid_tmr % ONE_SECOND == 2)
    {
        if (hw_status & LM92_1_OK)
        {
@@ -1440,7 +1500,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // TIME-SLICE: this time-slice is executed once every second.
    //             It reads the LM92 temperature sensor (MLT)
    //----------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 3)
+   else if (tmr.pid_tmr % ONE_SECOND == 3)
    {
        if (hw_status & LM92_2_OK)
        {
@@ -1463,9 +1523,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
 
    //-----------------------------------------------------------------------
    // TIME-SLICE: Time switch controller. Enable PI controller
-   // [5 sec.]    if current date & time matches the date & time set.
+   // [TS sec.]   if current date & time matches the date & time set.
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr == 4)
+   else if (tmr.pid_tmr % pid_pars.ts_ticks == 4)
    {
       // Only useful if PID controller is disabled AND time_switch is enabled
       if ((PID_RB->ItemIndex != 1) && (time_switch == 1))
@@ -1495,19 +1555,22 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          gamma = swfx.gamma_fx; // fix gamma
       } // if
-      /*------------------------------------------------*/
-      /* Now calculate high and low time for the timers */
-      /* Needed for Generate_IO_Signals();              */
-      /*------------------------------------------------*/
-      tmr.time_high = (int)((gamma * pid_pars.ts_ticks) / 100);
-      tmr.time_low  = pid_pars.ts_ticks - tmr.time_high;
 
+      //--------------------------------------------------------------------
+      // Now calculate high and low time for the timers
+      // The Gamma is a value between 0-100%. The Gamma signal has a
+      // period of 5 seconds, which is 100 * 50 msec.
+      // Therefore every percent corresponds to one period of 50 msec.
+      // These timer values are needed for Generate_IO_Signals();
+      //--------------------------------------------------------------------
+      tmr.time_high = (int)gamma;
+      tmr.time_low  = 100 - tmr.time_high;
    } // else if
 
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 5)
+   else if (tmr.pid_tmr % ONE_SECOND == 5)
    {
       // Now update the LEDs with the proper values by calling macro SET_LED
       //      HW_BIT, which display, which var., Visibility, LEDx_BASE
@@ -1517,7 +1580,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 6)
+   else if (tmr.pid_tmr % ONE_SECOND == 6)
    {
       SET_LED(LED2_OK,2,led2,led2_vis,LED2_BASE);
    } // else if
@@ -1525,7 +1588,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 7)
+   else if (tmr.pid_tmr % ONE_SECOND == 7)
    {
       SET_LED(LED3_OK,3,led3,led3_vis,LED3_BASE);
    } // else if
@@ -1533,7 +1596,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 8)
+   else if (tmr.pid_tmr % ONE_SECOND == 8)
    {
       SET_LED(LED4_OK,4,led4,led4_vis,LED4_BASE);
    } // else if
@@ -1542,7 +1605,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // TIME-SLICE: Calculate State Transition Diagram (STD) and determine
    //             new settings of the valves (every second)
    //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr % 20 == 9)
+   else if (tmr.pid_tmr % ONE_SECOND == 9)
    {
       int std_tmp;
       if (swfx.std_sw)
@@ -1572,9 +1635,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    } // else if
 
    //--------------------------------------------------------------------------
-   // LAST TIME-SLICE
+   // Reset timer if necessary
    //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr == pid_pars.ts_ticks)
+   if (++tmr.pid_tmr > TWENTY_SECONDS)
    {
       tmr.pid_tmr = 1; // reset timer
    } // else if
@@ -1614,6 +1677,7 @@ void __fastcall TMainForm::MenuEditMashSchemeClick(TObject *Sender)
       {
           MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
       } /* if */
+      print_mash_scheme_to_statusbar();
    } // if
    delete ptmp;
    ptmp = 0; // NULL the pointer
@@ -1932,9 +1996,36 @@ void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
 } // TMainForm::ReadLogFile1Click()
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::network_handler(void)
+{
+   AnsiString s;
+
+   if (network_init == true)
+   {
+      // Start with check on revision numbers
+      if (IsServer)
+      {
+         ServerSocket1->Socket->Connections[0]->SendText(ebrew_revision);
+      }
+      else do
+      {
+         s = ClientSocket1->Socket->ReceiveText();
+      }
+      while (s.Length() == 0);
+      if (!s.AnsiCompare(ebrew_revision))
+      {
+         Application->MessageBox("Both ebrew revisions should be the same!","ERROR",MB_OK);
+         NetworkDisconnect1Click(NULL);
+      } // if
+      network_init = false;
+   } // if
+} // TMainForm::network_handler()
+
 void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
 {
    char tmp_str[80];   // temp string for calculations
+   int  p;             // temp. variable
+   int  i;             // temp. variable
 
    sprintf(tmp_str,"%4.2f",thlt);   // Display Thlt value on screen
    Val_Thlt->Caption    = tmp_str;
@@ -2066,6 +2157,43 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
       case V7b      : V7->Caption = V71ATXT; break;
       default       : V7->Caption = V70ATXT; break;
    } // switch
+
+   //-------------------------------------------
+   // Debug PID Controller
+   //-------------------------------------------
+   if (cb_pid_dbg)
+   {
+      sprintf(tmp_str,"%6.2f %6.2f %6.2f %6.2f %6.2f",pid_pars.pp,
+                                                     pid_pars.pi,
+                                                     pid_pars.pd,
+                                                     pid_pars.pp+pid_pars.pi+pid_pars.pd,
+                                                     gamma);
+      PID_dbg->Caption = tmp_str;
+   } // if
+
+   //-------------------------------------------
+   // Update the various panels of the Statusbar
+   //-------------------------------------------
+   sprintf(tmp_str,"ms_idx = %d",std.ms_idx);
+   StatusBar->Panels->Items[PANEL_MSIDX]->Text = AnsiString(tmp_str);
+   sprintf(tmp_str,"sp_idx = %d",std.sp_idx);
+   StatusBar->Panels->Items[PANEL_SPIDX]->Text = AnsiString(tmp_str);
+   strcpy(tmp_str,"V7 [");
+   p = 128;
+   for (i = 7; i > 0; i--)
+   {  // cycle through the 7 valve bits V7..V1
+      std_out & p ? strcat(tmp_str,"1") : strcat(tmp_str,"0");
+      p = p / 2; // decrease power of 2
+   } // for
+   strcat(tmp_str,"] V1");
+   StatusBar->Panels->Items[PANEL_VALVE]->Text = AnsiString(tmp_str);
+   //-------------------------------------------
+   // Communication with another PC
+   //-------------------------------------------
+   if (network_alive)
+   {
+      network_handler();
+   } // if
 } // ebrew_idle_handler()
 
 void __fastcall TMainForm::FormCreate(TObject *Sender)
@@ -2221,17 +2349,134 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
 void __fastcall TMainForm::Contents1Click(TObject *Sender)
 {
    Application->HelpCommand(HELP_FINDER,0);
-}
+} // TMainForm::Contents1Click()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::HowtoUseHelp1Click(TObject *Sender)
 {
    Application->HelpCommand(HELP_HELPONHELP,0);
-}
+} // TMainForm::HowtoUseHelp1Click()
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::ServerSocket1Listen(TObject *Sender,
+      TCustomWinSocket *Socket)
+{
+   char s[100];
+   sprintf(s,"Listening on Port %d...",ServerSocket1->Port);
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = AnsiString(s);
+} // ServerSocket1Listen()
+//---------------------------------------------------------------------------
 
+void __fastcall TMainForm::Connect1Click(TObject *Sender)
+{
+   AnsiString Server; // computer name of network computer
+   TRegistry *Reg = new TRegistry();
 
+   NetworkDisconnect1Click(NULL);
+   // Get Server Name from the Registry
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+         Server = Reg->ReadString("SERVER_NAME");
+         if (InputQuery("Computer to connect to: ","Address Name: ",Server))
+         {
+            if (Server.Length() > 0)
+            {
+               Reg->WriteString("SERVER_NAME",Server);
+               ClientSocket1->Host   = Server;
+               ClientSocket1->Active = true;
+            } // if
+         } //if
+         Reg->CloseKey(); // Close the Registry
+      } // if
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+   delete Reg; // Clean up
+} // TMainForm::Connect1Click()
+//---------------------------------------------------------------------------
 
+void __fastcall TMainForm::NetworkListening1Click(TObject *Sender)
+{
+   NetworkDisconnect1Click(NULL);
+   ServerSocket1->Active = true; // start listening on Port 1008
+} // TMainForm::NetworkListening1Click()
+//---------------------------------------------------------------------------
 
+void __fastcall TMainForm::NetworkDisconnect1Click(TObject *Sender)
+{
+   if (ClientSocket1->Active)
+   {
+      ClientSocket1->Close();
+   } // if
+   if (ServerSocket1->Active)
+   {
+      ServerSocket1->Close();
+   } // if
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Disconnected from network";
+   network_alive = false;
+} // TMainForm::NetworkDisconnect1Click()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::ClientSocket1Connect(TObject *Sender,
+      TCustomWinSocket *Socket)
+{
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Connected to " + Socket->RemoteHost;
+   IsServer      = false;
+   network_alive = true;
+} // TMainForm::ClientSocket1Connect()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::ClientSocket1Disconnect(TObject *Sender,
+      TCustomWinSocket *Socket)
+{
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Disconnected from network";
+} // TMainForm::ClientSocket1Disconnect()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::ServerSocket1ClientDisconnect(TObject *Sender,
+      TCustomWinSocket *Socket)
+{
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Disconnected from network";
+} // TMainForm::ServerSocket1ClientDisconnect()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::ClientSocket1Connecting(TObject *Sender,
+      TCustomWinSocket *Socket)
+{
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Now connecting to " + Socket->RemoteHost;
+} // TMainForm::ClientSocket1Connecting()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::ServerSocket1ClientConnect(TObject *Sender,
+      TCustomWinSocket *Socket)
+{
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Connected to " + Socket->RemoteHost;
+   IsServer      = true;
+   network_alive = true;
+} // TMainForm::ServerSocket1ClientConnect()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::ClientSocket1Error(TObject *Sender,
+      TCustomWinSocket *Socket, TErrorEvent ErrorEvent, int &ErrorCode)
+{
+   char s[50];
+
+   switch (ErrorEvent)
+   {
+      case eeSend      : strcpy(s,"Send error");    break;
+      case eeReceive   : strcpy(s,"Read error");    break;
+      case eeConnect   : strcpy(s,"Request could not be completed"); break;
+      case eeDisconnect: strcpy(s,"Error when closing a connection"); break;
+      case eeAccept    : strcpy(s,"Error when accepting a request"); break;
+      default          : strcpy(s,"General error"); break;
+   } // switch
+   ErrorCode = 0; // prevent exception
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = AnsiString(s);
+} // TMainForm::ClientSocket1Error()
+//---------------------------------------------------------------------------
 

@@ -5,6 +5,13 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.6  2004/05/10 20:54:30  emile
+  - Bug-fix: log-file header: '\n' was removed, is corrected now
+  - Hints added to PID dialog screen
+  - Now four PID controllers to choose from. Old ebrew version is still listed,
+    but should not be used anymore. Simulation showed stability problems.
+    Preferably use the type C controller.
+
   Revision 1.5  2004/05/08 14:52:52  emile
   - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
     tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -50,6 +57,11 @@
 extern "C" {
 #endif
 
+// These defines are needed for loop timing and PID controller timing
+#define TWENTY_SECONDS (400)
+#define TEN_SECONDS    (200)
+#define FIVE_SECONDS   (100)
+#define ONE_SECOND      (20)
 #define T_50MSEC  (50)   // Period time of TTimer in msec.
 
 #define GMA_HLIM (100.0) // PID controller upper limit [%]
@@ -61,12 +73,18 @@ typedef struct _pid_params
    double ti; // Time-constant for I action from Dialog Box
    double td; // Time-constant for D action from Dialog Box
    double ts; // Sample time [sec.] from Dialog Box
+   double k_lpf; // Time constant [sec.] for LPF filter
    double k0; // k0 value for PID controller
    double k1; // k1 value for PID controller
    double k2; // k2 value for PID controller
    double k3; // k3 value for PID controller
+   double lpf1; // value for LPF filter
+   double lpf2; // value for LPF filter
    int    ts_ticks;  // ticks for timer
    int    pid_model; // PID Controller type [0..3]
+   double pp; // debug
+   double pi; // debug
+   double pd; // debug
 } pid_params; // struct pid_params
 
 //--------------------

@@ -6,6 +6,20 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.11  2004/05/08 14:52:52  emile
+// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+// - View mash progress screen: reorganised, pre-heat timers added, timers are now
+//   in seconds instead of minutes.
+// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+// - 'Apply' Button added to Fix parameters dialog screen.
+// - 'Edit mash scheme' no longer resets the (running) mash timers
+// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+//   also removed.
+// - Changing init. volume of HLT did not result in an update on screen. Corrected.
+//
 // Revision 1.10  2004/05/05 15:44:16  emile
 // - Main Screen picture update
 // - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
@@ -182,7 +196,7 @@ typedef struct _timer_vars
    int  pid_tmr;   // Timer for when to run PID controller
 } timer_vars;
 
-#define MAX_MA (20)
+#define MAX_MA (50)
 typedef struct _ma
 {
    double T[MAX_MA]; // array with delayed values of input signal
