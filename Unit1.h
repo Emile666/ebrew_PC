@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2003/01/04 22:35:50  emile
+// - Restore Settings function now restores all relevant variables (not just
+//   the mashing variables). Several separate functions are created to
+//   support this.
+//
 // Revision 1.3  2002/12/30 20:21:59  emile
 // - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
 // - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
@@ -124,6 +129,7 @@ __published:	// IDE-managed Components
         void __fastcall OFF1Click(TObject *Sender);
         void __fastcall ON1Click(TObject *Sender);
         void __fastcall PopupMenu1Popup(TObject *Sender);
+        void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
 private:	// User declarations
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);

@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2003/01/04 22:35:49  emile
+// - Restore Settings function now restores all relevant variables (not just
+//   the mashing variables). Several separate functions are created to
+//   support this.
+//
 // Revision 1.3  2002/12/30 20:21:58  emile
 // - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
 // - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
@@ -1408,5 +1413,11 @@ void __fastcall TMainForm::PopupMenu1Popup(TObject *Sender)
       else PopupMenu1->Items->Items[0]->Checked = true; // Auto
    }
 }  // TMainForm::PopupMenu1Popup()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::FormClose(TObject *Sender, TCloseAction &Action)
+{
+   MenuFileExitClick(Sender);
+}
 //---------------------------------------------------------------------------
 
