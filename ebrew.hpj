@@ -20,6 +20,7 @@ IDH_EditMashScheme=0x10040
 IDH_FixParameters=0x10050
 IDH_HardwareSettings=0x10090
 IDH_HelpContents=0x10000
+IDH_Measurements=0x100D0
 IDH_PIDSettings=0x100A0
 IDH_ReadLogFile=0x10020
 IDH_SpargeSTDSettings=0x100B0

@@ -5,6 +5,18 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2004/03/10 10:10:38  emile
+// - Reduced complexity of several routines:
+//   - T50msecTimer split, new routine Generate_IO_Signals added
+//   - PopupMenu1Popup now uses (new) macro SET_POPUPMENU
+//   - Reset_I2C_Bus now included in SET_LED macro
+// - Every I2C write action now in a separate time-slice to avoid
+//   I2C bus errors if fscl is low
+// - This is the first version where the help file function is enabled
+//   - All help buttons and F1 function key are operational
+//   - Help file sources: ebrew.rtf and ebrew.hpj are added to CVS
+// - ad1, ad2 and ad3 variables -> thlt, tmlt and ttriac (new variables)
+//
 // Revision 1.6  2004/02/22 12:56:44  emile
 // - SCL clock frequency now adjustable. Following changes are made:
 //   - New Registry value: FSCL_PRESCALER
@@ -63,10 +75,6 @@ __published:	// IDE-managed Components
         TButton *Help_Button;
         TRadioGroup *RG1;
         TRadioGroup *RG2;
-        TLabel *Vref1_Label;
-        TEdit *Vref1_edit;
-        TLabel *Vref2_label;
-        TEdit *Vref2_edit;
         TEdit *HW_Base_Edit;
         TLabel *HW_base_lbl;
         TLabel *hex_lbl;
@@ -76,16 +84,6 @@ __published:	// IDE-managed Components
         TUpDown *UpDown2;
         TEdit *Vis2_Edit;
         TLabel *Label1;
-        TLabel *Vref3_Label;
-        TLabel *Vref4_Label;
-        TEdit *Vref3_edit;
-        TEdit *Vref4_edit;
-        TLabel *Label2;
-        TEdit *DAC_edit;
-        TUpDown *UpDown3;
-        TLabel *Label3;
-        TUpDown *UpDown4;
-        TEdit *NMA_edit;
         TLabel *Label4;
         TLabel *Label5;
         TRadioGroup *RG3;
@@ -98,11 +96,6 @@ __published:	// IDE-managed Components
         TLabel *Label6;
         TEdit *Tllim_edit;
         TLabel *Label7;
-        TCheckBox *Vhlt_simulated;
-        TGroupBox *GroupBox1;
-        TCheckBox *Vboil_simulated;
-        TEdit *Vhlt_init_Edit;
-        TLabel *Label8;
         TCheckBox *cb_i2c_err_msg;
         TLabel *Label9;
         TLabel *Label10;

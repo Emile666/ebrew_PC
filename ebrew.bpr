@@ -17,11 +17,13 @@ PROJECT = ebrew.exe
 OBJFILES = O\ebrew.obj O\Unit1.obj O\PID_Settings_Dialog.obj O\FixParamsDialog.obj \
   O\I2CSettingsDialog.obj O\MISC.obj O\PID_REG.obj O\EditMashScheme.obj \
   O\ViewMashProgressForm.obj O\DataGraphForm.obj O\Sparge_Settings.obj \
-  O\i2c_dll.obj O\RestoreSettings.obj O\VersionAwareAbout.obj
+  O\i2c_dll.obj O\RestoreSettings.obj O\VersionAwareAbout.obj \
+  O\MeasurementsDialog.obj
 RESFILES = ebrew.res
 RESDEPEN = $(RESFILES) Unit1.dfm PID_Settings_Dialog.dfm FixParamsDialog.dfm \
   I2CSettingsDialog.dfm EditMashScheme.dfm ViewMashProgressForm.dfm \
-  DataGraphForm.dfm Sparge_Settings.dfm RestoreSettings.dfm VersionAwareAbout.dfm
+  DataGraphForm.dfm Sparge_Settings.dfm RestoreSettings.dfm VersionAwareAbout.dfm \
+  MeasurementsDialog.dfm
 LIBFILES =
 LIBRARIES = Vcwb4.lib AnimTimer.lib
 SPARELIBS = VCL40.lib VCLJPG40.lib AnimTimer.lib bcbsmp40.lib VCLX40.lib Vcwb4.lib

@@ -6,6 +6,18 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.22  2004/03/10 10:10:39  emile
+// - Reduced complexity of several routines:
+//   - T50msecTimer split, new routine Generate_IO_Signals added
+//   - PopupMenu1Popup now uses (new) macro SET_POPUPMENU
+//   - Reset_I2C_Bus now included in SET_LED macro
+// - Every I2C write action now in a separate time-slice to avoid
+//   I2C bus errors if fscl is low
+// - This is the first version where the help file function is enabled
+//   - All help buttons and F1 function key are operational
+//   - Help file sources: ebrew.rtf and ebrew.hpj are added to CVS
+// - ad1, ad2 and ad3 variables -> thlt, tmlt and ttriac (new variables)
+//
 // Revision 1.21  2004/02/25 18:51:05  emile
 // - Separate Start_I2C_Communication routine created
 // - 'T50msec->Enabled = False' removed. This caused lots of problems. Once
@@ -280,6 +292,7 @@ __published:	// IDE-managed Components
         TVrTank *Tank_Boil;
         TvrThermoMeter *tm_triac;
         TVrPowerMeter *Heater;
+        TMenuItem *Measurements;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -298,6 +311,7 @@ __published:	// IDE-managed Components
         void __fastcall ReadLogFile1Click(TObject *Sender);
         void __fastcall FormCreate(TObject *Sender);
         void __fastcall MenuView_I2C_HW_DevicesClick(TObject *Sender);
+        void __fastcall MeasurementsClick(TObject *Sender);
 private:	// User declarations
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall Start_I2C_Communication(int known_status);
@@ -309,7 +323,9 @@ private:	// User declarations
         void __fastcall Generate_IO_Signals(void);
         timer_vars      tmr;        // struct with timer variables
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
-        ma              str_vmlt;   // Struct for MA5 filter for pressure transducer
+        ma              str_vmlt;   // Struct for MA5 filter for MLT volume
+        ma              str_thlt;   // Struct for MA5 filter for HLT temperature
+        ma              str_tmlt;   // Struct for MA5 filter for MLT temperature
         int             led1;       // Which variable to display?
         int             led2;       //
         int             led3;       //
@@ -325,6 +341,8 @@ private:	// User declarations
         bool            power_up_flag;  // true = power-up
         int             known_hw_devices; // list of known I2C hardware devices  
         int             fscl_prescaler;   // index into PCF8584 prescaler values, see i2c_dll.cpp
+        double          thlt_offset;      // calibration offset to add to Thlt measurement
+        double          tmlt_offset;      // calibration offset to add to Tmlt measurement
 public:		// User declarations
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output

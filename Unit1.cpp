@@ -6,6 +6,18 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.28  2004/03/10 10:10:38  emile
+// - Reduced complexity of several routines:
+//   - T50msecTimer split, new routine Generate_IO_Signals added
+//   - PopupMenu1Popup now uses (new) macro SET_POPUPMENU
+//   - Reset_I2C_Bus now included in SET_LED macro
+// - Every I2C write action now in a separate time-slice to avoid
+//   I2C bus errors if fscl is low
+// - This is the first version where the help file function is enabled
+//   - All help buttons and F1 function key are operational
+//   - Help file sources: ebrew.rtf and ebrew.hpj are added to CVS
+// - ad1, ad2 and ad3 variables -> thlt, tmlt and ttriac (new variables)
+//
 // Revision 1.27  2004/02/25 18:51:05  emile
 // - Separate Start_I2C_Communication routine created
 // - 'T50msec->Enabled = False' removed. This caused lots of problems. Once
@@ -176,6 +188,7 @@
 #include "FixParamsDialog.h"
 #include "PID_Settings_Dialog.h"
 #include "I2CSettingsDialog.h"
+#include "MeasurementsDialog.h"
 #include "EditMashScheme.h"
 #include "ViewMashProgressForm.h"
 #include "DataGraphForm.h"
@@ -470,20 +483,26 @@ void __fastcall TMainForm::Main_Initialisation(void)
          led3_vis = Reg->ReadInteger("LED3_VIS"); // Read led3 Visibility
          led4_vis = Reg->ReadInteger("LED4_VIS"); // Read led4 Visibility
 
-         padc.vref1 = Reg->ReadInteger("VREF1"); // Read Vref1 from registry
-         padc.vref2 = Reg->ReadInteger("VREF2"); // Read Vref2 from registry
-         padc.vref3 = Reg->ReadInteger("VREF3"); // Read Vref3 from registry
-         padc.vref4 = Reg->ReadInteger("VREF4"); // Read Vref4 from registry
-         padc.dac   = Reg->ReadInteger("DAC");   // Read DAC Value
+         padc.vref1 = Reg->ReadInteger("VREF1"); // Read Vref1 [Future use]
+         padc.vref2 = Reg->ReadInteger("VREF2"); // Read Vref2 [Future use]
 
+         padc.vref3  = Reg->ReadInteger("VREF3"); // Full-Scale value for Triac Temperature
          ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
-         tm_triac->SetPoint->Value = ttriac_hlim;
+         tm_triac->SetPoint->Value = ttriac_hlim;       // update object on screen
          ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
 
          volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
          volumes.Vhlt_simulated  = Reg->ReadBool("VHLT_SIMULATED");
          volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
          cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG"); // display message
+
+         init_ma(&str_thlt,Reg->ReadInteger("MA_THLT")); // MA filter for Thlt
+         thlt_offset = Reg->ReadFloat("THLT_OFFSET");    // offset calibration
+         init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT")); // MA filter for Tmlt
+         tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");    // offset calibration
+         init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT")); // MA filter for Vmlt
+         padc.vref4 = Reg->ReadInteger("VREF4"); // Full-Scale value for Vmlt
+         padc.dac   = Reg->ReadInteger("DAC");   // DAC value for offset compensation of Vmlt
 
          Reg->CloseKey();      // Close the Registry
          init_adc(&padc);      // Calculate ADC conversion constants
@@ -548,10 +567,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    tmr.time_high = tmr.time_low = 0;  // init. time bit = 1
    tmr.alive     = tmr.alive_tmr = 0; // init. alive timers
    tmr.pid_tmr   = 1; // init. timer that controls PID controller timing
-
-   // Init. 5th order Moving Average (MA) filter for pressure transducer
-   //-------------------------------------------------------------------
-   init_ma(&str_vmlt,5); // 5th order MA filter
 
    //--------------------------------------------------------------------------
    // Init. the position of all valves & the Pump to OFF (closed).
@@ -648,12 +663,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
           ttriac_llim = 60; // Lower limit for triac temp.
           Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
-          volumes.Vhlt_start = 90; // Starting volume of HLT
-          Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
-          volumes.Vhlt_simulated  = true;
-          Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
-          volumes.Vboil_simulated = true;
-          Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
           cb_i2c_err_msg          = true;
           Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
           known_hw_devices = DIG_IO_LSB_OK | LED1_OK | LED2_OK   | LED3_OK |
@@ -667,7 +676,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("VREF4",VREF_INIT); // init. ADC4 VREF
           Reg->WriteInteger("DAC",0);           // Init. DA Converter
           Reg->WriteInteger("TOffset",3);       // HLT - MLT heat loss
-          Reg->WriteInteger("Mash_Control",1);  // 0 = Tad1, 1 = Tad2
+          Reg->WriteInteger("Mash_Control",1);  // 0 = Thlt, 1 = Tmlt
           // Init values for Sparge Settings
           Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
           Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
@@ -681,6 +690,18 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("TO_XSEC",1);     // TIMEOUT_xSEC [sec]
           Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
           Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
+          // Measurements
+          Reg->WriteInteger("MA_THLT",1);      // Order MA filter Thlt
+          Reg->WriteFloat("THLT_OFFSET",0.0); // Offset for Thlt
+          Reg->WriteInteger("MA_TMLT",1);      // Order MA filter Tmlt
+          Reg->WriteFloat("TMLT_OFFSET",0.0); // Offset for Tmlt
+          Reg->WriteInteger("MA_VMLT",1);      // Order MA filter Vmlt
+          volumes.Vhlt_start = 90; // Starting volume of HLT
+          Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
+          volumes.Vhlt_simulated  = true;
+          Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
+          volumes.Vboil_simulated = true;
+          Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
        } // if
        Reg->CloseKey();
        delete Reg;
@@ -1008,12 +1029,16 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
       if (Reg->KeyExists(REGKEY))
       {
          Reg->OpenKey(REGKEY,FALSE);
+
          x1 = Reg->ReadInteger("I2C_Base");  // Read HW IO address as an int.
          ptmp->HW_Base_Edit->Text = IntToHex(x1,3);
+
          known_hw_devices            = Reg->ReadInteger("KNOWN_HW_DEVICES");
          ptmp->Hw_devices_Edit->Text = IntToHex(known_hw_devices,3);
+
          fscl_prescaler              = Reg->ReadInteger("FSCL_PRESCALER");
          ptmp->fscl_combo->ItemIndex = fscl_prescaler;
+
          led1 = Reg->ReadInteger("LED1");     // Read LED1 from registry
          ptmp->RG1->ItemIndex = led1;         // Set radio-button
          led2 = Reg->ReadInteger("LED2");     // Read LED2 from registry
@@ -1022,6 +1047,7 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          ptmp->RG3->ItemIndex = led3;         // Set radio-button
          led4 = Reg->ReadInteger("LED4");     // Read LED4 from registry
          ptmp->RG4->ItemIndex = led4;         // Set radio-button
+
          led1_vis = Reg->ReadInteger("LED1_VIS"); // Read LED1 Visibility
          ptmp->UpDown1->Position = led1_vis;
          led2_vis = Reg->ReadInteger("LED2_VIS"); // Read LED2 Visibility
@@ -1031,23 +1057,10 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          led4_vis = Reg->ReadInteger("LED4_VIS"); // Read LED4 Visibility
          ptmp->UpDown6->Position = led4_vis;
 
-         ptmp->Vref1_edit->Text  = AnsiString(padc.vref1);
-         ptmp->Vref2_edit->Text  = AnsiString(padc.vref2);
-         ptmp->Vref3_edit->Text  = AnsiString(padc.vref3);
-         ptmp->Vref4_edit->Text  = AnsiString(padc.vref4);
-         ptmp->UpDown3->Position = padc.dac;   // value for DA Converter
-         ptmp->UpDown4->Position = str_vmlt.N; // order of MA filter
-
          ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM");
          ptmp->Thlim_edit->Text  = AnsiString(ttriac_hlim);
          ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM");
          ptmp->Tllim_edit->Text  = AnsiString(ttriac_llim);
-         volumes.Vhlt_start = Reg->ReadInteger("VHLT_START");
-         ptmp->Vhlt_init_Edit->Text = AnsiString(volumes.Vhlt_start);
-         volumes.Vhlt_simulated = Reg->ReadBool("VHLT_SIMULATED");
-         ptmp->Vhlt_simulated->Checked = volumes.Vhlt_simulated;
-         volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
-         ptmp->Vboil_simulated->Checked = volumes.Vboil_simulated;
          cb_i2c_err_msg = Reg->ReadBool("CB_I2C_ERR_MSG");
          ptmp->cb_i2c_err_msg->Checked = cb_i2c_err_msg;
 
@@ -1094,29 +1107,12 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
             led4_vis = ptmp->Vis4_Edit->Text.ToInt();
             Reg->WriteInteger("LED4_VIS",led4_vis);
 
-            padc.vref1 = ptmp->Vref1_edit->Text.ToInt();
-            padc.vref2 = ptmp->Vref2_edit->Text.ToInt();
-            padc.vref3 = ptmp->Vref3_edit->Text.ToInt();
-            padc.vref4 = ptmp->Vref4_edit->Text.ToInt();
-            padc.dac   = ptmp->DAC_edit->Text.ToInt();  // DAC value
-            init_ma(&str_vmlt,ptmp->NMA_edit->Text.ToInt()); // order of MA filter
-            Reg->WriteInteger("VREF1",padc.vref1);
-            Reg->WriteInteger("VREF2",padc.vref2);
-            Reg->WriteInteger("VREF3",padc.vref3);
-            Reg->WriteInteger("VREF4",padc.vref4);
-            Reg->WriteInteger("DAC"  ,padc.dac);
-
             ttriac_hlim = ptmp->Thlim_edit->Text.ToInt();
             Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
             tm_triac->SetPoint->Value = ttriac_hlim;
             ttriac_llim = ptmp->Tllim_edit->Text.ToInt();
             Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
-            volumes.Vhlt_start = ptmp->Vhlt_init_Edit->Text.ToInt();
-            Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
-            volumes.Vhlt_simulated = ptmp->Vhlt_simulated->Checked;
-            Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
-            volumes.Vboil_simulated = ptmp->Vboil_simulated->Checked;
-            Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
+
             cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
             Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
 
@@ -1136,7 +1132,6 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                   Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
                } // else
             } // if
-            init_adc(&padc); // recalculate conversion constants
          } // if
          Reg->CloseKey(); // Close the Registry
       } // if
@@ -1352,6 +1347,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
 {
    int        err = 0;       // error return value, needed for SET_LED macro
    TDateTime  td_now;        // holds current date and time
+   double     thlt_unf;      // unfiltered version of thlt
+   double     tmlt_unf;      // unfiltered version of tmlt
 
    //--------------------------------------------------------------
    // This is the main control loop, executed once every 50 msec.
@@ -1419,16 +1416,18 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //----------------------------------------------------------------
    else if (tmr.pid_tmr % 20 == 2)
    {
-       //-----------------------------------------------------------------
-       // If a LM92 is connected, overwrite the LM35 values on AD1 and AD2
-       //-----------------------------------------------------------------
        if (hw_status & LM92_1_OK)
        {
-          thlt = lm92_read(0); // Read HLT temp. from LM92 device
-          if (thlt == LM92_ERR)
+          thlt_unf = lm92_read(0); // Read HLT temp. from LM92 device
+          if (thlt_unf == LM92_ERR)
           {
              Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
           } // if
+          else
+          {
+             thlt_unf += thlt_offset; // add calibration offset
+             thlt = moving_average(&str_thlt,thlt_unf); // MA-filter
+          } // else
        } // if
        if (swfx.thlt_sw)
        {
@@ -1444,11 +1443,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    {
        if (hw_status & LM92_2_OK)
        {
-          tmlt = lm92_read(1); // Read MLT temp. from LM92 device
-          if (tmlt == LM92_ERR)
+          tmlt_unf = lm92_read(1); // Read MLT temp. from LM92 device
+          if (tmlt_unf == LM92_ERR)
           {
              Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
           } // if
+          else
+          {
+             tmlt_unf += tmlt_offset; // add calibration offset
+             tmlt = moving_average(&str_tmlt,tmlt_unf); // MA-filter
+          } // else
        } // if
        if (swfx.tmlt_sw)
        {
@@ -2086,5 +2090,118 @@ void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
       } // else
    } // else
 } // MenuView_I2C_HW_DevicesClick()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
+/*------------------------------------------------------------------
+  Purpose  : This is the function which is called whenever the user
+             presses 'Options | Measurements'.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   char *endp; // temp. pointer for strtol() function
+   char s[80]; // temp. array
+
+   TRegistry *Reg = new TRegistry();
+   TMeasurements *ptmp;
+
+   ptmp = new TMeasurements(this);
+
+   // Get Measurements Settings from the Registry
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+         //------------------
+         // HLT Temperature
+         //------------------
+         ptmp->UD_MA_HLT->Position      = Reg->ReadInteger("MA_THLT");
+         ptmp->Thlt_Offset->Text        = Reg->ReadFloat("THLT_OFFSET");
+         //------------------
+         // MLT Temperature
+         //------------------
+         ptmp->UD_MA_MLT->Position      = Reg->ReadInteger("MA_TMLT");
+         ptmp->Tmlt_Offset->Text        = Reg->ReadFloat("TMLT_OFFSET");
+         //------------------
+         // HLT Volume
+         //------------------
+         volumes.Vhlt_start             = Reg->ReadInteger("VHLT_START");
+         ptmp->Vhlt_init_Edit->Text     = AnsiString(volumes.Vhlt_start);
+         volumes.Vhlt_simulated         = Reg->ReadBool("VHLT_SIMULATED");
+         ptmp->Vhlt_simulated->Checked  = volumes.Vhlt_simulated;
+         //------------------
+         // MLT Volume
+         //------------------
+         ptmp->UpDown4->Position        = Reg->ReadInteger("MA_VMLT");
+         ptmp->UpDown3->Position        = Reg->ReadInteger("DAC"); // value for DA Converter
+         ptmp->Vref4_edit->Text         = Reg->ReadInteger("VREF4");
+         //-------------------
+         // Boil Kettle Volume
+         //-------------------
+         volumes.Vboil_simulated        = Reg->ReadBool("VBOIL_SIMULATED");
+         ptmp->Vboil_simulated->Checked = volumes.Vboil_simulated;
+         //------------------
+         // Triac Temperature
+         //------------------
+         ptmp->Vref3_edit->Text         = Reg->ReadInteger("VREF3");
+
+         if (ptmp->ShowModal() == 0x1) // mrOK
+         {
+            //------------------
+            // HLT Temperature
+            //------------------
+            init_ma(&str_thlt,ptmp->UD_MA_HLT->Position); // order of MA filter
+            Reg->WriteInteger("MA_THLT",ptmp->UD_MA_HLT->Position);
+            thlt_offset = ptmp->Thlt_Offset->Text.ToDouble();
+            Reg->WriteFloat("THLT_OFFSET",thlt_offset);
+            //------------------
+            // MLT Temperature
+            //------------------
+            init_ma(&str_tmlt,ptmp->UD_MA_MLT->Position); // order of MA filter
+            Reg->WriteInteger("MA_TMLT",ptmp->UD_MA_MLT->Position);
+            tmlt_offset = ptmp->Tmlt_Offset->Text.ToDouble();
+            Reg->WriteFloat("TMLT_OFFSET",tmlt_offset);
+            //------------------
+            // HLT Volume
+            //------------------
+            volumes.Vhlt_start = ptmp->Vhlt_init_Edit->Text.ToInt();
+            Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
+            volumes.Vhlt_simulated = ptmp->Vhlt_simulated->Checked;
+            Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
+            //------------------
+            // MLT Volume
+            //------------------
+            init_ma(&str_vmlt,ptmp->NMA_edit->Text.ToInt()); // order of MA filter
+            Reg->WriteInteger("MA_VMLT",ptmp->NMA_edit->Text.ToInt());
+            padc.dac   = ptmp->DAC_edit->Text.ToInt();       // DAC value
+            Reg->WriteInteger("DAC"  ,padc.dac);
+            padc.vref4 = ptmp->Vref4_edit->Text.ToInt();     // Vref4
+            Reg->WriteInteger("VREF4",padc.vref4);
+            //-------------------
+            // Boil Kettle Volume
+            //-------------------
+            volumes.Vboil_simulated = ptmp->Vboil_simulated->Checked;
+            Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
+            //------------------
+            // Triac Temperature
+            //------------------
+            padc.vref3 = ptmp->Vref3_edit->Text.ToInt();
+            Reg->WriteInteger("VREF3",padc.vref3);
+
+            init_adc(&padc); // recalculate conversion constants
+         } // if
+         Reg->CloseKey(); // Close the Registry
+      } // if
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+   // Clean up
+   delete Reg;
+   delete ptmp;
+   ptmp = 0; // NULL the pointer
+} // TMainForm::MeasurementsClick()
 //---------------------------------------------------------------------------
 
