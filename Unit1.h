@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.15  2004/01/25 22:00:51  emile
+// - Major update of main form. Added thermometer and tank controls from the
+//   TMS Instrumentation Workshop (TIW) package.
+//
 // Revision 1.14  2003/09/24 21:01:18  emile
 // - lm92_read() function: no second read if first read already returns with an error.
 // - Reset_I2C_Bus() function added. Called when lm92_read() returns with an error.
@@ -114,7 +118,7 @@
 #define TD_INIT  (27)
 #define LOGFILE "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
-#define REGKEY    "ebrew"
+#define REGKEY    "Software\\ebrew"
 #define PHEATER (3000)
 
 // 1 minute = 1/(60*24) part of one day, see TDateTime for details
@@ -143,7 +147,7 @@
                 break;                                                         \
         case 4: err  = set_led((int)(100.0 * padc.ad3),2,(w_disp),(ledx_vis)); \
                 break;                                                         \
-        case 5: err  = set_led((int)(100.0 * Vmlt)    ,2,(w_disp),(ledx_vis)); \
+        case 5: err  = set_led((int)(100.0 * volumes.Vmlt),2,(w_disp),(ledx_vis)); \
                 break;                                                         \
        default: break;                                                         \
      }                                                                         \
@@ -260,9 +264,6 @@ public:		// User declarations
         double          gamma;      // PID controller output
         double          tset_hlt;   // HLT reference temperature
         double          tset_mlt;   // MLT reference temperature
-        double          Vmlt;       // MLT volume: output of MA5 filter for pressure transducer
-        double          Vhlt;       // HLT volume: estimated from Vmlt
-        double          Vboil;      // Boil volume: estimated from Vmlt
         pid_params      pid_pars;   // struct containing PID parameters
         int             ms_tot;     // tot. nr. of valid temp & time values
         int             ms_idx;     // index in ms[] array
@@ -275,6 +276,7 @@ public:		// User declarations
                                     // Bit 8..15: 0 = Auto, 1 = Manual Override
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
         TDateTime       dt_time_switch; // object holding date and time
+        volume_struct   volumes;    // Struct for Volumes
         __fastcall TMainForm(TComponent* Owner);
 };
 //---------------------------------------------------------------------------

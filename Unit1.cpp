@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.19  2004/01/25 22:00:50  emile
+// - Major update of main form. Added thermometer and tank controls from the
+//   TMS Instrumentation Workshop (TIW) package.
+//
 // Revision 1.18  2004/01/11 21:49:29  emile
 // - Error corrected: an I2C bus error triggered the Reset_i2C_bus function,
 //   Main_Initialisation was called and ms_idx was set to 0. This got logged
@@ -135,6 +139,7 @@
 #pragma link "VrPowerMeter"
 #pragma resource "*.dfm"
 
+char *const ebrew_revision = "$Revision$";
 TMainForm *MainForm;
 //---------------------------------------------------------------------------
 void __fastcall TMainForm::Restore_Settings(void)
@@ -312,8 +317,12 @@ void __fastcall TMainForm::Main_Initialisation(void)
          padc.dac   = Reg->ReadInteger("DAC");   // Read DAC Value
 
          ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
-         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read high limit
-         
+         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
+
+         volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
+         volumes.Vhlt_simulated  = Reg->ReadBool("VHLT_SIMULATED");
+         volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
+
          Reg->CloseKey();      // Close the Registry
          init_adc(&padc);      // Calculate ADC converstion constants
          init_pid2(&pid_pars); // Init. PID controller
@@ -518,10 +527,16 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
           led4_vis = 4; // 12 mA visibility
           Reg->WriteInteger("LED4_VIS",led4_vis); // LED4 Visibility
 
-          ttriac_hlim = 60; // Upper limit for triac temp.
+          ttriac_hlim = 70; // Upper limit for triac temp.
           Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
-          ttriac_llim = 40; // Lower limit for triac temp.
+          ttriac_llim = 50; // Lower limit for triac temp.
           Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
+          volumes.Vhlt_start = 90; // Starting volume of HLT
+          Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
+          volumes.Vhlt_simulated  = true;
+          Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
+          volumes.Vboil_simulated = true;
+          Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
 
           // Init values for mash scheme variables
           Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
@@ -556,6 +571,16 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
        delete Reg;
        return;
     } // catch
+    // Init. volumes. Should be done only once
+    //----------------------------------------
+    if (volumes.Vhlt_simulated)
+    {  // Vhlt is not measured but calculated from Vmlt
+       volumes.Vhlt  = volumes.Vhlt_start;
+    }
+    if (volumes.Vboil_simulated)
+    {  // Vboil is not measured but calculated from Vmlt
+       volumes.Vboil  = VBOIL_START;
+    }
     Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
 } // TMainForm::TMainForm()
 //---------------------------------------------------------------------------
@@ -883,6 +908,12 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          ptmp->Thlim_edit->Text  = AnsiString(ttriac_hlim);
          ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM");
          ptmp->Tllim_edit->Text  = AnsiString(ttriac_llim);
+         volumes.Vhlt_start = Reg->ReadInteger("VHLT_START");
+         ptmp->Vhlt_init_Edit->Text = AnsiString(volumes.Vhlt_start);
+         volumes.Vhlt_simulated = Reg->ReadBool("VHLT_SIMULATED");
+         ptmp->Vhlt_simulated->Checked = volumes.Vhlt_simulated;
+         volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
+         ptmp->Vboil_simulated->Checked = volumes.Vboil_simulated;
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
@@ -927,7 +958,12 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
             Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
             ttriac_llim = ptmp->Tllim_edit->Text.ToInt();
             Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
-            
+            volumes.Vhlt_start = ptmp->Vhlt_init_Edit->Text.ToInt();
+            Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
+            volumes.Vhlt_simulated = ptmp->Vhlt_simulated->Checked;
+            Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
+            volumes.Vboil_simulated = ptmp->Vboil_simulated->Checked;
+            Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
             if (x2 != x1)
             {
                Reg->WriteInteger("I2C_Base",x2); // save new I2C address
@@ -1152,15 +1188,15 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        //-------------------------------------
        if (swfx.vmlt_sw)
        {
-          Vmlt = swfx.vmlt_fx;
+          volumes.Vmlt = swfx.vmlt_fx;
        }
        else
        {
-          Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
+          volumes.Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
        }
-       sprintf(tmp_str,"%4.1f",Vmlt);             // Display MA filter output on screen
-       Val_Volume->Caption = tmp_str;             // AD4 = Pressure Transducer
-       Tank_MLT->Position  = Vmlt;
+       sprintf(tmp_str,"%4.1f",volumes.Vmlt);  // Display MA filter output on screen
+       Val_Volume->Caption = tmp_str;          // AD4 = Pressure Transducer
+       Tank_MLT->Position  = volumes.Vmlt;
    } // if
    //-----------------------------------------------------------------------
    // Second time-slice: Time switch controller. Enable PI controller
@@ -1240,7 +1276,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
          std_tmp = -1;
       }
       /* Tmlt = AD2, Thlt = AD1 */
-      update_std(Vmlt,padc.ad2,padc.ad1,tset_hlt,&std_out,
+      update_std(&volumes,padc.ad2,padc.ad1,tset_hlt,&std_out,
                  ms,ms_idx,ms_tot,&sp,&std,PID_RB->ItemIndex,std_tmp);
       switch (std.ebrew_std)
       {
@@ -1259,6 +1295,12 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
          case 12: Std_State->Caption = "12. Chill"                ; break;
          default: break;
       } // switch
+      //----------------------------------------------------------------------
+      // Now update tank objects (volumes). MLT is already done (time-slice 1)
+      //----------------------------------------------------------------------
+      Tank_HLT->Position  = volumes.Vhlt;
+      Tank_Boil->Position = volumes.Vboil;
+
       //-----------------------------------------------------------------
       // Now output all valve bits to DIG_IO_MSB_BASE (if it is present).
       // NOTE: The pump bit is output to DIG_IO_LSB_IO!
@@ -1774,5 +1816,7 @@ void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
    delete Reg; // Delete Registry object to prevent memory leak
 } // TMainForm::ReadLogFile1Click()
 //---------------------------------------------------------------------------
+
+
 
 

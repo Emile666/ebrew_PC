@@ -6,6 +6,15 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.8  2003/09/15 20:37:22  emile
+  - LM76 constants renamed in LM92 constants
+  - Pump Popupmenu added (same as already done for the valves)
+  - Added support for LED3 and LED4 displays
+  - 'I2C settings' renamed into 'Hardware Settings'
+  - Added more variables to LED1..LED4 selection. Now 6 variables to select
+  - Added SET_LED macro
+  - Added Triac Temperature protection functionality
+
   Revision 1.7  2003/07/11 18:34:46  emile
   - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
   - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
@@ -521,7 +530,7 @@ double update_tset(double *tset, double temp, double offset,
    return ms[*ms_idx].temp; /* return ref. temp. for MLT */
 } /* update_tset() */
 
-int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
+int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
                unsigned int *kleppen, maisch_schedule ms[], int ms_idx, int ms_total,
                sparge_struct *sps, std_struct *std, int pid_on, int std_fx)
 /*------------------------------------------------------------------
@@ -532,7 +541,7 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
              in 'kleppen'.
              It uses various static variables (see begin of file).
   Variables:
-      vmlt : The volume (L) of the Mash/Lauter Tun (MLT)
+      *vol : Struct containing all volume variables
       tmlt : The actual temperature of the MLT
       thlt : The actual temperature of the HLT
   tset_hlt : The reference temperature for the HLT
@@ -557,30 +566,48 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
    switch (std->ebrew_std)
    {
       case S00_INITIALISATION:
+           if (vol->Vhlt_simulated)
+           {
+              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
+           }
            if (pid_on & 0x01)
            {
               std->ebrew_std = S01_WAIT_FOR_HLT_TEMP;
            } // if
            break;
       case S01_WAIT_FOR_HLT_TEMP:
+           if (vol->Vhlt_simulated)
+           {
+              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
+           }
            if (thlt >= tset_hlt) // HLT TEMP is OK
            {
               std->ebrew_std = S02_FILL_MLT;
            } // if
            break;
       case S02_FILL_MLT:
-           if (vmlt > sps->mash_vol)
+           if (vol->Vhlt_simulated)
+           {
+              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
+           }
+           if (vol->Vmlt > sps->mash_vol)
            {
               std->ebrew_std = S03_MASH_IN_PROGRESS;
            } // if
            break;
       case S03_MASH_IN_PROGRESS:
+           if (vol->Vhlt_simulated)
+           {
+              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
+           }
            if ((ms_idx >= ms_total - 1) && // Mashing finished?
                (ms[ms_idx].timer >= ms[ms_idx].time))
            {
               std->sp_idx    = 0;    // init. sparging index
-              std->vmash     = vmlt; // remember current MLT volume
+              std->vmash     = vol->Vmlt; // remember current MLT volume
               std->timer1    = sps->sp_time_ticks; // timer1 -> TIME-OUT
+              vol->Vhlt_old  = vol->Vhlt_start; // remember old value
+              vol->Vboil_old = 0.0;
               std->ebrew_std = S05_SPARGING_REST;
            }
            else if (tmlt > ms[ms_idx].temp + sps->tmlt_hlimit)
@@ -589,6 +616,10 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
            } // else if
            break;
       case S04_BYPASS_HEAT_EXCHANGER:
+           if (vol->Vhlt_simulated)
+           {
+              vol->Vhlt = vol->Vhlt_start - vol->Vmlt;
+           }
            if ((tmlt < ms[ms_idx].temp + sps->tmlt_llimit) ||
                ((ms_idx >= ms_total - 1) && // Mashing finished?
                 (ms[ms_idx].timer >= ms[ms_idx].time)))
@@ -597,6 +628,10 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
            } // if
            break;
       case S05_SPARGING_REST:
+           if (vol->Vhlt_simulated)
+           {
+              vol->Vhlt = vol->Vhlt_old - vol->Vmlt;
+           }
            if (++std->timer1 >= sps->sp_time_ticks)
            {
               if (std->sp_idx < sps->sp_batches)
@@ -610,17 +645,27 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
            } // if
            break;
       case S06_PUMP_FROM_MLT_TO_BOIL:
-           if (vmlt < std->vmash - sps->sp_vol_batch)
+           if (vol->Vboil_simulated)
+           {
+              vol->Vboil = vol->Vboil_old + std->vmash - vol->Vmlt;
+           }
+           if (vol->Vmlt < std->vmash - sps->sp_vol_batch)
            {
               std->timer2    = 0; // init. 1 sec. timer
+              vol->Vhlt_old  = vol->Vhlt; // remember value of HLT
               std->ebrew_std = S08_DELAY_xSEC;
            } // if
            break;
       case S07_PUMP_FROM_HLT_TO_MLT:
-           if (vmlt > std->vmash)
+           if (vol->Vhlt_simulated)
+           {
+              vol->Vhlt = vol->Vhlt_old + std->vmash - vol->Vmlt;
+           }
+           if (vol->Vmlt > std->vmash)
            {
               std->sp_idx++;      // Increase #Sparging Sessions done
               std->timer1    = 0; // init timer1
+              vol->Vboil_old = vol->Vboil; // remember value of BOIL
               std->ebrew_std = S05_SPARGING_REST;
            } // if
            break;
@@ -631,7 +676,11 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
            } // if
            break;
       case S09_EMPTY_MLT:
-           if (vmlt < sps->vmlt_empty)
+           if (vol->Vboil_simulated)
+           {
+              vol->Vboil = vol->Vboil_old + std->vmash - vol->Vmlt;
+           }
+           if (vol->Vmlt < sps->vmlt_empty)
            {
               std->timer3    = 0; // init. timer for transition to 'Empty Heat Exchanger'
               std->timer5    = 0; // init. timer for boiling time

@@ -4,6 +4,15 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2003/09/15 20:37:21  emile
+// - LM76 constants renamed in LM92 constants
+// - Pump Popupmenu added (same as already done for the valves)
+// - Added support for LED3 and LED4 displays
+// - 'I2C settings' renamed into 'Hardware Settings'
+// - Added more variables to LED1..LED4 selection. Now 6 variables to select
+// - Added SET_LED macro
+// - Added Triac Temperature protection functionality
+//
 // Revision 1.5  2003/07/11 18:34:45  emile
 // - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
 // - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
@@ -78,7 +87,7 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
                                                       MainForm->padc.ad1, // HLT
                                                       MainForm->padc.ad2, // MLT
                                                       MainForm->padc.ad3, // TTriac
-                                                      MainForm->Vmlt,
+                                                      MainForm->volumes.Vmlt,
                                                       MainForm->PID_RB->ItemIndex,
                                                       MainForm->ms_idx,
                                                       MainForm->std.ebrew_std);

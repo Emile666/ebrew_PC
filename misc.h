@@ -6,6 +6,15 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.8  2003/09/15 20:37:22  emile
+// - LM76 constants renamed in LM92 constants
+// - Pump Popupmenu added (same as already done for the valves)
+// - Added support for LED3 and LED4 displays
+// - 'I2C settings' renamed into 'Hardware Settings'
+// - Added more variables to LED1..LED4 selection. Now 6 variables to select
+// - Added SET_LED macro
+// - Added Triac Temperature protection functionality
+//
 // Revision 1.7  2003/07/11 18:34:46  emile
 // - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
 // - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
@@ -61,7 +70,7 @@ extern "C" {
 #define FALSE        (0)
 #endif
 #ifndef TRUE
-#define TRUE    (!FALSE)
+#define TRUE         (1)
 #endif
 
 #define SLEN       (255)
@@ -160,6 +169,20 @@ typedef struct _ma
    double sum;       // The running sum of the MA filter
 } ma;
 
+#define VBOIL_START (0.0)
+typedef struct _volume_struct
+{
+   double Vhlt;  // Volume of HLT in litres
+   double Vmlt;  // Volume of MLT in litres
+   double Vboil; // Volume of Boil kettle in litres
+   int    Vhlt_start; // Starting volume of HLT
+   double Vhlt_old;   // Prev. value of Vhlt, used for calculating Vhlt
+   double Vboil_old;  // Prev. value of Vboil, used for calculating Vboil
+   // Assumption is made here that Vmlt is always measured.
+   int    Vhlt_simulated;  // true = Vhlt is not measured, but calculated
+   int    Vboil_simulated; // true = Vboil is not measured, but calculated
+} volume_struct;
+
 //------------------------------------------------------
 // Defines for State Transition Diagram.
 // The STD is called every second => 1 tick == 1 second.
@@ -236,7 +259,7 @@ int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts);
 double update_tset(double *tset, double temp, double offset,
                    maisch_schedule ms[], int *ms_idx, int ms_total);
-int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
+int update_std(volume_struct *vol, double tmlt, double thlt, double tset_hlt,
                unsigned int *kleppen, maisch_schedule ms[], int ms_idx, int ms_total,
                sparge_struct *sps, std_struct *std, int pid_on, int std_fx);
 void init_ma(ma *p, int N);

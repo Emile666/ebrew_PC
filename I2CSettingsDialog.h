@@ -5,6 +5,15 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2003/09/15 20:37:21  emile
+// - LM76 constants renamed in LM92 constants
+// - Pump Popupmenu added (same as already done for the valves)
+// - Added support for LED3 and LED4 displays
+// - 'I2C settings' renamed into 'Hardware Settings'
+// - Added more variables to LED1..LED4 selection. Now 6 variables to select
+// - Added SET_LED macro
+// - Added Triac Temperature protection functionality
+//
 // Revision 1.2  2002/12/30 13:33:44  emile
 // - Headers with CVS tags added to every source file
 // - Restore Settings function is added
@@ -66,6 +75,11 @@ __published:	// IDE-managed Components
         TLabel *Label6;
         TEdit *Tllim_edit;
         TLabel *Label7;
+        TCheckBox *Vhlt_simulated;
+        TGroupBox *GroupBox1;
+        TCheckBox *Vboil_simulated;
+        TEdit *Vhlt_init_Edit;
+        TLabel *Label8;
 private:	// User declarations
 public:		// User declarations
         __fastcall TI2C_Settings(TComponent* Owner);
