@@ -3,7 +3,7 @@
 //               WriteCharLCD(),   ReadCharLCD(),   WriteInstrLCD(),
 //               GetAddrCntLCD(),  InitLCD(),       set_led(),
 //               print_lcd(),      check_i2c_hw(),  hw_err()
-// Filenaam    : i2c.c
+// Filenaam    : $Id$
 // Auteur      : E. van de Logt
 // Datum       : 12-03-2000
 // Versie      : V0.1
@@ -18,6 +18,7 @@
 // 14-03-02 LGT    - check_I2C_hw(): few lines from main (brewery.c) added
 //                 - function hw_err() added
 // 19-03-02 LGT    - Adapted for use with i2c2.c instead of device driver.
+// $Log$
 // ==================================================================
 
 // -------------------------- include files -------------------------
