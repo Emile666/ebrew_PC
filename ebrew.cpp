@@ -1,3 +1,11 @@
+// ==========================================================================
+// Filename    : $Id$
+// Author      : E. van de Logt
+// Purpose     : 
+// --------------------------------------------------------------------------
+// $Log$
+// ==========================================================================
+
 //---------------------------------------------------------------------------
 #include <vcl.h>
 #pragma hdrstop
@@ -14,6 +22,7 @@ USEFORM("ViewMashProgressForm.cpp", ViewMashProgress);
 USEFORM("DataGraphForm.cpp", ShowDataGraphs);
 USEFORM("Sparge_Settings.cpp", SpargeSettings);
 USEUNIT("i2c_dll\i2c_dll.cpp");
+USEFORM("RestoreSettings.cpp", Restore_Program_Settings);
 //---------------------------------------------------------------------------
 WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
@@ -30,6 +39,7 @@ WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
                  Application->CreateForm(__classid(TViewMashProgress), &ViewMashProgress);
                  Application->CreateForm(__classid(TShowDataGraphs), &ShowDataGraphs);
                  Application->CreateForm(__classid(TSpargeSettings), &SpargeSettings);
+                 Application->CreateForm(__classid(TRestore_Program_Settings), &Restore_Program_Settings);
                  Application->Run();
         }
         catch (Exception &exception)
@@ -39,5 +49,3 @@ WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
         return 0;
 }
 //---------------------------------------------------------------------------
-
-

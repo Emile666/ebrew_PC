@@ -1,3 +1,13 @@
+// ==========================================================================
+// Filename    : $Id$
+// Author      : E. van de Logt
+// Purpose     : Main Unit of the ebrew program. Contains Init. functions,
+//               functions for every menu command and it contains the main
+//               program loop (TMainForm::T50msec2Timer()).  
+// --------------------------------------------------------------------------
+// $Log$
+// ==========================================================================
+
 //---------------------------------------------------------------------------
 #ifndef Unit1H
 #define Unit1H
@@ -25,6 +35,7 @@
 #define TD_INIT  (27)
 #define LOGFILE "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
+#define REGKEY    "ebrew"
 
 typedef struct _swfx_struct
 {

@@ -1,3 +1,12 @@
+// ==========================================================================
+// Filename    : $Id$
+// Author      : E. van de Logt
+// Purpose     : Provides a form where various parameters can be manually
+//               (fixed) to a particular value.
+// --------------------------------------------------------------------------
+// $Log$
+// ==========================================================================
+
 //---------------------------------------------------------------------------
 #ifndef FixParamsDialogH
 #define FixParamsDialogH

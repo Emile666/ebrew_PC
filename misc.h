@@ -1,18 +1,13 @@
 // ==================================================================
-// Functienaam : -
-// Filenaam    : misc.h
+// Filenaam    : $Id$
 // Auteur      : E. van de Logt
-// Datum       : 13-03-2002
-// Versie      : V0.2
 // ------------------------------------------------------------------
-// Doel : This include file contains defines for misc.c
+// Purpose : This include file contains defines for misc.c
 // ------------------------------------------------------------------
-// Gewijzigd :
-//
-// Datum    Auteur Versie & Omschrijving
-// ------------------------------------------------------------------
-// 13-03-02 LGT    Initial version, derived from brew.c
+// Modification History :
+// $Log$
 // 27-07-02 LGT    moving_average() function added
+// 13-03-02 LGT    Initial version, derived from brew.c
 // ==================================================================
 #ifndef MISC_H
 #define MISC_H
@@ -21,11 +16,20 @@
 extern "C" {
 #endif
 
+#ifndef FALSE
 #define FALSE        (0)
+#endif
+#ifndef TRUE
 #define TRUE    (!FALSE)
+#endif
+
 #define SLEN       (255)
 #define MAX_MS      (10)
 #define NOT_STARTED (-1)
+
+#define LOG_HDR_SIZE (10)
+#define LOG_LAST_LINE (3)
+#define COLON         ","
 
 #define ALIVE_TICKS (10) // timer for 0.5 sec. LED
 
@@ -34,6 +38,18 @@ extern "C" {
 #define HEATERb (0x01)
 #define ALIVEb  (0x02)
 #define PUMPb   (0x04)
+
+typedef struct _log_struct
+{
+   char brew_date[20];  /* Brew date */
+   int  bline;          /* First line with valid information */
+   int  eline;          /* Last line with valid information */
+   char btime[20];      /* Begin time of brew session */
+   char etime[20];      /* End time of brew session */
+   int  lms_idx;        /* Last known value of ms_idx */
+   int  tmr_ms_idx;     /* Timer value of ms_idx timer */
+   int  std_val;        /* Last known value of std_state */
+} log_struct;
 
 typedef struct _maisch_schedule
 {
@@ -148,6 +164,7 @@ typedef struct _ma
 #define V11ATXT "V1 ON (A)"
 #define V10ATXT "V1 OFF (A)"
 
+int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts);
 void update_tset(double *tset, double temp, double offset,
                  maisch_schedule ms[], int *ms_idx, int ms_total);

@@ -1,3 +1,13 @@
+// ==========================================================================
+// Filename    : $Id$
+// Author      : E. van de Logt
+// Purpose     : Main Unit of the ebrew program. Contains Init. functions,
+//               functions for every menu command and it contains the main
+//               program loop (TMainForm::T50msec2Timer()).  
+// --------------------------------------------------------------------------
+// $Log$
+// ==========================================================================
+
 //---------------------------------------------------------------------------
 #include <vcl.h>
 #pragma hdrstop
@@ -15,7 +25,7 @@
 #include "ViewMashProgressForm.h"
 #include "DataGraphForm.h"
 #include "Sparge_Settings.h"
-//#include "i2c.h"
+#include "RestoreSettings.h"
 #include "misc.h"
 
 #include "i2c_dll.h"
@@ -39,6 +49,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
    char s1[20];   // temp. string
    char st[1024]; // string for MessageBox
    int  i;        // temp. variable
+   int  j;        // temp. variable
+   int  k;        // temp. variable
    FILE *fd;      // Log File Descriptor
    int  x1;       // Temp. var. for I2C HW base address
 
@@ -46,9 +58,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-------------------------------------------------------------------
    try
    {
-      if (Reg->KeyExists("ebrew"))
+      if (Reg->KeyExists(REGKEY))
       {
-         Reg->OpenKey("ebrew",FALSE);
+         Reg->OpenKey(REGKEY,FALSE);
          x1 = Reg->ReadInteger("I2C_Base");    // Read HW IO address as an int.
          i = Reg->ReadInteger("TS");  // Read TS from registry
          pid_pars.ts = (double)i;
@@ -174,21 +186,74 @@ void __fastcall TMainForm::Main_Initialisation(void)
    } /* if */
    try
    {
-      if (Reg->KeyExists("ebrew"))
+      if (Reg->KeyExists(REGKEY))
       {
-         Reg->OpenKey("ebrew",FALSE);
+         ms_idx = 0; // start with mash scheme from the beginning
+         Reg->OpenKey(REGKEY,FALSE);
          i = Reg->ReadInteger("ms_idx");
          if (i < MAX_MS)
          {
-            sprintf(s,"Power-down detected (ms_idx = %2d), YES to continue, NO to initialise",i);
-            if (MessageBox(NULL,s,"Mashing phase in progress",MB_YESNO|MB_ICONQUESTION) == IDYES)
+            if ((fd = fopen(LOGFILE,"r")) == NULL)
             {
-               ms_idx = i; // set ms_idx to value in registry
-               ms[ms_idx].timer = 0; // set timer to running
-            } // if
-            else ms_idx = 0; // start with mash scheme from the beginning
-         }
-         else ms_idx = 0; // start with mash scheme from the beginning
+               MessageBox(NULL,"Could not open log-file for reading","Init. error when trying to restore data",MB_OK);
+            } /* if */
+            else
+            {
+               //--------------------------------------------------------
+               // Read all information from the log-file and try to
+               // reconstruct the previous situation as good as possible
+               //--------------------------------------------------------
+               log_struct p1[100]; // Array of structs with log info to fill
+               int cnt_i = 1;      // #items in Combobox
+               TRestore_Program_Settings *prps;  // pointer to Form
+               j = decode_log_file(fd,p1); // read log file with data jusst before chrash
+               fclose(fd);
+               prps = new TRestore_Program_Settings(this);
+               prps->ComboBox1->Items->Add("Reset to default values (ms_idx = 0, std_state = 0)");
+               for (k = 0; k < j; k++)
+               {
+                  if ((p1[k].lms_idx > 0) || (p1[k].std_val > 0))
+                  {
+                     cnt_i++; // increment #items in Combobox
+                     sprintf(s,"%02d %s %s-%s ms_idx=%2d std=%2d",k,
+                                                                  p1[k].brew_date,
+                                                                  p1[k].btime,
+                                                                  p1[k].etime,
+                                                                  p1[k].lms_idx,
+                                                                  p1[k].std_val);
+                     prps->ComboBox1->Items->Add(s);
+                  } // if
+               } // for k
+               prps->ComboBox1->DropDownCount = cnt_i;
+               prps->ComboBox1->ItemIndex     = 0;
+               if ((prps->ShowModal() == 0x1) && (prps->ComboBox1->ItemIndex > 0)) // mrOK
+               {
+                  //-----------------------------------------------------------------
+                  // Initialise the various values with the values from the log-file
+                  //-----------------------------------------------------------------
+                  strncpy(s,prps->ComboBox1->Items->Strings[prps->ComboBox1->ItemIndex].c_str(),2);
+                  s[2]             = '\0';    // terminate string
+                  k                = atoi(s); // convert to integer
+                  ms_idx           = p1[k].lms_idx;
+                  for (j = 0; j < ms_idx; j++)
+                  {
+                     ms[j].timer = ms[j].time; // set previous timers to time-out
+                  } // for j
+                  ms[ms_idx].timer = p1[k].tmr_ms_idx; // restore timer value
+               } // if
+               delete prps;
+               prps = 0; // NULL the pointer
+            } // else
+            //---
+            //sprintf(s,"Power-down detected (ms_idx = %2d), YES to continue, NO to initialise",i);
+            //if (MessageBox(NULL,s,"Mashing phase in progress",MB_YESNO|MB_ICONQUESTION) == IDYES)
+            //{
+            //   ms_idx = i; // set ms_idx to value in registry
+            //   ms[ms_idx].timer = 0; // set timer to running
+            //} // if
+            //else ms_idx = 0; // start with mash scheme from the beginning
+            //---
+         } // if i < MAX_MS
          Reg->WriteInteger("ms_idx",ms_idx); // update registry setting
          tset = ms[ms_idx].temp; // Set tset value
          Reg->CloseKey();        // Close the Registry
@@ -227,24 +292,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    } /* if */
    else
    {
-      // DEBUG version info
-      //-------------------
-      /*DWORD dwSize;
-      DWORD dwReserved;
-      AnsiString FileName = Application->ExeName;
-      dwSize = GetFileVersionInfoSize(FileName.c_str(),&dwReserved);
-
-      LPVOID lpBuffer = malloc(dwSize);
-      GetFileVersionInfo(FileName.c_str(),0,dwSize,lpBuffer);
-      LPVOID lpStr;
-      UINT   dwLength;
-      VerQueryValue(lpBuffer,"\\StringFileInfo\\040904E4\\"
-                             "ProductName",&lpStr,&dwLength);
-      AnsiString Info = reinterpret_cast<char *>(lpStr);
-
-      MessageBox(NULL,Info.c_str(),"DEBUG Version Info",MB_OK);
-      if (lpBuffer) free (lpBuffer); */
-      //-------------------
       date d1;
       getdate(&d1);
       fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
@@ -255,9 +302,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
       (pid_pars.mash_control == 0) ? fprintf(fd,"(Thlt)\n") : fprintf(fd,"(Tmlt)\n");
       fprintf(fd,"Vref1 = %3d, Vref2 = %3d, Vref3 = %3d, Vref4 = %3d, DAC-value = %3d\n\n",
                  padc.vref1,padc.vref2,padc.vref3,padc.vref4,padc.dac);
-      fprintf(fd,"Time-stamp Gamma    Tset    Tad1    Tad2 TTriac   Vmlt PID_on ms_idx     std_state\n");
-      fprintf(fd,"[hh:mm:ss]  [%]     [°C]    [°C]    [°C]  [°C]    [L]  [0|1]  [0..ms_tot]  [0..12]\n");
-      fprintf(fd,"----------------------------------------------------------------------------------\n");
+      fprintf(fd,"Time-stamp Gamma    Tset    Tad1    Tad2 TTriac   Vmlt PID_on ms_idx\n");
+      fprintf(fd,"[hh:mm:ss]  [%]     [°C]    [°C]    [°C]  [°C]    [L]  [0|1]  [0..ms_tot]\n");
+      fprintf(fd,"-------------------------------------------------------------------------\n");
       fclose(fd);
    } // else
 
@@ -282,11 +329,11 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
    TRegistry *Reg   = new TRegistry();
    try
     {
-       if (!Reg->KeyExists("ebrew"))
+       if (!Reg->KeyExists(REGKEY))
        {
           // No entry in Registry, create all keys
-          Reg->CreateKey("ebrew"); // Create key if it does not exist yet
-          Reg->OpenKey("ebrew",FALSE);
+          Reg->CreateKey(REGKEY); // Create key if it does not exist yet
+          Reg->OpenKey(REGKEY,FALSE);
           // PID Settings Dialog
           Reg->WriteInteger("TS",TS_INIT);  // Set Default value
           Reg->WriteInteger("Kc",KC_INIT);  // Controller gain
@@ -347,9 +394,9 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
    // Get PID Controller setting from the Registry
    try
    {
-      if (Reg->KeyExists("ebrew"))
+      if (Reg->KeyExists(REGKEY))
       {
-         Reg->OpenKey("ebrew",FALSE);
+         Reg->OpenKey(REGKEY,FALSE);
          i = Reg->ReadInteger("TS");      // Read TS from registry
          ptmp->TS_edit->Text = AnsiString(i);
          i = Reg->ReadInteger("Kc");      // Read Kc from registry
@@ -455,9 +502,9 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
 
    try
    {
-      if (Reg->KeyExists("ebrew"))
+      if (Reg->KeyExists(REGKEY))
       {
-         Reg->OpenKey("ebrew",FALSE);
+         Reg->OpenKey(REGKEY,FALSE);
          Reg->WriteInteger("ms_idx",MAX_MS); // terminated normally
       } // if
       Reg->CloseKey(); // Close the Registry
@@ -564,9 +611,9 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
    // Get I2C Bus Settings from the Registry
    try
    {
-      if (Reg->KeyExists("ebrew"))
+      if (Reg->KeyExists(REGKEY))
       {
-         Reg->OpenKey("ebrew",FALSE);
+         Reg->OpenKey(REGKEY,FALSE);
          x1 = Reg->ReadInteger("I2C_Base");    // Read HW IO address as an int.
          ptmp->HW_Base_Edit->Text = IntToHex(x1,3);
          led1 = Reg->ReadInteger("LED1");     // Read LED1 from registry
@@ -644,18 +691,11 @@ void __fastcall TMainForm::MenuHelpAboutClick(TObject *Sender)
   ------------------------------------------------------------------*/
 {
    TAbout *ptmp;
-   int res = 0;
-   //static int lprinted = 1;
-   //char s[80];
 
-   //res = read_lcd();
-   //res = eeread(0,s,2); // read 2 bytes
    ptmp = new TAbout(this);
    ptmp->ShowModal();
    delete ptmp;
    ptmp = 0; // NULL the pointer
-   //sprintf(s,"This is line %d",lprinted++);
-   //print_lcd(s);
 } // TMainForm::About1Click()
 //---------------------------------------------------------------------------
 
@@ -669,8 +709,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
   ------------------------------------------------------------------*/
 {
    int        value = 0x00;  // init. byte to write to DIG_IO_LSB_BASE
-   int        err   = 0;     // error return value
-   char       s1[80];
+   int        err = 0;       // error return value
    char       tmp_str[80];   // temp string for calculations
 
    switch (tmr.isrstate)
@@ -1061,9 +1100,9 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
   // Get Sparge Settings from the Registry
   try
   {
-     if (Reg->KeyExists("ebrew"))
+     if (Reg->KeyExists(REGKEY))
      {
-        Reg->OpenKey("ebrew",FALSE);
+        Reg->OpenKey(REGKEY,FALSE);
         i = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
         ptmp->EBatches->Text = AnsiString(i);
         i = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches

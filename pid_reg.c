@@ -1,7 +1,7 @@
 /*==================================================================
   Function name: init_pid2(), pid_reg2()
-  File name    : pid_reg.c
   Author       : E. vd Logt
+  File name    : $Id$
   ------------------------------------------------------------------
   Purpose : This file contains the main body of the PID controller.
             For design details, please read the Word document
@@ -13,7 +13,7 @@
             Td: Time-constant for the Derivative Gain
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
-  Change history: Please refer to pid_reg.h
+  $Log$
   ==================================================================
 */
 #include "pid_reg.h"

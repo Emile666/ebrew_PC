@@ -1,11 +1,11 @@
 /*==================================================================
-  Function name: read_input_file(), update_tset(), init_ma(),
-                 moving_average()
-  File name    : misc.c
+  Function name: decode_log_file(), read_input_file(), update_tset(),
+                 init_ma(), moving_average()
+  File name    : $Id$
   Author       : E. vd Logt
   ------------------------------------------------------------------
-  Purpose : This file contains miscellaneous functions
-  ------------------------------------------------------------------
+  Purpose : This file contains several miscellaneous functions
+  $Log$
   ==================================================================
 */
 #include <stdio.h>
@@ -13,6 +13,184 @@
 #include <stdlib.h>
 #include "pid_reg.h" /* for TS */
 #include "misc.h"
+
+/*----------------------------------------------------*/
+/* This macro is used by decode_log_file() to advance */
+/* to the x-th column in the string s. The value can  */
+/* then be read by a atoi(phlp) / atof(phlp).         */
+/* phlp & i to be defined by the function.            */
+/*----------------------------------------------------*/
+#define GOTO_COLUMN(x,stmp)                                         \
+            phlp = strtok(stmp,COLON); /* Find first ',' on line */ \
+            for (i = 1; i < x; i++)                                 \
+            {                                                       \
+               phlp = strtok(NULL,COLON); /* Skip other columns */  \
+            } /* for */
+
+/*------------------------------------------------------*/
+/* This macro calculates the value for the last line of */
+/* the log entry. It makes sure that the last line is   */
+/* greater than or equal to the first line.             */
+/*------------------------------------------------------*/
+#define CALC_LAST_LINE                                           \
+            if (line_nr - LOG_LAST_LINE < p[log_idx - 1].bline)  \
+                 p[log_idx - 1].eline = p[log_idx - 1].bline;    \
+            else p[log_idx - 1].eline = line_nr - LOG_LAST_LINE
+
+int decode_log_file(FILE *fd, log_struct p[])
+/*------------------------------------------------------------------
+  Purpose  : This function reads all the information from the
+             log file, of which f is the file descriptor.
+             The information
+             the PSP exercises. The purpose of this program is to
+             count logical lines of code, following the LOC counting
+             standard and the C Coding standard.
+  Variables:
+        fd : File descriptor for the log file, should be opened already
+             by the calling program!
+         p : Pointer to an array of log_struct structs
+  Returns  : The number of log-file entries found in the log file
+  ------------------------------------------------------------------*/
+{
+   char tmp[SLEN];
+   char *phlp;  /* temp. pointer */
+   char sstart[] = "Date of brewing: "; /* string to start a log-file entry */
+   int  sslen    = strlen(sstart);      /* length of sstart[] */
+   int  log_idx  = 0; /* log entry index */
+   int  line_nr  = 1; /* start at line 1 in log file */
+   int  rval     = 0; /* return value */
+   int  i;
+   int  found;        /* temp. boolean var. */
+
+   /*-----------------------------------------------------------------*/
+   /* 1) Go through the log-file and determine the brew-date and the  */
+   /*    and the begin- and end-lines of every log-entry.             */
+   /*-----------------------------------------------------------------*/
+   do
+   {
+      if (fgets(tmp,SLEN,fd) != NULL)
+      {
+         if (((phlp = strstr(tmp,sstart)) != NULL) || !strncmp(tmp,sstart,sslen))
+         {
+            /*---------------------------------------------------*/
+            /* We found the start of a new log-entry in the file */
+            /*---------------------------------------------------*/
+            strncpy(p[log_idx].brew_date, phlp + sslen, 10);
+            p[log_idx].brew_date[10] = '\0'; /* terminate with '\0' */
+
+            p[log_idx].bline = line_nr + LOG_HDR_SIZE;
+            if (log_idx > 0)
+            {
+              /*--------------------------------------------------------*/
+              /* fill in the last valid line of the previous log entry. */
+              /* Assume that the last entry may be wrong.               */
+              /*--------------------------------------------------------*/
+              CALC_LAST_LINE;
+            } /* if */
+            log_idx++; /* increment log entry index */
+         } /* if */
+      } /* if */
+      line_nr++; /* read next line */
+   } while (!feof(fd));
+   CALC_LAST_LINE;
+   rval = log_idx; /* return value */
+
+   /*----------------------------------------------------------------------------*/
+   /* 2) Go through the log-file again. The begin- and end-lines are known.      */
+   /*    Extend this info with the begin- and end-time and ms_idx and std_state. */
+   /*----------------------------------------------------------------------------*/
+   rewind(fd); /* start again at beginning of file */
+   log_idx = 0;
+   line_nr = 1;
+   do
+   {
+      if (fgets(tmp,SLEN,fd) != NULL)
+      {
+         if (p[log_idx].bline == line_nr)
+         {
+            /*-------------------------------------------*/
+            /* This is the start of the actual log entry */
+            /*-------------------------------------------*/
+            strncpy(p[log_idx].btime,tmp,8); /* copy time string */
+            p[log_idx].btime[8] = '\0';      /* terminate with '\0' */
+         } /* if */
+
+         if (p[log_idx].eline == line_nr)
+         {
+            /*-----------------------------------------*/
+            /* This is the end of the actual log entry */
+            /*-----------------------------------------*/
+            strncpy(p[log_idx].etime,tmp,8); /* copy time string */
+            p[log_idx].etime[8] = '\0';      /* terminate with '\0' */
+
+            GOTO_COLUMN(9,tmp); /* ms_idx is to be found in column 9 */
+            /* Next value to read is ms_idx */
+            p[log_idx].lms_idx = atoi(phlp);
+            phlp = strtok(NULL,COLON); /* next value is std_state */
+            p[log_idx].std_val = atoi(phlp);
+
+            log_idx++; /* to next log entry */
+         } /* else if */
+      } /* if */
+      line_nr++; /* read next line */
+   } while (!feof(fd));
+
+   /*-------------------------------------------------------------------*/
+   /* 3) Go through the log-file AGAIN and fill in the following:       */
+   /*    - Latest timer value for mash timers (denoted by ms_idx).      */
+   /*    - Vmash value: This is Vmlt when std_state changes from 3 -> 5 */
+   /*-------------------------------------------------------------------*/
+   rewind(fd); /* start again at beginning of file */
+   log_idx = 0;
+   line_nr = 1;
+   found   = FALSE;
+   do
+   {
+      if (fgets(tmp,SLEN,fd) != NULL)
+      {
+         if ((line_nr >= p[log_idx].bline) && (line_nr < p[log_idx].eline) &&
+             (p[log_idx].lms_idx > 0) && !found)
+         {
+            /*--------------------------------------------*/
+            /* Mash in progress: now calculate timer info */
+            /*--------------------------------------------*/
+            GOTO_COLUMN(9,tmp); /* ms_idx is to be found in column 9 */
+            /*----------------------------------*/
+            /* Next value to read is ms_idx     */
+            /* Check if ms_idx == latest ms_idx */
+            /* If so, calculate #clock-ticks    */
+            /*----------------------------------*/
+            if (atoi(phlp) == p[log_idx].lms_idx)
+            {
+               p[log_idx].tmr_ms_idx = p[log_idx].eline - line_nr;
+               found = TRUE;
+            } /* if */
+         } /* if */
+         else if (line_nr == p[log_idx].eline)
+         {
+            log_idx++; /* next log entry number */
+            found = FALSE;
+         } /* else */
+      } /* if */
+      line_nr++; /* read next line */
+   } while (!feof(fd));
+
+   /*-------------------------------------------------------------------*/
+   /* 4) Go through the log-file AGAIN and, for every log-entry that    */
+   /*    has a std_state > 4, fill in the following:                    */
+   /*    - Vmash value: This is Vmlt when std_state changes from 3 -> 5 */
+   /*    - sp_idx     : The number of cycles that std_state = 5,6,8,7.  */
+   /*    - timer1     : If last state = 5, the time in state 5.         */
+   /*    - timer3     : time in states 10 and 11.                       */
+   /*-------------------------------------------------------------------*/
+   //rewind(fd); /* start again at beginning of file */
+   //line_nr = 1;
+   //for (log_idx = 0; log_idx < rval; log_idx++)
+   //{
+   //} // for
+
+   return rval;
+} /* decode_log_file() */
 
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts)
 /*------------------------------------------------------------------
