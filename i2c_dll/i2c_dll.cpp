@@ -1,14 +1,17 @@
 // ==================================================================
-// Functienaam : -
-// Filenaam    : $Id$
-// Auteur      : E. van de Logt
-// Datum       : 01-07-2002
-// Versie      : V1.03
+// Filename : $Id$
+// Author   : E. van de Logt
+// Date     : $Date$
+// Revision : $Revision$
 // ------------------------------------------------------------------
-// Doel : I2C DLL, which can be used by both Visual C++ and Visual
-//        Basic. It is meant to directly access the I2C Hardware.
+// Purpose  : I2C DLL, which can be used by both Visual C++ and Visual
+//            Basic. It is meant to directly access the I2C Hardware.
 // ------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2004/02/01 14:24:26  emile
+// - Setting the SCL clock to 90 kHz resulted in frequent lock-ups of the I2C
+//   bus. fscl is now set back again to 9.8 kHz (0x1A).
+//
 // Revision 1.10  2004/01/06 19:09:30  emile
 // - Changes in speed to allow correct operation on faster PCs
 //   - TO_VAL from 50 to 100
@@ -84,7 +87,6 @@
 #include <conio.h>
 #include <time.h>
 
-//USEDEF("i2c_dll.def");
 //---------------------------------------------------------------------------
 USERES("i2c_dll.res");
 //---------------------------------------------------------------------------
@@ -222,7 +224,6 @@ static byte led_ctrl_byte[] = {0x00,0x17,0x27,0x37,0x47,0x57,0x67,0x77};
 #define ADDA_BUF          (0x05)
 
 // -------------------------- external section ----------------------
-static int BackLight;             // Status of Backlight
 static int lcd_lines_printed = 0; // #lines printed to LCD Display
 
 //-------------------------------------------------------------------------
@@ -240,6 +241,7 @@ static byte ic_adr;       // Currently addressed IC and R/W_ bit
 
 static byte win_nt;       // TRUE = Windows NT, 2000, XP
 static byte i2c_method;   // [ISA_CARD, LPT_CARD]
+static byte clock_reg_S2; // Init. value for S2 clock register of PCF8584
 static int  S023;         // Registers S0, S2 and S3 of PCF8584
 static int  S1;           // Register S1 of PCF8584 (= S023 + 1)
 static int  lpt_data;     // Data register of LPTx: port
@@ -248,6 +250,7 @@ static int  lpt_stat;     // Status register of LPTx: port
 static byte lpt_ctrl_old; // Previous value of Control register of LPTx: port
 static byte dataH;        // High nibble read from multiplexer
 static byte dataL;        // Low nibble read from multiplexer
+char   *i2c_dll_revision = "$Revision$";
 
 unsigned char inportb(unsigned short port)
 /*------------------------------------------------------------------
@@ -498,7 +501,9 @@ int i2c_berr_check(void)
    }
 } // i2c_berr_check()
 
-extern "C" __declspec(dllexport) int __stdcall i2c_init(int address, byte win_ver)
+extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
+                                                        byte win_ver,
+                                                        byte clock_reg_val)
 /*------------------------------------------------------------------
   Purpose  : Sets the proper base address for the PCF8584. This should
              be the first routine to call. The I2C bus can be interfaced
@@ -507,8 +512,17 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int address, byte win_ve
                 0x320, 0x330 or 0x340.
              2) With a I2C interface card connected to a parallel port.
                 Base addresses are 0x378 (LPT1) and 0x278 (LPT2:)
-  Variables: address: the IO base address for the PCF8584
-             win_ver: TRUE = Windows NT, 2000 or XP platform
+  Variables: address      : the IO base address for the PCF8584
+             win_ver      : TRUE = Windows NT, 2000 or XP platform
+             clock_reg_val: value for the clock register S2 of the PCF8584.
+                            This byte controls the SCL frequency:
+                             clock prescaler             SCL frequency
+                            S24 S23 S22 Ratio            S21 S20 Ratio
+                             0   X   X   /2               0   0    /16
+                             1   0   0   /3               0   1    /32
+                             1   0   1   /4               1   0   /128
+                             1   1   0   /5               1   1  /1024
+                             1   1   1   /8
   Returns  : Error: I2C_NOERR : No error
                     I2C_ARGS  : Wrong value for address
                     I2C_PT    : PortTalk error (NT, 2000, XP only)
@@ -541,6 +555,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int address, byte win_ve
            err = I2C_ARGS; // wrong input address
            break;
    } // switch
+   clock_reg_S2 = clock_reg_val; // save S2 clock register value for i2c_start()
    return err; // return error-code
 } // i2c_init()
 
@@ -957,9 +972,9 @@ extern "C" __declspec(dllexport) void __stdcall check_i2c_hw(int *HW_present)
    {
       *HW_present |= LM92_2_OK;
    }
-   if (i2c_address(ADS7828_BASE) == I2C_NOERR)
+   if (i2c_address(LM92_3_BASE) == I2C_NOERR)
    {
-      *HW_present |= ADS7828_OK;
+      *HW_present |= LM92_3_OK;
    }
    if (i2c_address(FM24C08_BASE) == I2C_NOERR)
    {
@@ -1001,35 +1016,35 @@ extern "C" __declspec(dllexport) void __stdcall init_adc(adda_t *p)
   Returns  : < 0: error
                0: everything OK
   ------------------------------------------------------------------*/
-extern "C" __declspec(dllexport) int __stdcall read_ads7828(int channel, int *value)
-{
+//extern "C" __declspec(dllexport) int __stdcall read_ads7828(int channel, int *value)
+//{
    // Command Byte Bits 7 - 4
    // 1111 = Ch.7, 1110 = Ch.5, 1101 = Ch.3, 1100 = Ch.1
    // 1011 = Ch.6, 1010 = Ch.4, 1001 = Ch.2, 1000 = Ch.0
    // Bits 3 - 2: Power-down selection: 11 = Int. Vref on & ADC on
-   byte cmd[8] = {0x8c,0xcc,0x9c,0xdc,0xac,0xec,0xbc,0xfc};
+//   byte cmd[8] = {0x8c,0xcc,0x9c,0xdc,0xac,0xec,0xbc,0xfc};
 
-   byte to_ad;   // array to write to ADC
-   byte from_ad; // array to write to ADC
-   int  r1;      // Result from i2c_write() and i2c_read
+//   byte to_ad;   // array to write to ADC
+//   byte from_ad; // array to write to ADC
+//   int  r1;      // Result from i2c_write() and i2c_read
 
-   if ((channel > 7) || (channel < 0))
-   {
-      return I2C_ARGS;
-   } // if
-   r1    = i2c_address(ADS7828_BASE); // Put ADC address on I2C bus
-   to_ad = cmd[channel];
-   r1   |= i2c_write(ADS7828_BASE,&to_ad,1);    // send 1 byte to ADC
+//   if ((channel > 7) || (channel < 0))
+//   {
+//      return I2C_ARGS;
+//   } // if
+//   r1    = i2c_address(ADS7828_BASE); // Put ADC address on I2C bus
+//   to_ad = cmd[channel];
+//   r1   |= i2c_write(ADS7828_BASE,&to_ad,1);    // send 1 byte to ADC
 
    //---------------------------------------------------------------
    // Now we switch to read mode and read 2 bytes from the ADS7828
    //---------------------------------------------------------------
-   r1 |= i2c_read(ADS7828_BASE | RWb,&from_ad,1); // read MSB
-   *value = (from_ad << 8);
-   r1 |= i2c_read(ADS7828_BASE | RWb,&from_ad,1); // read LSB
-   *value |= (from_ad & 0x0ff);
-   return r1;
-} // read_ads7828()
+//   r1 |= i2c_read(ADS7828_BASE | RWb,&from_ad,1); // read MSB
+//   *value = (from_ad << 8);
+//   r1 |= i2c_read(ADS7828_BASE | RWb,&from_ad,1); // read LSB
+//   *value |= (from_ad & 0x0ff);
+//   return r1;
+//} // read_ads7828()
 
 /*------------------------------------------------------------------
   Purpose  : This function reads the 4 AD-Converters from the PCF8591
@@ -1165,7 +1180,8 @@ extern "C" __declspec(dllexport) double __stdcall lm92_read(byte dvc)
              Sign MSB B10 B9 ... B0 Crit High Low
   Variables:
        dvc : 0 = Read from the LM92 at 0x92/0x93 (LM92_1)
-             1 = Read from the LM92 at 0x94/0x95 (LM92_2).
+             1 = Read from the LM92 at 0x94/0x95 (LM92_2)
+             2 = Read from the LM92 at 0x96/0x97 (LM92_3)
   Returns  : The temperature from the LM92
   ------------------------------------------------------------------*/
 {
@@ -1183,12 +1199,20 @@ extern "C" __declspec(dllexport) double __stdcall lm92_read(byte dvc)
          res = i2c_read(LM92_1_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
       }
    }
-   else
+   else if (dvc == 1)
    {
       res  = i2c_address(LM92_2_BASE);
       if (res == I2C_NOERR)
       {
          res = i2c_read(LM92_2_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
+      }
+   } // else
+   else
+   {
+      res  = i2c_address(LM92_3_BASE);
+      if (res == I2C_NOERR)
+      {
+         res = i2c_read(LM92_3_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
       }
    } // else
 

@@ -1,32 +1,30 @@
-// ==================================================================
-// Functienaam : -
-// Filenaam    : i2c_dll.h
-// Auteur      : E. van de Logt
-// Datum       : 01-07-2002
-// Versie      : V1.04
-// ------------------------------------------------------------------
-// Doel : External declaration for I2C DLL, which can be used by both
-//        Visual C++ and Visual Basic. It is meant to directly access
-//        the I2C Hardware.
-// ------------------------------------------------------------------
-// Gewijzigd :
-//
-// Datum    Auteur Versie & Omschrijving
-// ------------------------------------------------------------------
-// 14-06-02 LGT    V1.00: First version for Ronald Rakke
-// 01-07-02 LGT    V1.01: init_adc()/read_adc(): 4 channels working
-//                        set_led(): visibility [1..7] parameter added
-// 02-07-02 LGT    V1.02: - eewrite(): i2c_stop()+i2c_start() added to
-//                                     initiate write to eeprom
-//                        - eewrite(), eeread(): page xover (>16) check added
-//			  - TO_VAL: 500 -> 50
+// ======================================================================
+// Filename : $Id$
+// Author   : E. van de Logt
+// Date     : $Date$
+// Revision : $Revision$
+// ----------------------------------------------------------------------
+// Purpose : External declaration for I2C DLL, which can be used by both
+//           Visual C++ and Visual Basic. It is meant to directly access
+//           the I2C Hardware.
+// ----------------------------------------------------------------------
+// $Log$
+// Date    Author Version Description
+// ----------------------------------------------------------------------
+// 11-11-02 LGT    V1.04  - MAX6626 constants replaced by LM76 constants
+//                        - lm76_read function prototype added
 // 14-09-02 LGT    V1.03  - VREF_INIT from 900 -> 930
 //                        - DAC enabled (dac added to adda_t struct,
 //                          ADDA_CONTROL_BYTE from 0x04 -> 0x44
 //                        - PortTalk interface added (nt_in(), nt_out())
-// 11-11-02 LGT    V1.04  - MAX6626 constants replaced by LM76 constants
-//                        - lm76_read function prototype added
-// ==================================================================
+// 02-07-02 LGT    V1.02: - eewrite(): i2c_stop()+i2c_start() added to
+//                                     initiate write to eeprom
+//                        - eewrite(), eeread(): page xover (>16) check added
+//			  - TO_VAL: 500 -> 50
+// 01-07-02 LGT    V1.01: init_adc()/read_adc(): 4 channels working
+//                        set_led(): visibility [1..7] parameter added
+// 14-06-02 LGT    V1.00: First version for Ronald Rakke
+// ======================================================================
 #ifndef _I2C_DLL_H
 #define _I2C_DLL_H
 
@@ -71,7 +69,7 @@
 // LCD Display        : PCF 8574
 // Digital IO         : PCF 8574
 // LED1..LED4 Displays: SAA 1064
-// AD/DA Converter    : PCF 8591 / LM92 / ADS7828
+// AD/DA Converter    : PCF 8591 / LM92
 // EEPROM memory      : FM24C08
 //------------------------------
 #define LCD_BASE         (0x40)
@@ -84,7 +82,7 @@
 #define ADDA_BASE        (0x90)
 #define LM92_1_BASE      (0x92)
 #define LM92_2_BASE      (0x94)
-#define ADS7828_BASE     (0x96)
+#define LM92_3_BASE      (0x96)
 #define FM24C08_BASE     (0xA0)
 
 #define LCD_OK           (0x0001)
@@ -97,7 +95,7 @@
 #define ADDA_OK          (0x0080)
 #define LM92_1_OK        (0x0100)
 #define LM92_2_OK        (0x0200)
-#define ADS7828_OK       (0x0400)
+#define LM92_3_OK        (0x0400)
 #define FM24C08_OK       (0x0800)
 #define ALL_OK           (0x0FFF)
 
@@ -113,7 +111,7 @@
 #define ADDA_TXT         "AD/DA Converter\tPCF 8591\t0x90 : %s Present\n"
 #define LM92_1_TXT       "Temp. Sensor 1\tLM92\t0x92 : %s Present\n"
 #define LM92_2_TXT       "Temp. Sensor 2\tLM92\t0x94 : %s Present\n"
-#define ADS7828_TXT      "12-bit 8 ch. ADC\tADS7828\t0x96 : %s Present\n"
+#define LM92_3_TXT       "Temp. Sensor 3\tLM92\t0x96 : %s Present\n"
 #define FM24C08_TXT      "EEPROM Device\tFM24C08\t0xA0 : %s Present\n"
 
 //------------------------------------------------------------------
@@ -137,7 +135,7 @@ typedef struct
    int    dac;   // Value for DA Converter
 } adda_t;
 
-extern "C" __declspec(dllexport) int    __stdcall i2c_init(int address, byte win_ver);
+extern "C" __declspec(dllexport) int    __stdcall i2c_init(int address, byte win_ver, byte clock_reg_val);
 extern "C" __declspec(dllexport) int    __stdcall i2c_start(void);
 extern "C" __declspec(dllexport) int    __stdcall i2c_address(byte address);
 extern "C" __declspec(dllexport) int    __stdcall i2c_write(byte address, byte *p, int bytes);
@@ -146,7 +144,7 @@ extern "C" __declspec(dllexport) int    __stdcall i2c_stop(void);
 extern "C" __declspec(dllexport) int    __stdcall set_led(int number, int dp, int which_led, int visibility);
 extern "C" __declspec(dllexport) void   __stdcall check_i2c_hw(int *HW_present);
 extern "C" __declspec(dllexport) void   __stdcall init_adc(adda_t *p);
-extern "C" __declspec(dllexport) int    __stdcall read_ads7828(int channel, int *value);
+//extern "C" __declspec(dllexport) int    __stdcall read_ads7828(int channel, int *value);
 extern "C" __declspec(dllexport) int    __stdcall read_adc(adda_t *p);
 extern "C" __declspec(dllexport) int    __stdcall WriteIOByte(byte value, byte LorH);
 extern "C" __declspec(dllexport) int    __stdcall eewrite(int addr, byte *p, byte nr);
