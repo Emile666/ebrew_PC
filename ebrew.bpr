@@ -14,10 +14,10 @@ BCB = $(MAKEDIR)\..
 VERSION = BCB.04.04
 # ---------------------------------------------------------------------------
 PROJECT = ebrew.exe
-OBJFILES = ebrew.obj Unit1.obj PID_Settings_Dialog.obj FixParamsDialog.obj \
-  I2CSettingsDialog.obj MISC.obj PID_REG.obj About_Form.obj EditMashScheme.obj \
-  ViewMashProgressForm.obj DataGraphForm.obj Sparge_Settings.obj \
-  i2c_dll\i2c_dll.obj
+OBJFILES = O\ebrew.obj O\Unit1.obj O\PID_Settings_Dialog.obj O\FixParamsDialog.obj \
+  O\I2CSettingsDialog.obj O\MISC.obj O\PID_REG.obj O\About_Form.obj \
+  O\EditMashScheme.obj O\ViewMashProgressForm.obj O\DataGraphForm.obj \
+  O\Sparge_Settings.obj O\i2c_dll.obj
 RESFILES = ebrew.res
 RESDEPEN = $(RESFILES) Unit1.dfm PID_Settings_Dialog.dfm FixParamsDialog.dfm \
   I2CSettingsDialog.dfm About_Form.dfm EditMashScheme.dfm \
@@ -44,7 +44,7 @@ CFLAG1 = -Ii2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program File
   -D$(SYSDEFINES);$(USERDEFINES)
 PFLAGS = -Ui2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\program files\borland\cbuilder4\Lib";"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\lib\obj;$(BCB)\lib;$(DEBUGLIBPATH) \
   -Ii2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl \
-  -$YD -$W -$O- -v -JPHNE -M
+  -N2O -N0O -$YD -$W -$O- -v -JPHNE -M
 RFLAGS = -ii2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;"..\..\..\Program Files\Borland\CBuilder4\Projects";$(BCB)\include;$(BCB)\include\vcl
 AFLAGS = /ii2c_dll /i..\..\..\Programming\bc\c\PSP\REUSE /i.. \
   /i"..\..\..\Program Files\Borland\CBuilder4\Projects" /i$(BCB)\include \
@@ -64,7 +64,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=0
 Release=0
-Build=19
+Build=22
 Debug=0
 PreRelease=0
 Special=0
@@ -76,7 +76,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=E. vd Logt
 FileDescription=E-Brewing
-FileVersion=1.0.0.19
+FileVersion=1.0.0.22
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=
@@ -110,6 +110,10 @@ Item7=$(BCB)\lib\obj;$(BCB)\lib
 [HistoryLists\hlDebugSourcePath]
 Count=1
 Item0=$(BCB)\source\vcl
+
+[HistoryLists\hlIntOutputDir]
+Count=1
+Item0=O
 
 [Debugging]
 DebugSourceDirs=$(BCB)\source\vcl
