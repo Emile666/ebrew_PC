@@ -6,6 +6,16 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.35  2004/05/13 20:50:59  emile
+// - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
+//   timing is now reset after 100 loops (5 seconds)
+// - TS parameter now only works on PID-controller time-slice. Max. is 20 sec.
+// - Bug-fix in init_ma() filter when init. to a value (should be /N).
+// - LPF for D-term of PID controller added. New reg. var. K_LPF
+// - PID Debug label added + checkbox in PID screen. Default off (NO reg var).
+// - Statusbar object added
+// - Start made with network functionality. Not operational yet.
+//
 // Revision 1.34  2004/05/10 20:54:29  emile
 // - Bug-fix: log-file header: '\n' was removed, is corrected now
 // - Hints added to PID dialog screen
@@ -425,7 +435,7 @@ void __fastcall TMainForm::Start_I2C_Communication(int known_status)
    Reg->CloseKey(); // Close the Registry
    delete Reg;      // Delete Registry object to prevent memory leak
 
-   hw_status = i2c_init(x1,TRUE,fscl_values[fscl_prescaler]);
+   hw_status = i2c_init(x1, LPT_CARD|WIN_XP, fscl_values[fscl_prescaler]);
    if (hw_status != I2C_NOERR)
    {
      sprintf(s,"Error in i2c_init(0x%x)",x1);
@@ -527,6 +537,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    FILE *fd;            // Log File Descriptor
    int  i;              // temp. variable
    char s[40];          // Temp. string
+   int test;
 
    //----------------------------------------
    // Initialise all variables from Registry
@@ -535,7 +546,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    {
       if (Reg->KeyExists(REGKEY))
       {
-         Reg->OpenKey(REGKEY,FALSE);
+         test = Reg->OpenKey(REGKEY,FALSE);
          known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
          pid_pars.ts = Reg->ReadFloat("TS");  // Read TS from registry
          pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
@@ -543,6 +554,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
          pid_pars.k_lpf     = Reg->ReadFloat("K_LPF");
          pid_pars.pid_model = Reg->ReadInteger("PID_Model"); // [0..3]
+         pid_pars.burner_hyst_h = Reg->ReadInteger("BURNER_HHYST");
+         pid_pars.burner_hyst_l = Reg->ReadInteger("BURNER_LHYST");
 
          led1 = Reg->ReadInteger("LED1"); // Read led1 from registry
          led2 = Reg->ReadInteger("LED2"); // Read led2 from registry
@@ -729,6 +742,8 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TOffset",1.0);      // HLT - MLT heat loss
           Reg->WriteFloat("TOffset2",-0.5);    // offset for early start of mash timers
           Reg->WriteInteger("PID_Model",0);    // Type A PID Controller
+          Reg->WriteInteger("BURNER_HHYST",35); // Gas Burner Hysteresis High Limit
+          Reg->WriteInteger("BURNER_LHYST",30); // Gas Burner Hysteresis Low Limit
           Reg->WriteString("SERVER_NAME","PC-EMILE"); // Server to connect to
 
           //-------------------------------------------------------
@@ -853,6 +868,8 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->Td_Edit->Text        = AnsiString(Reg->ReadFloat("Td"));
          ptmp->K_LPF_Edit->Text     = AnsiString(Reg->ReadFloat("K_LPF"));
          ptmp->PID_Model->ItemIndex = Reg->ReadInteger("PID_Model");
+         ptmp->Burner_On->Text      = AnsiString(Reg->ReadInteger("BURNER_HHYST"));
+         ptmp->Burner_Off->Text     = AnsiString(Reg->ReadInteger("BURNER_LHYST"));
          ptmp->RG2->ItemIndex       = time_switch; // Value of time-switch [off, on]
          ptmp->CB_PID_dbg->Checked  = cb_pid_dbg;   // PID debug info
          if (time_switch)
@@ -875,6 +892,10 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             pid_pars.k_lpf = ptmp->K_LPF_Edit->Text.ToDouble();
             Reg->WriteFloat("K_LPF",pid_pars.k_lpf);
             pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
+            pid_pars.burner_hyst_h = ptmp->Burner_On->Text.ToInt();
+            Reg->WriteInteger("BURNER_HHYST",pid_pars.burner_hyst_h);
+            pid_pars.burner_hyst_l = ptmp->Burner_Off->Text.ToInt();
+            Reg->WriteInteger("BURNER_LHYST",pid_pars.burner_hyst_l);
             switch (pid_pars.pid_model)
             {
                case 0 : init_pid1(&pid_pars); break; // First   ebrew PID controller
@@ -1279,7 +1300,8 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
                              40%       60%
              2) It calculates the Alive bit (blinking LED)
              3) It calculates the Pump bit (control pump on/off)
-             4) It sends all signals to the PCF8574 I2C IO device
+             4) It calculates the 'Gas Burner On' bit
+             5) It sends all signals to the PCF8574 I2C IO device
   Variables: The timer variables in tmr (Unit1.h) are used and updated.
   Returns  : None
   ------------------------------------------------------------------*/
@@ -1382,6 +1404,19 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
    {
       lsb_io &= ~PUMPb;
    } // else
+
+   //--------------------------------------------------
+   // Send Gas Burner On/Off signal to DIG_IO_LSB_BASE.
+   //--------------------------------------------------
+   if (tmr.time_high > pid_pars.burner_hyst_h)
+   {
+      lsb_io |= BURNERb;
+   }
+   else if (tmr.time_high < pid_pars.burner_hyst_l)
+   {
+      lsb_io &= ~BURNERb;
+   } // else if
+   // else: do nothing (hysteresis)
 
    //-------------------------------------------------
    // Output lsb_io to IO port every 50 msec.
@@ -1650,6 +1685,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // - Gamma (triac) pulse
    // - Alive bit (LED)
    // - Pump bit
+   // - Gas burner bit
    // - Output value to PCF874 IO port every 50 msec.
    //------------------------------------------------
    Generate_IO_Signals();
@@ -1996,31 +2032,6 @@ void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
 } // TMainForm::ReadLogFile1Click()
 //---------------------------------------------------------------------------
 
-void __fastcall TMainForm::network_handler(void)
-{
-   AnsiString s;
-
-   if (network_init == true)
-   {
-      // Start with check on revision numbers
-      if (IsServer)
-      {
-         ServerSocket1->Socket->Connections[0]->SendText(ebrew_revision);
-      }
-      else do
-      {
-         s = ClientSocket1->Socket->ReceiveText();
-      }
-      while (s.Length() == 0);
-      if (!s.AnsiCompare(ebrew_revision))
-      {
-         Application->MessageBox("Both ebrew revisions should be the same!","ERROR",MB_OK);
-         NetworkDisconnect1Click(NULL);
-      } // if
-      network_init = false;
-   } // if
-} // TMainForm::network_handler()
-
 void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
 {
    char tmp_str[80];   // temp string for calculations
@@ -2358,6 +2369,104 @@ void __fastcall TMainForm::HowtoUseHelp1Click(TObject *Sender)
 } // TMainForm::HowtoUseHelp1Click()
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::network_handler(void)
+{
+   TRegistry *Reg = new TRegistry();
+   AnsiString s;
+   int i;
+   double f;
+   TCustomWinSocket *p; // help pointer
+
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+         if (network_init == true)
+         {
+            // Start with check on revision numbers
+            if (IsServer)
+            {
+               //-------------------------------------------------
+               // Server: The PC in control of the brewing process
+               //-------------------------------------------------
+               p = ServerSocket1->Socket->Connections[0];
+               p->SendText(ebrew_revision);
+               //----------------------------------------------
+               // Start sending all registry keys to the server
+               //----------------------------------------------
+               s = AnsiString(Reg->ReadFloat("TS"));
+               p->SendText(s);
+               p->SendText(Reg->ReadFloat("Kc"));
+               p->SendText(Reg->ReadFloat("Ti"));
+               p->SendText(Reg->ReadFloat("Td"));
+               p->SendText(Reg->ReadFloat("K_LPF"));
+               p->SendText(Reg->ReadFloat("TOffset"));
+               p->SendText(Reg->ReadFloat("TOffset2"));
+               p->SendText(Reg->ReadInteger("PID_Model"));
+               p->SendText(Reg->ReadInteger("TTRIAC_HLIM"));
+               p->SendText(Reg->ReadInteger("TTRIAC_LLIM"));
+               p->SendText(Reg->ReadInteger("ms_idx"));
+      /*          Reg->WriteInteger("VREF1",VREF_INIT); // init. ADC1 VREF
+                Reg->WriteInteger("VREF2",VREF_INIT); // init. ADC2 VREF
+                Reg->WriteInteger("VREF3",VREF_INIT); // init. ADC3 VREF
+                Reg->WriteInteger("VREF4",VREF_INIT); // init. ADC4 VREF
+                Reg->WriteInteger("DAC",0);           // Init. DA Converter
+                Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
+                Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
+                Reg->WriteInteger("MASH_VOL",30);     // Total Mash Volume (L)
+                Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
+                Reg->WriteInteger("BOIL_TIME",90);    // Total Boil Time (min.)
+                Reg->WriteInteger("PREHEAT_TIME",0);// PREHEAT_TIME [sec]
+                Reg->WriteFloat("VMLT_EMPTY", 3.0); // Vmlt_EMPTY [L]
+                Reg->WriteInteger("TO_XSEC",1);     // TIMEOUT_xSEC [sec]
+                Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
+                Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
+                Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
+      */
+            } // if IsServer
+            else
+            {
+               //------------------------------------------------------------
+               // Client: the remote PC NOT in control of the brewing process
+               //------------------------------------------------------------
+               s = ClientSocket1->Socket->ReceiveText();
+               if (s.AnsiCompare(ebrew_revision))
+               {
+                  Application->MessageBox("Both ebrew revisions should be the same!","ERROR",MB_OK);
+               } // if
+               s = ClientSocket1->Socket->ReceiveText(); // TS
+               if (s.AnsiCompare(AnsiString(Reg->ReadFloat("TS"))) &&
+                   (Application->MessageBox("One or more Registry variables differ.",
+                                            "OK to overwrite current Registry Settings?",MB_OKCANCEL) == IDOK))
+               {
+                  Reg->WriteFloat("TS",s.ToDouble());
+               } // if
+      /*               p->SendText(Reg->ReadFloat("TS"));
+                     p->SendText(Reg->ReadFloat("Kc"));
+                     p->SendText(Reg->ReadFloat("Ti"));
+                     p->SendText(Reg->ReadFloat("Td"));
+                     p->SendText(Reg->ReadFloat("K_LPF"));
+                     p->SendText(Reg->ReadFloat("TOffset"));
+                     p->SendText(Reg->ReadFloat("TOffset2"));
+                     p->SendText(Reg->ReadInteger("PID_Model"));
+                     p->SendText(Reg->ReadInteger("TTRIAC_HLIM"));
+                     p->SendText(Reg->ReadInteger("TTRIAC_LLIM"));
+                     p->SendText(Reg->ReadInteger("ms_idx"));
+      */      } // else
+              network_init = false;
+         } // if network_init
+         Reg->CloseKey(); // Close the Registry
+      } // if Reg->KeyExists
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+   delete Reg; // Clean up
+} // TMainForm::network_handler()
+//---------------------------------------------------------------------------
+
 void __fastcall TMainForm::ServerSocket1Listen(TObject *Sender,
       TCustomWinSocket *Socket)
 {
@@ -2419,6 +2528,7 @@ void __fastcall TMainForm::NetworkDisconnect1Click(TObject *Sender)
    } // if
    StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Disconnected from network";
    network_alive = false;
+   network_init  = true;
 } // TMainForm::NetworkDisconnect1Click()
 //---------------------------------------------------------------------------
 

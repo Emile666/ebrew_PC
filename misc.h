@@ -6,6 +6,16 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.12  2004/05/13 20:51:00  emile
+// - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
+//   timing is now reset after 100 loops (5 seconds)
+// - TS parameter now only works on PID-controller time-slice. Max. is 20 sec.
+// - Bug-fix in init_ma() filter when init. to a value (should be /N).
+// - LPF for D-term of PID controller added. New reg. var. K_LPF
+// - PID Debug label added + checkbox in PID screen. Default off (NO reg var).
+// - Statusbar object added
+// - Start made with network functionality. Not operational yet.
+//
 // Revision 1.11  2004/05/08 14:52:52  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -121,6 +131,7 @@ extern "C" {
 #define HEATERb (0x01)
 #define ALIVEb  (0x02)
 #define PUMPb   (0x04)
+#define BURNERb (0x08)
 
 typedef struct _log_struct
 {

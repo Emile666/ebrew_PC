@@ -5,6 +5,16 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2004/05/13 20:50:59  emile
+// - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
+//   timing is now reset after 100 loops (5 seconds)
+// - TS parameter now only works on PID-controller time-slice. Max. is 20 sec.
+// - Bug-fix in init_ma() filter when init. to a value (should be /N).
+// - LPF for D-term of PID controller added. New reg. var. K_LPF
+// - PID Debug label added + checkbox in PID screen. Default off (NO reg var).
+// - Statusbar object added
+// - Start made with network functionality. Not operational yet.
+//
 // Revision 1.7  2004/05/08 14:52:51  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -102,6 +112,12 @@ __published:
         TLabel *Label9;
         TEdit *K_LPF_Edit;
         TCheckBox *CB_PID_dbg;
+        TLabel *Label10;
+        TLabel *Label11;
+        TLabel *Label12;
+        TLabel *Label13;
+        TEdit *Burner_On;
+        TEdit *Burner_Off;
         void __fastcall RG2Click(TObject *Sender);
         void __fastcall Button3Click(TObject *Sender);
 private:
