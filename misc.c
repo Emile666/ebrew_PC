@@ -6,6 +6,15 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.7  2003/07/11 18:34:46  emile
+  - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
+  - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
+  - Log-file header updated
+  - init_adc(): all vref initialisations are now the same (/ 2560).
+                Removed the / 10 division of AD4 in the main loop, this is
+                now done in init_adc().
+  - Multiply and division changed into <<= and >>= (in lm76_read())
+
   Revision 1.6  2003/06/01 13:40:45  emile
   - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
   - Switch/fix for std state added for easier testing
@@ -528,7 +537,7 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
       thlt : The actual temperature of the HLT
   tset_hlt : The reference temperature for the HLT
   *kleppen : Every bit represent a valve (1=ON, 0=OFF):
-             Bits 15..8: 0 = Auto, 1 = Manual Override for valves V7-V1
+             Bits 15..8: 0 = Auto, 1 = Manual Override for valves V7-V1 + Pump
              Bits  7..1: Valves V7-V1
              Bit      0: Pump
       ms[] : Array containing the mash schedule
@@ -704,7 +713,11 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
       if (klepstand & V1b) *kleppen |= V1b;
       else                 *kleppen &= ~V1b;
    }
-   // No Manual Override for the pump.
+   if ((*kleppen & P0M) == 0x0000) // Pump No Manual Override ?
+   {
+      if (klepstand & P0b) *kleppen |= P0b;
+      else                 *kleppen &= ~P0b;
+   }
    return std->ebrew_std; // return the new state of the STD
 } // update_std()
 

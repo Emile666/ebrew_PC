@@ -4,6 +4,15 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2003/07/11 18:34:45  emile
+// - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
+// - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
+// - Log-file header updated
+// - init_adc(): all vref initialisations are now the same (/ 2560).
+//               Removed the / 10 division of AD4 in the main loop, this is
+//               now done in init_adc().
+// - Multiply and division changed into <<= and >>= (in lm92_read())
+//
 // Revision 1.4  2003/06/01 11:53:47  emile
 // - tset has been renamed in tset_hlt for more clearance
 // - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.

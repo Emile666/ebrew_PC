@@ -44,11 +44,11 @@
 #define I2C_ARGS_MSG   "Wrong argument"
 #define I2C_PT_MSG     "PortTalk Error"
 
-// The LM76 sign bit is normally bit 12. The value read from the
-// LM76 is SHL3. Therefore the sign bit is at bit 15
+// The LM92 sign bit is normally bit 12. The value read from the
+// LM92 is SHL3. Therefore the sign bit is at bit 15
 // Same for the Full Scale value, normally 2^12 SHL3 = 2^15.
-#define LM76_SIGNb     (0x8000)
-#define LM76_FS        (32768)
+#define LM92_SIGNb     (0x8000)
+#define LM92_FS        (32768)
 
 #ifndef FALSE
 #define FALSE (0)
@@ -68,7 +68,7 @@
 // LCD Display        : PCF 8574
 // Digital IO         : PCF 8574
 // LED1..LED4 Displays: SAA 1064
-// AD/DA Converter    : PCF 8591 / LM76 / ADS7828
+// AD/DA Converter    : PCF 8591 / LM92 / ADS7828
 // EEPROM memory      : FM24C08
 //------------------------------
 #define LCD_BASE         (0x40)
@@ -79,8 +79,8 @@
 #define LED3_BASE        (0x74)
 #define LED4_BASE        (0x76)
 #define ADDA_BASE        (0x90)
-#define LM76_1_BASE      (0x92)
-#define LM76_2_BASE      (0x94)
+#define LM92_1_BASE      (0x92)
+#define LM92_2_BASE      (0x94)
 #define ADS7828_BASE     (0x96)
 #define FM24C08_BASE     (0xA0)
 
@@ -92,8 +92,8 @@
 #define LED3_OK          (0x0020)
 #define LED4_OK          (0x0040)
 #define ADDA_OK          (0x0080)
-#define LM76_1_OK        (0x0100)
-#define LM76_2_OK        (0x0200)
+#define LM92_1_OK        (0x0100)
+#define LM92_2_OK        (0x0200)
 #define ADS7828_OK       (0x0400)
 #define FM24C08_OK       (0x0800)
 #define ALL_OK           (0x0FFF)
@@ -108,8 +108,8 @@
 #define LED3_TXT         "LED3 Display\tSAA 1064\t0x74 : %s Present\n"
 #define LED4_TXT         "LED4 Display\tSAA 1064\t0x76 : %s Present\n"
 #define ADDA_TXT         "AD/DA Converter\tPCF 8591\t0x90 : %s Present\n"
-#define LM76_1_TXT       "Temp. Sensor 1\tLM76\t0x92 : %s Present\n"
-#define LM76_2_TXT       "Temp. Sensor 2\tLM76\t0x94 : %s Present\n"
+#define LM92_1_TXT       "Temp. Sensor 1\tLM92\t0x92 : %s Present\n"
+#define LM92_2_TXT       "Temp. Sensor 2\tLM92\t0x94 : %s Present\n"
 #define ADS7828_TXT      "12-bit 8 ch. ADC\tADS7828\t0x96 : %s Present\n"
 #define FM24C08_TXT      "EEPROM Device\tFM24C08\t0xA0 : %s Present\n"
 
@@ -148,5 +148,5 @@ extern "C" __declspec(dllexport) int    __stdcall read_adc(adda_t *p);
 extern "C" __declspec(dllexport) int    __stdcall WriteIOByte(byte value, byte LorH);
 extern "C" __declspec(dllexport) int    __stdcall eewrite(int addr, byte *p, byte nr);
 extern "C" __declspec(dllexport) int    __stdcall eeread(int addr, byte *p, byte nr);
-extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc);
+extern "C" __declspec(dllexport) double __stdcall lm92_read(byte dvc);
 #endif

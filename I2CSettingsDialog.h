@@ -5,6 +5,11 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2002/12/30 13:33:44  emile
+// - Headers with CVS tags added to every source file
+// - Restore Settings function is added
+// - "ebrew" registry key now in a define REGKEY
+//
 // ==========================================================================
 
 //---------------------------------------------------------------------------
@@ -49,6 +54,18 @@ __published:	// IDE-managed Components
         TLabel *Label3;
         TUpDown *UpDown4;
         TEdit *NMA_edit;
+        TLabel *Label4;
+        TLabel *Label5;
+        TRadioGroup *RG3;
+        TRadioGroup *RG4;
+        TEdit *Vis3_Edit;
+        TUpDown *UpDown5;
+        TUpDown *UpDown6;
+        TEdit *Vis4_Edit;
+        TEdit *Thlim_edit;
+        TLabel *Label6;
+        TEdit *Tllim_edit;
+        TLabel *Label7;
 private:	// User declarations
 public:		// User declarations
         __fastcall TI2C_Settings(TComponent* Owner);

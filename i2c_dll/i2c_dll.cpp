@@ -9,6 +9,9 @@
 //        Basic. It is meant to directly access the I2C Hardware.
 // ------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2003/07/11 21:04:15  emile
+// - Comments now in proper order.
+//
 // Revision 1.6  2003/07/11 21:01:20  emile
 // Bad-fix solved: do NOT temp_int >>= 7, since this looses the numbers behind
 //                 the comma. leave to (double)temp_int / 128.0 instead.
@@ -20,11 +23,11 @@
 // - init_adc(): all vref initialisations are now the same (/ 2560).
 //               Removed the / 10 division of AD4 in the main loop, this is
 //               now done in init_adc().
-// - Multiply and division changed into <<= and >>= (in lm76_read())
+// - Multiply and division changed into <<= and >>= (in lm92_read())
 //
 // Revision 1.4  2002/12/09 21:25:14  emile
 // - TRUE / FALSE now conditionally defined.
-// - lm76_read() could not handle negative temperatures. Fixed.
+// - lm92_read() could not handle negative temperatures. Fixed.
 //
 // Revision 1.3  2002/11/18 18:34:02  emile
 // - MAX6626 constants replaced by LM76 constants.
@@ -926,13 +929,13 @@ extern "C" __declspec(dllexport) void __stdcall check_i2c_hw(int *HW_present)
    {
       *HW_present |= ADDA_OK;
    }
-   if (i2c_address(LM76_1_BASE) == I2C_NOERR)
+   if (i2c_address(LM92_1_BASE) == I2C_NOERR)
    {
-      *HW_present |= LM76_1_OK;
+      *HW_present |= LM92_1_OK;
    }
-   if (i2c_address(LM76_2_BASE) == I2C_NOERR)
+   if (i2c_address(LM92_2_BASE) == I2C_NOERR)
    {
-      *HW_present |= LM76_2_OK;
+      *HW_present |= LM92_2_OK;
    }
    if (i2c_address(ADS7828_BASE) == I2C_NOERR)
    {
@@ -1133,45 +1136,45 @@ extern "C" __declspec(dllexport) int __stdcall eeread(int addr, byte *p, byte nr
    return res;
 } // eeread()
 
-extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc)
+extern "C" __declspec(dllexport) double __stdcall lm92_read(byte dvc)
 /*------------------------------------------------------------------
-  Purpose  : This function reads the LM76 13-bit Temp. Sensor and
+  Purpose  : This function reads the LM92 13-bit Temp. Sensor and
              returns the temperature.
-             Reading Register 0 of the LM76 results in the following bits:
+             Reading Register 0 of the LM92 results in the following bits:
               15   14  13 12      3   2    1   0
              Sign MSB B10 B9 ... B0 Crit High Low
   Variables:
-       dvc : 0 = Read from the LM76 at 0x92/0x93 (LM76_1)
-             1 = Read from the LM76 at 0x94/0x95 (LM76_2).
-  Returns  : The temperature from the LM76
+       dvc : 0 = Read from the LM92 at 0x92/0x93 (LM92_1)
+             1 = Read from the LM92 at 0x94/0x95 (LM92_2).
+  Returns  : The temperature from the LM92
   ------------------------------------------------------------------*/
 {
    int    res = I2C_NOERR;   // return result
    byte   buffer[2];         // array to store data from i2c_read()
-   int    temp_int;          // the temp. from the LM76 as an integer
+   int    temp_int;          // the temp. from the LM92 as an integer
    int    sign;              // sign of temperature
-   double temp;              // the temp. from the LM76 as a double
+   double temp;              // the temp. from the LM92 as a double
 
    if (dvc == 0)
    {
-      res  = i2c_address(LM76_1_BASE);
-      res |= i2c_read(LM76_1_BASE | RWb,buffer,2); // read 2 bytes from LM76 register 0
+      res  = i2c_address(LM92_1_BASE);
+      res |= i2c_read(LM92_1_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
    }
    else
    {
-      res  = i2c_address(LM76_2_BASE);
-      res |= i2c_read(LM76_2_BASE | RWb,buffer,2); // read 2 bytes from LM76 register 0
+      res  = i2c_address(LM92_2_BASE);
+      res |= i2c_read(LM92_2_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
    } // else
    temp_int = buffer[0];      // store {Sign, MSB, bit 10..5} at bits temp_int bits 7..0
    temp_int <<= 8;            // SHL 8, Sign now at bit 15
    temp_int &= 0xff00;        // Clear bits 7..0
    temp_int |= buffer[1];     // Add bits D4..D0 to temp_int bits 7..3
    temp_int &= 0xFFF8;        // Clear Crit High & Low bits
-   sign = ((temp_int & LM76_SIGNb) == LM76_SIGNb);
+   sign = ((temp_int & LM92_SIGNb) == LM92_SIGNb);
    if (sign)
    {
-      temp_int &= ~LM76_SIGNb;        // Clear sign bit
-      temp_int  = LM76_FS - temp_int; // Convert two complement number
+      temp_int &= ~LM92_SIGNb;        // Clear sign bit
+      temp_int  = LM92_FS - temp_int; // Convert two complement number
    } // if
    temp = (double)temp_int / 128.0;   // SHR 3 + multiply with 0.0625 = 1/16
    if (sign)
@@ -1179,7 +1182,7 @@ extern "C" __declspec(dllexport) double __stdcall lm76_read(byte dvc)
       temp = -temp; // negate number
    } // if
    return temp;     // Return value now in °C
-} // lm76_read()
+} // lm92_read()
 
 //---------------------------------------------------------------------------
 //   Important note about DLL memory management in a VCL DLL:

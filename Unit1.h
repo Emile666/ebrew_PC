@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2003/08/03 13:27:33  emile
+// - FileOpen Dialog added to Restore Settings function, so that other log files
+//   besides the default name can be read.
+// - Menu option 'Read log file...' added.
+//
 // Revision 1.11  2003/07/11 18:34:46  emile
 // - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
 // - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
@@ -13,7 +18,7 @@
 // - init_adc(): all vref initialisations are now the same (/ 2560).
 //               Removed the / 10 division of AD4 in the main loop, this is
 //               now done in init_adc().
-// - Multiply and division changed into <<= and >>= (in lm76_read())
+// - Multiply and division changed into <<= and >>= (in lm92_read())
 //
 // Revision 1.10  2003/06/29 20:47:43  emile
 // - Changes in Main_Initialisation(). Single exit-point, all code is evaluated,
@@ -91,11 +96,38 @@
 #define LOGFILE "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
 #define REGKEY    "ebrew"
+
 // 1 minute = 1/(60*24) part of one day, see TDateTime for details
 #define ONE_MINUTE (6.94444E-04)
 
 // Macro, used in TMainForm::Main_Initialisation()
 #define PR_HW_STAT(x)   hw_status & x ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT)
+
+//--------------------------------------------------------
+// For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
+//                       3=Tset_mlt, 4=Ttriac, 5=Vmlt
+// Macro, used in TMainForm::T50msec2Timer()
+//--------------------------------------------------------
+#define SET_LED(LEDX_OK,w_disp,ledx,ledx_vis)                                  \
+  if (hw_status & (LEDX_OK))                                                   \
+  {                                                                            \
+     switch (ledx)                                                             \
+     {                                                                         \
+        case 0: err  = set_led((int)(100.0 * padc.ad1),2,(w_disp),(ledx_vis)); \
+                break;                                                         \
+        case 1: err  = set_led((int)(100.0 * padc.ad2),2,(w_disp),(ledx_vis)); \
+                break;                                                         \
+        case 2: err  = set_led((int)(100.0 * tset_hlt),2,(w_disp),(ledx_vis)); \
+                break;                                                         \
+        case 3: err  = set_led((int)(100.0 * tset_mlt),2,(w_disp),(ledx_vis)); \
+                break;                                                         \
+        case 4: err  = set_led((int)(100.0 * padc.ad3),2,(w_disp),(ledx_vis)); \
+                break;                                                         \
+        case 5: err  = set_led((int)(100.0 * Vmlt)    ,2,(w_disp),(ledx_vis)); \
+                break;                                                         \
+       default: break;                                                         \
+     }                                                                         \
+  }
 
 typedef struct _swfx_struct
 {
@@ -164,6 +196,7 @@ __published:	// IDE-managed Components
         TLabel *Std_State;
         TMenuItem *N2;
         TMenuItem *ReadLogFile1;
+        TLabel *P0;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -187,10 +220,17 @@ private:	// User declarations
         timer_vars      tmr;        // struct with timer variables
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         ma              str_vmlt;   // Struct for MA5 filter for pressure transducer
-        int             led1;       // 0=Tad1, 1=Tad2, 2=Tset
-        int             led2;       // 0=Tad1, 1=Tad2, 2=Tset
+        int             led1;       // Which variable to display?
+        int             led2;       //
+        int             led3;       //
+        int             led4;       //
         int             led1_vis;   // 1..7: LED1 Visibility
         int             led2_vis;   // 1..7: LED2 Visibility
+        int             led3_vis;   // 1..7: LED3 Visibility
+        int             led4_vis;   // 1..7: LED4 Visibility
+        int             ttriac_hlim; // High limit for Triac Temp. Protection
+        int             ttriac_llim; // Low  limit for Triac Temp. Protection
+        bool            triac_too_hot; // true = Triac is overheated
 public:		// User declarations
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output

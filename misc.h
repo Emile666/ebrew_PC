@@ -6,6 +6,15 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.7  2003/07/11 18:34:46  emile
+// - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
+// - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
+// - Log-file header updated
+// - init_adc(): all vref initialisations are now the same (/ 2560).
+//               Removed the / 10 division of AD4 in the main loop, this is
+//               now done in init_adc().
+// - Multiply and division changed into <<= and >>= (in lm92_read())
+//
 // Revision 1.6  2003/06/01 13:40:45  emile
 // - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
 // - Switch/fix for std state added for easier testing
@@ -169,15 +178,6 @@ typedef struct _ma
 #define S11_EMPTY_HEAT_EXCHANGER  (11)
 #define S12_CHILL                 (12)
 
-/*
-#define TMLT_HLIMIT           (0.5)
-#define TMLT_LLIMIT           (0.0)
-#define TIMEOUT_1SEC          (1)
-#define VMLT_EMPTY            (3.0)
-#define TIMEOUT3              (300)
-#define TIMEOUT4              (20)
-*/
-
 //--------------------------------------------------------------------------
 // #defines for the valves. Each valve can be set manually or automatically
 // by the STD. Bit-values are for the variable 'valves'.
@@ -189,6 +189,7 @@ typedef struct _ma
 #define V3M  (0x0800)
 #define V2M  (0x0400)
 #define V1M  (0x0200)
+#define P0M  (0x0100)
 #define V7b  (0x0080)
 #define V6b  (0x0040)
 #define V5b  (0x0020)
@@ -196,7 +197,7 @@ typedef struct _ma
 #define V3b  (0x0008)
 #define V2b  (0x0004)
 #define V1b  (0x0002)
-#define V0b  (0x0001)
+#define P0b  (0x0001)
 
 #define V71MTXT "V7 ON (M)"
 #define V70MTXT "V7 OFF (M)"
@@ -226,6 +227,10 @@ typedef struct _ma
 #define V10MTXT "V1 OFF (M)"
 #define V11ATXT "V1 ON (A)"
 #define V10ATXT "V1 OFF (A)"
+#define P01MTXT "PUMP ON (M)"
+#define P00MTXT "PUMP OFF (M)"
+#define P01ATXT "PUMP ON (A)"
+#define P00ATXT "PUMP OFF (A)"
 
 int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts);

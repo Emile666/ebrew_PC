@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.13  2003/08/03 13:27:32  emile
+// - FileOpen Dialog added to Restore Settings function, so that other log files
+//   besides the default name can be read.
+// - Menu option 'Read log file...' added.
+//
 // Revision 1.12  2003/07/11 18:34:45  emile
 // - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
 // - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
@@ -13,7 +18,7 @@
 // - init_adc(): all vref initialisations are now the same (/ 2560).
 //               Removed the / 10 division of AD4 in the main loop, this is
 //               now done in init_adc().
-// - Multiply and division changed into <<= and >>= (in lm76_read())
+// - Multiply and division changed into <<= and >>= (in lm92_read())
 //
 // Revision 1.11  2003/06/29 20:47:43  emile
 // - Changes in Main_Initialisation(). Single exit-point, all code is evaluated,
@@ -251,13 +256,23 @@ void __fastcall TMainForm::Main_Initialisation(void)
 
          led1 = Reg->ReadInteger("LED1"); // Read led1 from registry
          led2 = Reg->ReadInteger("LED2"); // Read led2 from registry
+         led3 = Reg->ReadInteger("LED3"); // Read led3 from registry
+         led4 = Reg->ReadInteger("LED4"); // Read led4 from registry
+
          led1_vis = Reg->ReadInteger("LED1_VIS"); // Read led1 Visibility
          led2_vis = Reg->ReadInteger("LED2_VIS"); // Read led2 Visibility
+         led3_vis = Reg->ReadInteger("LED3_VIS"); // Read led3 Visibility
+         led4_vis = Reg->ReadInteger("LED4_VIS"); // Read led4 Visibility
+
          padc.vref1 = Reg->ReadInteger("VREF1"); // Read Vref1 from registry
          padc.vref2 = Reg->ReadInteger("VREF2"); // Read Vref2 from registry
          padc.vref3 = Reg->ReadInteger("VREF3"); // Read Vref3 from registry
          padc.vref4 = Reg->ReadInteger("VREF4"); // Read Vref4 from registry
          padc.dac   = Reg->ReadInteger("DAC");   // Read DAC Value
+
+         ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
+         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read high limit
+         
          Reg->CloseKey();      // Close the Registry
          init_adc(&padc);      // Calculate ADC converstion constants
          init_pid2(&pid_pars); // Init. PID controller
@@ -312,14 +327,14 @@ void __fastcall TMainForm::Main_Initialisation(void)
                         PR_HW_STAT(LED4_OK);       // LED4
                         sprintf(s,LED4_TXT,s1);
                         strcat(st,s);
-                        PR_HW_STAT(ADDA_OK);       // PCD8591 AD-DA Converter
+                        PR_HW_STAT(ADDA_OK);       // PCF8591 AD-DA Converter
                         sprintf(s,ADDA_TXT,s1);
                         strcat(st,s);
-                        PR_HW_STAT(LM76_1_OK);     // LM92 Temp. Sensor
-                        sprintf(s,LM76_1_TXT,s1);
+                        PR_HW_STAT(LM92_1_OK);     // LM92 Temp. Sensor
+                        sprintf(s,LM92_1_TXT,s1);
                         strcat(st,s);
-                        PR_HW_STAT(LM76_2_OK);     // LM92 Temp. Sensor
-                        sprintf(s,LM76_2_TXT,s1);
+                        PR_HW_STAT(LM92_2_OK);     // LM92 Temp. Sensor
+                        sprintf(s,LM92_2_TXT,s1);
                         strcat(st,s);
                         PR_HW_STAT(FM24C08_OK);    // FM24C08 EEPROM
                         sprintf(s,FM24C08_TXT,s1);
@@ -442,15 +457,30 @@ __fastcall TMainForm::TMainForm(TComponent* Owner)
           Reg->WriteInteger("Kc",KC_INIT);  // Controller gain
           Reg->WriteInteger("Ti",TI_INIT);  // Ti constant
           Reg->WriteInteger("Td",TD_INIT);  // Td constant
-          // I2C Bus Settings Dialog
-          led1 = 0;
-          Reg->WriteInteger("LED1",led1);   // 0=Tad1, 1=Tad2, 2=Tset
-          led2 = 1;
-          Reg->WriteInteger("LED2",led2);   // 0=Tad1, 1=Tad2, 2=Tset
+
+          //-------------------------------------------------------
+          // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
+          //                       3=Tset_mlt, 4=Ttriac, 5=Vmlt
+          //-------------------------------------------------------
+          led1 = 0; Reg->WriteInteger("LED1",led1);   // Thlt
+          led2 = 1; Reg->WriteInteger("LED2",led2);   // Tmlt
+          led3 = 2; Reg->WriteInteger("LED3",led3);   // Tset_hlt
+          led4 = 3; Reg->WriteInteger("LED4",led4);   // Tset_mlt
+
           led1_vis = 4; // 12 mA visibility
           Reg->WriteInteger("LED1_VIS",led1_vis); // LED1 Visibility
           led2_vis = 4; // 12 mA visibility
-          Reg->WriteInteger("LED2_VIS",led2_vis); // LED1 Visibility
+          Reg->WriteInteger("LED2_VIS",led2_vis); // LED2 Visibility
+          led3_vis = 4; // 12 mA visibility
+          Reg->WriteInteger("LED3_VIS",led3_vis); // LED3 Visibility
+          led4_vis = 4; // 12 mA visibility
+          Reg->WriteInteger("LED4_VIS",led4_vis); // LED4 Visibility
+
+          ttriac_hlim = 60; // Upper limit for triac temp.
+          Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
+          ttriac_llim = 40; // Lower limit for triac temp.
+          Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
+
           // Init values for mash scheme variables
           Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
           Reg->WriteInteger("VREF1",VREF_INIT); // init. ADC1 VREF
@@ -599,6 +629,7 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
       sprintf(s,"Error %d while closing LSB_IO",err);
       if (err) MessageBox(NULL,s,"ERROR",MB_OK);
    } // if
+
    if ((hw_status & LED1_OK) && !err)     // clear LED1 display
    {
       err = set_led(-1,0,1,led1_vis);
@@ -611,6 +642,19 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
       sprintf(s,"Error %d while closing LED2 Display",err);
       if (err) MessageBox(NULL,s,"ERROR",MB_OK);
    } // if
+   if ((hw_status & LED3_OK) && !err)     // clear LED3 display
+   {
+      err = set_led(-1,0,3,led3_vis);
+      sprintf(s,"Error %d while closing LED3 Display",err);
+      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
+   } // if
+   if ((hw_status & LED4_OK) && !err)     // clear LED4 display
+   {
+      err = set_led(-1,0,4,led4_vis);
+      sprintf(s,"Error %d while closing LED4 Display",err);
+      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
+   } // if
+
    if ((hw_status & LCD_OK) && !err)     // clear LCD display
    {
       //err = WriteInstrLCD(0x01); // clear display
@@ -773,10 +817,18 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          ptmp->RG1->ItemIndex = led1;         // Set radio-button
          led2 = Reg->ReadInteger("LED2");     // Read LED2 from registry
          ptmp->RG2->ItemIndex = led2;         // Set Radio-button
+         led3 = Reg->ReadInteger("LED3");     // Read LED3 from registry
+         ptmp->RG3->ItemIndex = led3;         // Set radio-button
+         led4 = Reg->ReadInteger("LED4");     // Read LED4 from registry
+         ptmp->RG4->ItemIndex = led4;         // Set radio-button
          led1_vis = Reg->ReadInteger("LED1_VIS"); // Read LED1 Visibility
          ptmp->UpDown1->Position = led1_vis;
          led2_vis = Reg->ReadInteger("LED2_VIS"); // Read LED2 Visibility
          ptmp->UpDown2->Position = led2_vis;
+         led3_vis = Reg->ReadInteger("LED3_VIS"); // Read LED3 Visibility
+         ptmp->UpDown5->Position = led3_vis;
+         led4_vis = Reg->ReadInteger("LED4_VIS"); // Read LED4 Visibility
+         ptmp->UpDown6->Position = led4_vis;
 
          ptmp->Vref1_edit->Text  = AnsiString(padc.vref1);
          ptmp->Vref2_edit->Text  = AnsiString(padc.vref2);
@@ -784,18 +836,38 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          ptmp->Vref4_edit->Text  = AnsiString(padc.vref4);
          ptmp->UpDown3->Position = padc.dac;   // value for DA Converter
          ptmp->UpDown4->Position = str_vmlt.N; // order of MA filter
+
+         ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM");
+         ptmp->Thlim_edit->Text  = AnsiString(ttriac_hlim);
+         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM");
+         ptmp->Tllim_edit->Text  = AnsiString(ttriac_llim);
+
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
             strcpy(s,ptmp->HW_Base_Edit->Text.c_str()); // retrieve hex value
             x2 = (int)(strtol(s,&endp,16)); // convert to integer
+
+            //-------------------------------------------------------
+            // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
+            //                       3=Tset_mlt, 4=Ttriac, 5=Vmlt
+            //-------------------------------------------------------
             led1 = ptmp->RG1->ItemIndex;
-            Reg->WriteInteger("LED1",led1); // 0=Tad1, 1=Tad2, 2=Tset
+            Reg->WriteInteger("LED1",led1);
             led2 = ptmp->RG2->ItemIndex;
-            Reg->WriteInteger("LED2",led2); // 0=Tad1, 1=Tad2, 2=Tset
+            Reg->WriteInteger("LED2",led2);
+            led3 = ptmp->RG3->ItemIndex;
+            Reg->WriteInteger("LED3",led3);
+            led4 = ptmp->RG4->ItemIndex;
+            Reg->WriteInteger("LED4",led4);
+
             led1_vis = ptmp->Vis1_Edit->Text.ToInt();
             Reg->WriteInteger("LED1_VIS",led1_vis);
             led2_vis = ptmp->Vis2_Edit->Text.ToInt();
             Reg->WriteInteger("LED2_VIS",led2_vis);
+            led3_vis = ptmp->Vis3_Edit->Text.ToInt();
+            Reg->WriteInteger("LED3_VIS",led3_vis);
+            led4_vis = ptmp->Vis4_Edit->Text.ToInt();
+            Reg->WriteInteger("LED4_VIS",led4_vis);
 
             padc.vref1 = ptmp->Vref1_edit->Text.ToInt();
             padc.vref2 = ptmp->Vref2_edit->Text.ToInt();
@@ -808,8 +880,12 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
             Reg->WriteInteger("VREF3",padc.vref3);
             Reg->WriteInteger("VREF4",padc.vref4);
             Reg->WriteInteger("DAC"  ,padc.dac);
-            //sprintf(dbg,"x1 = 0x%3x, x2 = 0x%3x, s = %s",x1,x2,s);
-            //MessageBox(NULL,dbg,"DEBUG",MB_OK);
+
+            ttriac_hlim = ptmp->Thlim_edit->Text.ToInt();
+            Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
+            ttriac_llim = ptmp->Tllim_edit->Text.ToInt();
+            Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
+            
             if (x2 != x1)
             {
                Reg->WriteInteger("I2C_Base",x2); // save new I2C address
@@ -869,7 +945,13 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    switch (tmr.isrstate)
    {
       case 0: /* enable heater */
-              if (tmr.htimer == 0)
+              if (triac_too_hot)
+              {
+                 value &= ~HEATERb; // set heater OFF
+                 tmr.isrstate = 1;  // go to 'disable heater' state
+                 tmr.ltimer   = tmr.time_low; // init. timer
+              }
+              else if (tmr.htimer == 0)
               {  /* timer has counted down */
                  if (tmr.time_low == 0)
                  {  /* indication for 100% gamma, remain in this state */
@@ -899,12 +981,13 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
                     tmr.ltimer = tmr.time_low; /* init. timer again */
                     value &= ~HEATERb; // set heater OFF
                  }
-                 else
+                 else if (!triac_too_hot)
                  {
                     value |= HEATERb; // set heater ON
                     tmr.isrstate = 0; /* go to 'enable heater' state */
                     tmr.htimer   = tmr.time_high; /* init. timer */
-                 } /* else */
+                 } /* else if*/
+                 // Remain in this state if timeout && !0% && triac_too_hot
               } /* if */
               else
               {
@@ -914,7 +997,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
               } /* else */
               break;
 
-      default:  tmr.isrstate = 0;
+      default:  tmr.isrstate = 1;
                 break;
    } /* case */
 
@@ -944,16 +1027,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
           padc.ad3 = 0.0; // Triac temperature
           padc.ad4 = 0.0; // Pressure transducer
        } // else
-       //-----------------------------------------------------------------------
-       // If a LM76/LM92 is connected, overwrite the LM35 values on AD1 and AD2
-       //-----------------------------------------------------------------------
-       if (hw_status & LM76_1_OK)
+       //-----------------------------------------------------------------
+       // If a LM92 is connected, overwrite the LM35 values on AD1 and AD2
+       //-----------------------------------------------------------------
+       if (hw_status & LM92_1_OK)
        {
-          padc.ad1 = lm76_read(0); // Read HLT temp. from LM76 device
+          padc.ad1 = lm92_read(0); // Read HLT temp. from LM92 device
        } // if
-       if (hw_status & LM76_2_OK)
+       if (hw_status & LM92_2_OK)
        {
-          padc.ad2 = lm76_read(1); // Read MLT temp. from LM76 device
+          padc.ad2 = lm92_read(1); // Read MLT temp. from LM92 device
        } // if
 
        if (swfx.tad1_sw)
@@ -970,9 +1053,29 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        sprintf(tmp_str,"%4.2f",padc.ad2);  // Display AD2 value to screen
        Val_Tmlt->Caption = tmp_str;
 
-       sprintf(tmp_str,"%4.1f",padc.ad3);         // Display AD3 value on screen
-       Val_TTriac->Caption = tmp_str;             // AD3 = Temp. of Triac
+       //---------------------------------------------------
+       // Triac Temperature Protection: hysteresis function
+       //---------------------------------------------------
+       if (triac_too_hot)
+       {
+          if (padc.ad3 < ttriac_llim)
+          {
+             triac_too_hot = false;
+          }
+       }
+       else
+       {
+          if (padc.ad3 > ttriac_hlim)
+          {
+             triac_too_hot = true;
+          }
+       }
+       sprintf(tmp_str,"%4.1f",padc.ad3); // Display AD3 value on screen
+       Val_TTriac->Caption = tmp_str;     // AD3 = Temp. of Triac
 
+       //-------------------------------------
+       // Pressure sensor, AD4, Volume of MLT
+       //-------------------------------------
        if (swfx.vmlt_sw)
        {
           Vmlt = swfx.vmlt_fx;
@@ -1000,44 +1103,11 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
          }
       } // if
    } // else
-   //----------------------------------------------------------------------
-   // Third time-slice: Output values to I2C LED Displays every TS seconds.
-   //----------------------------------------------------------------------
+   //--------------------------------------------------------------------------
+   // Third time-slice: Calculate Gamma value with the PID controller.
+   //                   Update Tset_hlt and update values on screen every TS seconds.
+   //--------------------------------------------------------------------------
    else if (tmr.pid_tmr == 3)
-   {
-      // Now update the LEDs with the proper values
-      if (hw_status & LED1_OK)
-      {
-         switch(led1) // 0=Tad1, 1=Tad2, 2=Tset_hlt
-         {
-            case 0: err  = set_led((int)(100.0 * padc.ad1),2,1,led1_vis); // set LED1 with DP at pos.2
-                    break;
-            case 1: err  = set_led((int)(100.0 * padc.ad2),2,1,led1_vis); // set LED1 with DP at pos.2
-                    break;
-            case 2: err  = set_led((int)(100.0 * tset_hlt),2,1,led1_vis); // set LED1 with DP at pos.2
-                    break;
-            default: break;
-         } // switch
-      } // if
-      if (hw_status & LED2_OK)
-      {
-         switch(led2) // 0=Tad1, 1=Tad2, 2=Tset_hlt
-         {
-            case 0: err  = set_led((int)(100.0 * padc.ad1),2,2,led2_vis); // set LED2 with DP at pos.2
-                    break;
-            case 1: err  = set_led((int)(100.0 * padc.ad2),2,2,led2_vis); // set LED2 with DP at pos.2
-                    break;
-            case 2: err  = set_led((int)(100.0 * tset_hlt),2,2,led2_vis); // set LED2 with DP at pos.2
-                    break;
-            default: break;
-         } // switch
-      } // if
-   } // else if
-   //--------------------------------------------------------------------------
-   // Fourth time-slice: Calculate Gamma value with the PID controller.
-   //                    Update Tset_hlt and update values on screen every TS seconds.
-   //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr == 4)
    {
       // PID_RB->ItemIndex = 1 => PID Controller On
       pid_reg2(padc.ad1,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex); // gamma = pid_reg2(temp)
@@ -1065,6 +1135,18 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       Val_tset->Caption = tmp_str;
       sprintf(tmp_str,"%4.1f",tset_hlt - padc.ad1);
       Val_ek->Caption = tmp_str;
+   } // else if
+   //-----------------------------------------------------------------------
+   // Fourth time-slice: Output values to I2C LED Displays every TS seconds.
+   //-----------------------------------------------------------------------
+   else if (tmr.pid_tmr == 4)
+   {
+      // Now update the LEDs with the proper values by calling macro SET_LED
+      //      HW_BIT, which display, which var., Visibility
+      SET_LED(LED1_OK,1,led1,led1_vis);
+      SET_LED(LED2_OK,2,led2,led2_vis);
+      SET_LED(LED3_OK,3,led3,led3_vis);
+      SET_LED(LED4_OK,4,led4,led4_vis);
    } // else if
    //--------------------------------------------------------------------------
    // Fifth time-slice: Calculate State Transition Diagram (STD) and determine
@@ -1103,6 +1185,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       } // switch
       //-----------------------------------------------------------------
       // Now output all valve bits to DIG_IO_MSB_BASE (if it is present).
+      // NOTE: The pump bit is output to DIG_IO_LSB_IO!
       //-----------------------------------------------------------------
       if (hw_status & DIG_IO_MSB_OK)
       {
@@ -1118,6 +1201,13 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //--------------------------------------------------------------------------
    else if (tmr.pid_tmr % 20 == 6)
    {
+      switch (std_out & (P0M | P0b))
+      {
+         case P0M | P0b: P0->Caption = P01MTXT; break;
+         case P0M      : P0->Caption = P00MTXT; break;
+         case P0b      : P0->Caption = P01ATXT; break;
+         default       : P0->Caption = P00ATXT; break;
+      } // switch
       switch (std_out & (V1M | V1b))
       {
          case V1M | V1b: V1->Caption = V11MTXT; break;
@@ -1202,7 +1292,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //--------------------------------------------
    // Send Pump On/Off signal to DIG_IO_LSB_BASE.
    //--------------------------------------------
-   if (std_out & V0b)
+   if (std_out & P0b)
    {
       value |= PUMPb;
    }
@@ -1391,7 +1481,11 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
 
 void __fastcall TMainForm::Auto1Click(TObject *Sender)
 {
-   if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
+   if (PopupMenu1->PopupComponent->Name.AnsiCompare("P0") == 0)
+   {
+      std_out &= ~(P0M | P0b); // Pump = Auto mode + OFF
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
    {
       std_out &= ~(V1M | V1b); // V1 = Auto mode + OFF
    }
@@ -1421,7 +1515,12 @@ void __fastcall TMainForm::Auto1Click(TObject *Sender)
 
 void __fastcall TMainForm::OFF1Click(TObject *Sender)
 {
-   if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
+   if (PopupMenu1->PopupComponent->Name.AnsiCompare("P0") == 0)
+   {
+      std_out |=  P0M; // Pump = Manual Override mode
+      std_out &= ~P0b; // Pump = OFF
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
    {
       std_out |=  V1M; // V1 = Manual Override mode
       std_out &= ~V1b; // V1 = OFF
@@ -1461,7 +1560,11 @@ void __fastcall TMainForm::OFF1Click(TObject *Sender)
 
 void __fastcall TMainForm::ON1Click(TObject *Sender)
 {
-   if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
+   if (PopupMenu1->PopupComponent->Name.AnsiCompare("P0") == 0)
+   {
+      std_out |= (P0M | P0b); // Pump = Manual Override mode + ON
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
    {
       std_out |= (V1M | V1b); // V1 = Manual Override mode + ON
    }
@@ -1491,7 +1594,16 @@ void __fastcall TMainForm::ON1Click(TObject *Sender)
 
 void __fastcall TMainForm::PopupMenu1Popup(TObject *Sender)
 {
-   if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
+   if (PopupMenu1->PopupComponent->Name.AnsiCompare("P0") == 0)
+   {
+      if (std_out & P0M) // Manual Override Mode
+      {
+         if (std_out & P0b) PopupMenu1->Items->Items[2]->Checked = true; // On (M)
+         else               PopupMenu1->Items->Items[1]->Checked = true; // Off (M)
+      }
+      else PopupMenu1->Items->Items[0]->Checked = true; // Auto
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
    {
       if (std_out & V1M) // Manual Override Mode
       {
