@@ -6,6 +6,15 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.5  2003/06/01 11:53:48  emile
+// - tset has been renamed in tset_hlt for more clearance
+// - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
+//        This is now 'thlt >= tset_hlt', because timer0 only starts with water
+//        in the MLT => this caused a dead-lock.
+// - 6 defines have been made adjustable via 'Options|Sparge & STD Settings'.
+//   These defines were TMLT_HLIMIT, TMLT_LLIMIT, TIMEOUT_1SEC, VMLT_EMPTY,
+//   TIMEOUT3 and TIMEOUT4.
+//
 // Revision 1.4  2003/01/04 22:35:50  emile
 // - Restore Settings function now restores all relevant variables (not just
 //   the mashing variables). Several separate functions are created to
@@ -218,8 +227,8 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts);
 void update_tset(double *tset, double temp, double offset,
                  maisch_schedule ms[], int *ms_idx, int ms_total);
 int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
-               unsigned int *kleppen, maisch_schedule ms[], int ms_idx,
-               int ms_total, sparge_struct *sps, std_struct *std, int pid_on);
+               unsigned int *kleppen, maisch_schedule ms[], int ms_idx, int ms_total,
+               sparge_struct *sps, std_struct *std, int pid_on, int std_fx);
 void init_ma(ma *p, int N);
 double moving_average(ma *p, double x);
 

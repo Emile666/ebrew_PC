@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2003/06/01 11:53:48  emile
+// - tset has been renamed in tset_hlt for more clearance
+// - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
+//        This is now 'thlt >= tset_hlt', because timer0 only starts with water
+//        in the MLT => this caused a dead-lock.
+// - 6 defines have been made adjustable via 'Options|Sparge & STD Settings'.
+//   These defines were TMLT_HLIMIT, TMLT_LLIMIT, TIMEOUT_1SEC, VMLT_EMPTY,
+//   TIMEOUT3 and TIMEOUT4.
+//
 // Revision 1.5  2003/01/05 14:31:21  emile
 // - Bug-fix: Pressing the top-right Close button of EBrew now activates the
 //   MenuFileExitClick method. This was not the case yet, which resulted in
@@ -888,6 +897,21 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           padc.ad2 = lm76_read(1); // Read MLT temp. from LM76 device
        } // if
+
+       if (swfx.tad1_sw)
+       {
+          padc.ad1 = (double)swfx.tad1_fx;
+       } // if
+       sprintf(tmp_str,"%4.2f",padc.ad1);  // Display AD1 value to screen
+       Val_temp->Caption = tmp_str;
+
+       if (swfx.tad2_sw)
+       {
+          padc.ad2 = (double)swfx.tad2_fx;
+       } // if
+       sprintf(tmp_str,"%4.2f",padc.ad2);  // Display AD2 value to screen
+       Val_Tmlt->Caption = tmp_str;
+
        sprintf(tmp_str,"%4.1f",padc.ad3);         // Display AD3 value on screen
        Val_TTriac->Caption = tmp_str;             // AD3 = Temp. of Triac
        Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
@@ -896,22 +920,11 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        Val_Volume->Caption = tmp_str;             // AD4 = Pressure Transducer
    } // if
    //--------------------------------------------------------------------
-   // Second time-slice: Update Thlt and Tmlt on screen every TS seconds.
+   // Second time-slice: -
    //--------------------------------------------------------------------
    else if (tmr.pid_tmr == 2)
    {
-       if (swfx.tad1_sw)
-       {
-          padc.ad1 = (double)swfx.tad1_fx;
-       } // if
-       sprintf(tmp_str,"%4.2f",padc.ad1);  // Display AD1 value to screen
-       Val_temp->Caption = tmp_str;
-       if (swfx.tad2_sw)
-       {
-          padc.ad2 = (double)swfx.tad2_fx;
-       } // if
-       sprintf(tmp_str,"%4.2f",padc.ad2);  // Display AD2 value to screen
-       Val_Tmlt->Caption = tmp_str;
+      // Empty
    } // else
    //----------------------------------------------------------------------
    // Third time-slice: Output values to I2C LED Displays every TS seconds.

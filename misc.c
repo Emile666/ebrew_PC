@@ -6,6 +6,15 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.5  2003/06/01 11:53:48  emile
+  - tset has been renamed in tset_hlt for more clearance
+  - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
+         This is now 'thlt >= tset_hlt', because timer0 only starts with water
+         in the MLT => this caused a dead-lock.
+  - 6 defines have been made adjustable via 'Options|Sparge & STD Settings'.
+    These defines were TMLT_HLIMIT, TMLT_LLIMIT, TIMEOUT_1SEC, VMLT_EMPTY,
+    TIMEOUT3 and TIMEOUT4.
+
   Revision 1.4  2003/01/04 22:35:50  emile
   - Restore Settings function now restores all relevant variables (not just
     the mashing variables). Several separate functions are created to
@@ -498,8 +507,8 @@ void update_tset(double *tset, double temp, double offset,
 } /* update_tset() */
 
 int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
-               unsigned int *kleppen, maisch_schedule ms[], int ms_idx,
-               int ms_total, sparge_struct *sps, std_struct *std, int pid_on)
+               unsigned int *kleppen, maisch_schedule ms[], int ms_idx, int ms_total,
+               sparge_struct *sps, std_struct *std, int pid_on, int std_fx)
 /*------------------------------------------------------------------
   Purpose  : This function contains the State Transition Diagram (STD)
              for the ebrew program.
@@ -522,6 +531,7 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
        sps : Struct containing all sparge variables
        std : Struct containing all STD variables
     pid_on : 1 = PID Controller enabled (needed as a condition here)
+    std_fx : Fix value for ebrew_std, -1 if no fix
   Returns  : The values of ebrew_std is returned
   ------------------------------------------------------------------*/
 {
@@ -529,7 +539,6 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
    unsigned int  klepstanden[] = {0x0000, 0x0024, 0x0015, 0x0013, 0x0023,
                                   0x0013, 0x0093, 0x0017, 0x0013, 0x0083,
                                   0x0010, 0x0013, 0x00c1};
-
    switch (std->ebrew_std)
    {
       case S00_INITIALISATION:
@@ -644,6 +653,11 @@ int update_std(double vmlt, double tmlt, double thlt, double tset_hlt,
            std->ebrew_std = S00_INITIALISATION;
            break;
    } // switch
+
+   if (std_fx != -1)
+   {
+      std->ebrew_std = std_fx;
+   } // if
 
    //-------------------------------------------------
    // Now calculate the proper settings for the valves

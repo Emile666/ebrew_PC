@@ -5,6 +5,11 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2002/12/30 13:33:44  emile
+// - Headers with CVS tags added to every source file
+// - Restore Settings function is added
+// - "ebrew" registry key now in a define REGKEY
+//
 // ==========================================================================
 
 //---------------------------------------------------------------------------
@@ -35,6 +40,8 @@ __published:	// IDE-managed Components
         TLabel *Label2;
         TCheckBox *CB_Tad2;
         TMaskEdit *Tad2_MEdit;
+        TCheckBox *CB_std;
+        TMaskEdit *STD_MEdit;
         void __fastcall CB_GammaClick(TObject *Sender);
         void __fastcall CB_TsetClick(TObject *Sender);
         void __fastcall Gamma_MEditClick(TObject *Sender);
