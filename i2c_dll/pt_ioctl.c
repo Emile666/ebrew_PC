@@ -104,7 +104,8 @@ unsigned char OpenPortTalk(void)
 
 void ClosePortTalk(void)
 {
-    CloseHandle(PortTalk_Handle);
+    bool err;
+    err = CloseHandle(PortTalk_Handle);
 }
 
 unsigned char StartPortTalkDriver(void)

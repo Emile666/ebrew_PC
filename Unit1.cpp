@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.36  2005/03/26 13:53:21  Emile
+// - During State "Mash Preheat" pump is set to ON (again)
+// - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
+//   variables are introduced (BURNER_HHYST and BURNER_LHYST)
+// - Various screens a little enlarged (no scrollbars visible anymore)
+//
 // Revision 1.35  2004/05/13 20:50:59  emile
 // - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
 //   timing is now reset after 100 loops (5 seconds)
@@ -955,14 +961,25 @@ void __fastcall TMainForm::exit_ebrew(void)
    char s[80];
 
    //T50msec->Enabled = false; // Disable Interrupt Timer
-   ShowDataGraphs->GraphTimer->Enabled = false; // Stop Graph Update timer
-   ViewMashProgress->UpdateTimer->Enabled = false; // Stop Mash Progress Update timer
+   if (ShowDataGraphs)
+   {
+      ShowDataGraphs->GraphTimer->Enabled = false; // Stop Graph Update timer
+   }
+   if (ViewMashProgress)
+   {
+      ViewMashProgress->UpdateTimer->Enabled = false; // Stop Mash Progress Update timer
+   }
    Sleep(51);                // Make sure that Timer is disabled
-   delete ShowDataGraphs;    // close modeless dialog
-   ShowDataGraphs = 0;       // null the pointer
-   delete ViewMashProgress;  // close modeless dialog
-   ViewMashProgress = 0;     // null the pointer
-
+   if (ShowDataGraphs)
+   {
+      delete ShowDataGraphs;    // close modeless dialog
+      ShowDataGraphs = 0;       // null the pointer
+   }
+   if (ViewMashProgress)
+   {
+      delete ViewMashProgress;  // close modeless dialog
+      ViewMashProgress = 0;     // null the pointer
+   }
    if (hw_status & DIG_IO_LSB_OK)
    {
       err = WriteIOByte(0xFF,LSB_IO); // disable heater, alive LED & PUMP
@@ -1421,11 +1438,13 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
    //-------------------------------------------------
    // Output lsb_io to IO port every 50 msec.
    // (see misc.h for bit definitions)
-   // Bits are inverted, because they are active low
+   // Bits for the Heater and the PUMP are inverted,
+   // because they are active low.
    //-------------------------------------------------
    if (hw_status & DIG_IO_LSB_OK)
    {
-      err = WriteIOByte(~lsb_io,LSB_IO); // Write inverted value to IO port
+      lsb_io ^= PUMPb | HEATERb; // Invert PUMP and Heater bits
+      err = WriteIOByte(lsb_io,LSB_IO); // Write inverted value to IO port
       if (err) Reset_I2C_Bus(DIG_IO_LSB_BASE,err);
    } // if
 } // Generate_IO_Signals()
