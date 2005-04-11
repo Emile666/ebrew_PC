@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.38  2005/04/11 10:50:27  Emile
+// Bug-fix: Gas burner hysteresis did not work. Is corrected.
+//
 // Revision 1.37  2005/04/11 10:35:12  Emile
 // - exit_ebrew(): delete pointers only if still active
 // - Only PUMP and HEATER bits inverted, alive and burner bits not
@@ -986,7 +989,8 @@ void __fastcall TMainForm::exit_ebrew(void)
    }
    if (hw_status & DIG_IO_LSB_OK)
    {
-      err = WriteIOByte(0xFF,LSB_IO); // disable heater, alive LED & PUMP
+      // Disable Heater and Pump (active-low) and Alive LED and Gas Burner (active-high)
+      err = WriteIOByte(PUMPb | HEATERb,LSB_IO);
       sprintf(s,"Error %d while closing LSB_IO",err);
       if (err) MessageBox(NULL,s,"ERROR",MB_OK);
    } // if
