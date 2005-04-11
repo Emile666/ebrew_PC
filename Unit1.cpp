@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.39  2005/04/11 10:57:39  Emile
+// - Bug-fix: exit_ebrew() did not shut down gas-burner (and alive LED). Corrected.
+//
 // Revision 1.38  2005/04/11 10:50:27  Emile
 // Bug-fix: Gas burner hysteresis did not work. Is corrected.
 //
@@ -1430,10 +1433,11 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
       lsb_io &= ~PUMPb;
    } // else
 
-   //--------------------------------------------------
+   //----------------------------------------------------
    // Send Gas Burner On/Off signal to DIG_IO_LSB_BASE.
-   //--------------------------------------------------
-   if (tmr.time_high > pid_pars.burner_hyst_h)
+   // Safety: disable gas burner when time_switch is true
+   //----------------------------------------------------
+   if (!time_switch && (tmr.time_high > pid_pars.burner_hyst_h))
    {
       burner_on = true;
    }
