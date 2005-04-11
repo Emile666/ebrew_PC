@@ -6,6 +6,16 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.26  2004/05/13 20:50:59  emile
+// - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
+//   timing is now reset after 100 loops (5 seconds)
+// - TS parameter now only works on PID-controller time-slice. Max. is 20 sec.
+// - Bug-fix in init_ma() filter when init. to a value (should be /N).
+// - LPF for D-term of PID controller added. New reg. var. K_LPF
+// - PID Debug label added + checkbox in PID screen. Default off (NO reg var).
+// - Statusbar object added
+// - Start made with network functionality. Not operational yet.
+//
 // Revision 1.25  2004/05/08 14:52:51  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -436,6 +446,7 @@ public:		// User declarations
         bool            IsServer;        // true = server (not the client)
         bool            network_init;    // true = network init. to be done
         bool            network_alive;   // true = network connection is established
+        bool            burner_on;       // true = gas burner is on
         char            *ebrew_revision; // contains CVS revision number
         __fastcall TMainForm(TComponent* Owner);
 };

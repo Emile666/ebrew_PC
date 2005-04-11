@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.37  2005/04/11 10:35:12  Emile
+// - exit_ebrew(): delete pointers only if still active
+// - Only PUMP and HEATER bits inverted, alive and burner bits not
+//
 // Revision 1.36  2005/03/26 13:53:21  Emile
 // - During State "Mash Preheat" pump is set to ON (again)
 // - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
@@ -1427,13 +1431,21 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
    //--------------------------------------------------
    if (tmr.time_high > pid_pars.burner_hyst_h)
    {
-      lsb_io |= BURNERb;
+      burner_on = true;
    }
    else if (tmr.time_high < pid_pars.burner_hyst_l)
    {
-      lsb_io &= ~BURNERb;
+      burner_on = false;
    } // else if
    // else: do nothing (hysteresis)
+   if (burner_on)
+   {
+      lsb_io |= BURNERb;
+   }
+   else
+   {
+      lsb_io &= ~BURNERb;
+   } // else
 
    //-------------------------------------------------
    // Output lsb_io to IO port every 50 msec.
