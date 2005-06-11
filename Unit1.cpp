@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.40  2005/04/11 12:11:03  Emile
+// - Added safety feature: gas burner is disabled if time_switch is set.
+//
 // Revision 1.39  2005/04/11 10:57:39  Emile
 // - Bug-fix: exit_ebrew() did not shut down gas-burner (and alive LED). Corrected.
 //
@@ -283,6 +286,7 @@ extern byte fscl_values[]; // defined in i2c_dll.cpp
 #pragma link "VrTank"
 #pragma link "VrThermoMeter"
 #pragma link "VrPowerMeter"
+#pragma link "VrLeds"
 #pragma resource "*.dfm"
 
 TMainForm *MainForm;
@@ -2627,5 +2631,21 @@ void __fastcall TMainForm::ClientSocket1Error(TObject *Sender,
    ErrorCode = 0; // prevent exception
    StatusBar->Panels->Items[PANEL_TCPIP]->Text = AnsiString(s);
 } // TMainForm::ClientSocket1Error()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
+{
+   if (UpCase(Key) == 'P')
+   {
+      std_out |= P0M; // Set Pump Manual bit
+      std_out ^= P0b; // Toggle Pump On/Off
+   } // if
+   else if ((Key >= '1') && (Key <= '7'))
+   {
+      // This code only works if V7 is the MSB and V1 is the LSB!! (see misc.h)
+      std_out |= (V1M << (Key - '1')); // set corresponding V1M..V7M bit
+      std_out ^= (V1b << (Key - '1')); // set corresponding V1b..V7b bit
+   }
+}
 //---------------------------------------------------------------------------
 

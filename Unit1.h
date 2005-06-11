@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.27  2005/04/11 10:50:27  Emile
+// Bug-fix: Gas burner hysteresis did not work. Is corrected.
+//
 // Revision 1.26  2004/05/13 20:50:59  emile
 // - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
 //   timing is now reset after 100 loops (5 seconds)
@@ -213,6 +216,7 @@
 #include "VrThermoMeter.hpp"
 #include "VrPowerMeter.hpp"
 #include <ScktComp.hpp>
+#include "VrLeds.hpp"
 
 #define TS_INIT    (5.0)
 #define KC_INIT   (69.0)
@@ -390,6 +394,7 @@ __published:	// IDE-managed Components
         void __fastcall ClientSocket1Error(TObject *Sender,
           TCustomWinSocket *Socket, TErrorEvent ErrorEvent,
           int &ErrorCode);
+        void __fastcall FormKeyPress(TObject *Sender, char &Key);
 private:	// User declarations
         void __fastcall network_handler(void);
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);

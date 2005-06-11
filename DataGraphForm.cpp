@@ -4,6 +4,20 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2004/05/08 14:52:50  emile
+// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+// - View mash progress screen: reorganised, pre-heat timers added, timers are now
+//   in seconds instead of minutes.
+// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+// - 'Apply' Button added to Fix parameters dialog screen.
+// - 'Edit mash scheme' no longer resets the (running) mash timers
+// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+//   also removed.
+// - Changing init. volume of HLT did not result in an update on screen. Corrected.
+//
 // Revision 1.9  2004/04/25 14:02:17  emile
 // - Added a 'type C' PID controller, function pid_reg3(). Possible to select
 //   this from the PID settings dialog screen. Left the old one in for
@@ -105,7 +119,7 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
    {
       gettime(&t1);
       fprintf(fd,"%02d:%02d:%02d, ",t1.ti_hour,t1.ti_min,t1.ti_sec);
-      fprintf(fd,"%6.2f, %6.2f, %6.2f, %6.2f, %5.1f, %6.2f,%3d,%3d,%3d, %5.1f\n",
+      fprintf(fd,"%6.2f, %6.2f, %6.2f, %6.2f, %5.1f, %6.2f,%3d,%3d,%3d, %5.1f, %6.2f\n",
                                                       MainForm->tset_mlt,
                                                       MainForm->tset_hlt,
                                                       MainForm->thlt,
@@ -115,7 +129,8 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
                                                       MainForm->PID_RB->ItemIndex,
                                                       MainForm->std.ms_idx,
                                                       MainForm->std.ebrew_std,
-                                                      MainForm->gamma);
+                                                      MainForm->gamma,
+                                                      MainForm->padc.ad4); //Debug Vmlt_unf
       fclose(fd);
    } /* if */
 

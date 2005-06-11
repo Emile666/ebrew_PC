@@ -6,6 +6,16 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.12  2004/05/13 20:50:59  emile
+  - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
+    timing is now reset after 100 loops (5 seconds)
+  - TS parameter now only works on PID-controller time-slice. Max. is 20 sec.
+  - Bug-fix in init_ma() filter when init. to a value (should be /N).
+  - LPF for D-term of PID controller added. New reg. var. K_LPF
+  - PID Debug label added + checkbox in PID screen. Default off (NO reg var).
+  - Statusbar object added
+  - Start made with network functionality. Not operational yet.
+
   Revision 1.11  2004/05/08 14:52:52  emile
   - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
     tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -811,6 +821,10 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
               vol->Vmlt_old  = vol->Vmlt;          // remember current MLT volume
               std->ebrew_std = S07_PUMP_FROM_HLT_TO_MLT;
            } // if
+           else if (vol->Vmlt > vol->Vmlt_old - sps->sp_vol_batch)
+           {
+              std->ebrew_std = S06_PUMP_FROM_MLT_TO_BOIL; // prevent false transitions
+           } // else if
            break;
       //---------------------------------------------------------------------------
       // S09_EMPTY_MLT: Sparging is finished, pump all wort to the boil kettle
