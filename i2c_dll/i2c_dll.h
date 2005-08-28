@@ -9,6 +9,9 @@
 //           the I2C Hardware.
 // ----------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2005/03/26 13:42:01  Emile
+// - Added functionality for Velleman card. i2c_init() is changed by this!!!
+//
 // Revision 1.10  2004/02/25 18:21:36  emile
 // - Undo of previous revision. Porttalk was not the problem here.
 //
@@ -163,8 +166,8 @@ enum i2c_acks {I2C_ACK, I2C_NACK};
 #define LED3_TXT         "LED3 Display\tSAA 1064\t0x74 : %s Present\n"
 #define LED4_TXT         "LED4 Display\tSAA 1064\t0x76 : %s Present\n"
 #define ADDA_TXT         "AD/DA Converter\tPCF 8591\t0x90 : %s Present\n"
-#define LM92_1_TXT       "Temp. Sensor 1\tLM92\t0x92 : %s Present\n"
-#define LM92_2_TXT       "Temp. Sensor 2\tLM92\t0x94 : %s Present\n"
+#define LM92_1_TXT       "Temp. Sensor HLT\tLM92\t0x92 : %s Present\n"
+#define LM92_2_TXT       "Temp. Sensor MLT\tLM92\t0x94 : %s Present\n"
 #define LM92_3_TXT       "Temp. Sensor 3\tLM92\t0x96 : %s Present\n"
 #define FM24C08_TXT      "EEPROM Device\tFM24C08\t0xA0 : %s Present\n"
 

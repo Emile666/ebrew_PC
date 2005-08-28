@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.28  2005/06/11 12:35:07  Emile
+// - Keyboard shortcuts 'P' (Pump toggle) and '1' .. '7' (valve toggles) added.
+// - Added transition from state 8 back to state 6. This prevents a transition
+//   change during sparging when a glitch on Vmlt happens.
+// - Added Vmlt_unf (=padc.ad4) to log-file for debugging purposes.
+//
 // Revision 1.27  2005/04/11 10:50:27  Emile
 // Bug-fix: Gas burner hysteresis did not work. Is corrected.
 //
@@ -407,7 +413,6 @@ private:	// User declarations
         void __fastcall Reset_I2C_Bus(int i2c_bus_id, int err);
         void __fastcall Generate_IO_Signals(void);
         timer_vars      tmr;        // struct with timer variables
-        ma              str_vmlt;   // Struct for MA5 filter for MLT volume
         ma              str_thlt;   // Struct for MA5 filter for HLT temperature
         ma              str_tmlt;   // Struct for MA5 filter for MLT temperature
         int             led1;       // Which variable to display?
@@ -423,12 +428,14 @@ private:	// User declarations
         bool            triac_too_hot;  // true = Triac is overheated
         bool            cb_i2c_err_msg; // true = give error message on successful I2C reset
         bool            power_up_flag;  // true = power-up
-        int             known_hw_devices; // list of known I2C hardware devices  
+        int             known_hw_devices; // list of known I2C hardware devices
         int             fscl_prescaler;   // index into PCF8584 prescaler values, see i2c_dll.cpp
         double          thlt_offset;      // calibration offset to add to Thlt measurement
         double          tmlt_offset;      // calibration offset to add to Tmlt measurement
         bool            cb_pid_dbg;       // true = Show PID Debug label
 public:		// User declarations
+        ma              str_vmlt;   // Struct for MA5 filter for MLT volume
+        double          vmlt_old;   // For debugging of Vmlt
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output

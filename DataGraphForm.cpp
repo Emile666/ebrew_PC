@@ -4,6 +4,12 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2005/06/11 12:35:07  Emile
+// - Keyboard shortcuts 'P' (Pump toggle) and '1' .. '7' (valve toggles) added.
+// - Added transition from state 8 back to state 6. This prevents a transition
+//   change during sparging when a glitch on Vmlt happens.
+// - Added Vmlt_unf (=padc.ad4) to log-file for debugging purposes.
+//
 // Revision 1.10  2004/05/08 14:52:50  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -96,6 +102,7 @@
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 #pragma link "PERFGRAP"
+#pragma link "AnimTimer"
 #pragma resource "*.dfm"
 TShowDataGraphs *ShowDataGraphs;
 //---------------------------------------------------------------------------
@@ -113,13 +120,15 @@ void __fastcall TShowDataGraphs::Button1Click(TObject *Sender)
 void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
 {
    FILE *fd;
+   FILE *fd2;
    struct time t1;
-
+   int  i;
+    
    if ((fd = fopen(LOGFILE,"a")) != NULL)
    {
       gettime(&t1);
       fprintf(fd,"%02d:%02d:%02d, ",t1.ti_hour,t1.ti_min,t1.ti_sec);
-      fprintf(fd,"%6.2f, %6.2f, %6.2f, %6.2f, %5.1f, %6.2f,%3d,%3d,%3d, %5.1f, %6.2f\n",
+      fprintf(fd,"%6.2f, %6.2f, %6.2f, %6.2f, %5.1f, %6.2f,%3d,%3d,%3d, %5.1f\n",
                                                       MainForm->tset_mlt,
                                                       MainForm->tset_hlt,
                                                       MainForm->thlt,
@@ -129,8 +138,28 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
                                                       MainForm->PID_RB->ItemIndex,
                                                       MainForm->std.ms_idx,
                                                       MainForm->std.ebrew_std,
-                                                      MainForm->gamma,
-                                                      MainForm->padc.ad4); //Debug Vmlt_unf
+                                                      MainForm->gamma);
+      // Debugging of MLT Volume
+      if ((MainForm->volumes.Vmlt < 0.9 * MainForm->vmlt_old) &&
+          (MainForm->volumes.Vmlt > 10.0))
+      {
+         if ((fd2 = fopen("ma_mlt.log","a")) != NULL)
+         {
+            fprintf(fd2,"%02d:%02d:%02d, ",t1.ti_hour,t1.ti_min,t1.ti_sec);
+            fprintf(fd2,"%6.2f %6.2f %3d %3d\n",MainForm->padc.ad4,
+                                                MainForm->str_vmlt.sum,
+                                                MainForm->str_vmlt.N,
+                                                MainForm->str_vmlt.index);
+            for (i = 0; i < MainForm->str_vmlt.N; i++)
+            {
+               fprintf(fd2,"%6.2f",MainForm->str_vmlt.T[i]);
+            } // for
+            fprintf(fd2,"\n\n");
+            fclose(fd2);
+         } // if
+      } // if
+      // Debugging of MLT Volume
+
       fclose(fd);
    } /* if */
 

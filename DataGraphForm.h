@@ -4,6 +4,12 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2004/04/25 14:02:17  emile
+// - Added a 'type C' PID controller, function pid_reg3(). Possible to select
+//   this from the PID settings dialog screen. Left the old one in for
+//   compatibility. New registry variable PID_Model.
+// - Gamma added to log-file, so that the PID controller can be tuned.
+//
 // Revision 1.4  2004/03/26 10:22:55  emile
 // - Several files added to CVS repository, where not included yet
 // - Help file extended with many help items. First real help file version.
@@ -38,6 +44,7 @@
 #include <Forms.hpp>
 #include "PERFGRAP.h"
 #include <ExtCtrls.hpp>
+#include "AnimTimer.h"
 //---------------------------------------------------------------------------
 class TShowDataGraphs : public TForm
 {
@@ -48,7 +55,7 @@ __published:	// IDE-managed Components
         TPerformanceGraph *Tad2_Graph;
         TButton *Button1;
         TButton *Help_Button;
-        TTimer *GraphTimer;
+        TAnimTimer *GraphTimer;
         void __fastcall Button1Click(TObject *Sender);
         void __fastcall GraphTimerTimer(TObject *Sender);
         void __fastcall Help_ButtonClick(TObject *Sender);

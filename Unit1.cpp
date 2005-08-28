@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.41  2005/06/11 12:35:07  Emile
+// - Keyboard shortcuts 'P' (Pump toggle) and '1' .. '7' (valve toggles) added.
+// - Added transition from state 8 back to state 6. This prevents a transition
+//   change during sparging when a glitch on Vmlt happens.
+// - Added Vmlt_unf (=padc.ad4) to log-file for debugging purposes.
+//
 // Revision 1.40  2005/04/11 12:11:03  Emile
 // - Added safety feature: gas burner is disabled if time_switch is set.
 //
@@ -974,7 +980,7 @@ void __fastcall TMainForm::exit_ebrew(void)
    int err = 0;
    char s[80];
 
-   //T50msec->Enabled = false; // Disable Interrupt Timer
+   T50msec->Enabled = false; // Disable Interrupt Timer
    if (ShowDataGraphs)
    {
       ShowDataGraphs->GraphTimer->Enabled = false; // Stop Graph Update timer
@@ -1545,6 +1551,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        }
        else
        {
+          vmlt_old     = volumes.Vmlt; // debugging of Vmlt
           volumes.Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
        }
    } // else if
@@ -2640,6 +2647,18 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
       std_out |= P0M; // Set Pump Manual bit
       std_out ^= P0b; // Toggle Pump On/Off
    } // if
+   else if (UpCase(Key) == 'H')
+   {
+      swfx.gamma_sw = true; // Set switch for gamma
+      if (swfx.gamma_fx > 99.9)
+      {
+         swfx.gamma_fx = 0.0; // fix gamma to 0 %
+      } // if
+      else
+      {
+         swfx.gamma_fx = 100.0; // fix gamma to 100 %
+      } // else
+   } // else
    else if ((Key >= '1') && (Key <= '7'))
    {
       // This code only works if V7 is the MSB and V1 is the LSB!! (see misc.h)
