@@ -6,6 +6,12 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.13  2005/06/11 12:35:07  Emile
+  - Keyboard shortcuts 'P' (Pump toggle) and '1' .. '7' (valve toggles) added.
+  - Added transition from state 8 back to state 6. This prevents a transition
+    change during sparging when a glitch on Vmlt happens.
+  - Added Vmlt_unf (=padc.ad4) to log-file for debugging purposes.
+
   Revision 1.12  2004/05/13 20:50:59  emile
   - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
     timing is now reset after 100 loops (5 seconds)
@@ -123,19 +129,25 @@
 /* the log entry. It makes sure that the last line is   */
 /* greater than or equal to the first line.             */
 /*------------------------------------------------------*/
-#define CALC_LAST_LINE                                           \
-            if (line_nr - LOG_LAST_LINE < p[log_idx - 1].bline)  \
-                 p[log_idx - 1].eline = p[log_idx - 1].bline;    \
-            else p[log_idx - 1].eline = line_nr - LOG_LAST_LINE
+#define CALC_LAST_LINE                                              \
+        if (line_nr - LOG_LAST_LINE < p[log_idx - 1].bline)         \
+             p[log_idx - 1].eline = p[log_idx - 1].bline;           \
+        else p[log_idx - 1].eline = line_nr - LOG_LAST_LINE;        \
+                                                                    \
+        if (p[log_idx-1].eline - p[log_idx-1].bline < 12)           \
+        {                                                           \
+            /* overwrite previous entry if it less than a minute */ \
+           log_idx--;                                               \
+        } // if
 
-/*------------------------------------------------------*/
-/* This macro checks if the variable 'std' is > x.      */
-/* If so, the phase_start variable is set to 'line_nr'. */
-/*------------------------------------------------------*/
-#define FIND_PHASE(phase_start,x)          \
-            if (!phase_start && (std > x)) \
-            {                              \
-               phase_start = line_nr;      \
+/*--------------------------------------------------------------------*/
+/* This macro checks if the variable 'std' transition from xold to x. */
+/* If so, the phase_start variable is set to 'line_nr'.               */
+/*--------------------------------------------------------------------*/
+#define FIND_PHASE(phase_start,x,xold)                           \
+            if (!phase_start && (std == x) && (std_old == xold)) \
+            {                                                    \
+               phase_start = line_nr;                            \
             } /* if */
 
 void calc_phases_start(FILE *fd, log_struct p[])
@@ -146,7 +158,7 @@ void calc_phases_start(FILE *fd, log_struct p[])
                boiling and chilling phases
              - the end line number of the mashing, sparging,
                boiling and chilling phases for every log-file entry.
-             - the last value of ms_idx for every log-file entry.
+             - the last value of ms_idx and sp_idx for every log-file entry.
              - the last value of ebrew_std for every log-file entry
              Pre-condition: - p[].bline, p[].eline must be set.
                             - p[].mashing_start .. p[].chill_start must be set.
@@ -161,10 +173,9 @@ void calc_phases_start(FILE *fd, log_struct p[])
    char *phlp;             /* temp. pointer */
    int  line_nr = 1;       /* line number */
    int  log_idx = 0;       /* log entry index */
-   int  std;               /* value of ebrew_std */
+   int  std = 0;           /* value of ebrew_std */
+   int  std_old;           /* previous value of std */
    int  i;                 /* temp. variable */
-   double dtmp;            /* Value of Vmlt just before transition ebrew_std 3->5 */
-   static double dtmp_old; /* Previous value of dtmp */
 
    rewind(fd); /* start again at beginning of file */
    do
@@ -186,38 +197,30 @@ void calc_phases_start(FILE *fd, log_struct p[])
             /* Find the start moments of the various phases: */
             /* Mashing, Sparging, Boiling and Chilling       */
             /*-----------------------------------------------*/
-            GOTO_COLUMN(7,tmp); /* Vmlt is to be found in column 10 */
-            /* Next value to read is Vmlt */
-            dtmp = atof(phlp);
-            phlp = strtok(NULL,COLON); /* skip PID_ON */
-            phlp = strtok(NULL,COLON); /* skip ms_idx */
-            phlp = strtok(NULL,COLON); /* ebrew_std */
-            std  = atoi(phlp);
-            if (std > p[log_idx].max_std)
-            {
-               p[log_idx].max_std = std;
-            } /* if */
-            FIND_PHASE(p[log_idx].mashing_start,1);  /* Find 1st entry of "2. FILL MLT" */
-            if (!p[log_idx].sparging_start && std > 4)
-            {
-               p[log_idx].sparging_start = line_nr;
-               //p[log_idx].vmash          = dtmp_old; /* last Vmlt before transition */
-            } /* if */
-            dtmp_old = dtmp; /* update previous value */
-            FIND_PHASE(p[log_idx].boil_start,9);     /* Find 1st entry of "10. BOIL" */
-            FIND_PHASE(p[log_idx].chill_start,11);   /* Find 1st entry of "12. CHILL" */
+            GOTO_COLUMN(10,tmp); /* std is to be found in column 10 */
+            std_old = std; // save previous value of std
+            std     = atoi(phlp);
+            //-----------------------------------------------
+            // Find 1st entries of the various brewing phases
+            //-----------------------------------------------
+            FIND_PHASE(p[log_idx].mashing_start ,S04_MASH_TIMER_RUNNING, S03_MASH_IN_PROGRESS);
+            FIND_PHASE(p[log_idx].sparging_start,S05_SPARGING_REST     , S04_MASH_TIMER_RUNNING);
+            FIND_PHASE(p[log_idx].boil_start    ,S10_BOILING           , S09_EMPTY_MLT);
+            FIND_PHASE(p[log_idx].chill_start   ,S12_CHILL             , S10_BOILING);
          } /* if */
 
-         if (p[log_idx].eline == line_nr)
+         if (line_nr == p[log_idx].eline)
          {
-            /*-----------------------------------------*/
-            /* This is the end of the actual log entry */
-            /*-----------------------------------------*/
+            /*------------------------------------------*/
+            /* This is the end of a non-empty log entry */
+            /*------------------------------------------*/
             strncpy(p[log_idx].etime,tmp,8); /* copy time string */
             p[log_idx].etime[8] = '\0';      /* terminate with '\0' */
 
-            GOTO_COLUMN(9,tmp); /* ms_idx is to be found in column 9 */
-            /* Next value to read is ms_idx */
+            GOTO_COLUMN(8,tmp); /* sp_idx is to be found in column 8 */
+            /* Next value to read is sp_idx */
+            p[log_idx].lsp_idx = atoi(phlp);
+            phlp = strtok(NULL,COLON); /* next value is ms_idx */
             p[log_idx].lms_idx = atoi(phlp);
             phlp = strtok(NULL,COLON); /* next value is std_state */
             p[log_idx].std_val = atoi(phlp);
@@ -228,73 +231,10 @@ void calc_phases_start(FILE *fd, log_struct p[])
    } while (!feof(fd));
 } /* calc_phases_start() */
 
-void calc_mash_timer_info(FILE *fd, log_struct p[])
-/*------------------------------------------------------------------
-  Purpose  : This function finds, from the log file, for every
-             log-file entry, the following:
-             - tmr_ms_idx: the status of the last mash timer
-             Pre-condition: - p[].bline, p[].eline must be set.
-                            - p[].lms_idx must be set
-    Variables:
-        fd : File descriptor for the log file, should be opened already
-             by the calling program!
-         p : Pointer to an log_struct struct
-  Returns  : -
-  ------------------------------------------------------------------*/
-{
-   char tmp[SLEN];
-   char *phlp;           /* temp. pointer */
-   int  line_nr = 1;     /* line number */
-   int  log_idx = 0;     /* log entry index */
-   int  found   = FALSE; /* temp. boolean var. */
-   int  i;               /* temp. variable */
-
-   rewind(fd); /* start again at beginning of file */
-   do
-   {
-      if (fgets(tmp,SLEN,fd) != NULL)
-      {
-         if ((line_nr >= p[log_idx].bline) && (line_nr < p[log_idx].eline) &&
-             (p[log_idx].lms_idx > 0) && !found)
-         {
-            /*--------------------------------------------*/
-            /* Mash in progress: now calculate timer info */
-            /*--------------------------------------------*/
-            GOTO_COLUMN(9,tmp); /* ms_idx is to be found in column 9 */
-            /*----------------------------------*/
-            /* Next value to read is ms_idx     */
-            /* Check if ms_idx == latest ms_idx */
-            /* If so, calculate #clock-ticks    */
-            /*----------------------------------*/
-            if (atoi(phlp) == p[log_idx].lms_idx)
-            {
-               if (p[log_idx].sparging_start)
-               {
-                  /* Mashing was completed & followed by Sparging */
-                  p[log_idx].tmr_ms_idx = p[log_idx].sparging_start - line_nr;
-               }
-               else
-               {
-                  /* Still in Mashing mode, not completed yet */
-                  p[log_idx].tmr_ms_idx = p[log_idx].eline + 1 - line_nr;
-               } /* else */
-               found = TRUE;
-            } /* if */
-         } /* if */
-         else if (line_nr == p[log_idx].eline)
-         {
-            log_idx++; /* next log entry number */
-            found = FALSE;
-         } /* else */
-      } /* if */
-      line_nr++; /* read next line */
-   } while (!feof(fd));
-} /* calc_mash_timer_info() */
-
 void calc_sp_idx(FILE *fd, log_struct p[])
 /*------------------------------------------------------------------
   Purpose  : This function finds, for every log-file entry, the following:
-             - the number of sparging sessions done
+             - the start line number where the last mash timer was started
              - the start line number of the last ebrew_std value
   Variables:
         fd : File descriptor for the log file, should be opened already
@@ -308,35 +248,36 @@ void calc_sp_idx(FILE *fd, log_struct p[])
    int  line_nr    = 1;     /* line number */
    int  log_idx    = 0;     /* log entry index */
    int  i;                  /* temp. variable */
-   int  prev_state = 0;     /* previous value of std */
    int  std;                /* value of ebrew_std */
    int  ffound     = FALSE; /* TRUE = start of last state found */
-   
+   int  mfound     = FALSE; /* TRUE = start of last mash timer started */
+
    rewind(fd); /* start again at beginning of file */
    do
    {
       if (fgets(tmp,SLEN,fd) != NULL)
       {
-         if (line_nr >= p[log_idx].bline && line_nr <= p[log_idx].eline)
+         if (line_nr > p[log_idx].bline && line_nr <= p[log_idx].eline)
          {
             GOTO_COLUMN(10,tmp); /* std_ebrew is to be found in column 10 */
             /* Next value to read is std_ebrew */
             std = atoi(phlp);
 
-            /*-------------------------------------------*/
-            /* Find the number of sparging sessions done */
-            /*-------------------------------------------*/
-            if (line_nr >= p[log_idx].sparging_start && line_nr < p[log_idx].boil_start)
+            /*----------------------------------------------------------*/
+            /* Now find the 1st line where the last mash timer started. */
+            /*----------------------------------------------------------*/
+            if (std == S04_MASH_TIMER_RUNNING)
             {
-               /*--------------------------------------------*/
-               /* We are now in the correct sparging section */
-               /*--------------------------------------------*/
-               if (std == 5 && (prev_state >= 6 && prev_state <= 8))
+               if (!mfound)
                {
-                  p[log_idx].sp_idx++;
+                  p[log_idx].start_lmtmr = line_nr;
+                  mfound                 = TRUE;
                } /* if */
-               prev_state = std; /* update previous value of std */
-            } /* if */
+            }
+            else
+            {
+               mfound = FALSE;
+            } /* else */
 
             /*-----------------------------------------------------*/
             /* Now find the 1st line where the last state started. */
@@ -365,6 +306,52 @@ void calc_sp_idx(FILE *fd, log_struct p[])
    } while (!feof(fd));
 } /* calc_sp_idx() */
 
+void print_p_struct(int log_idx, log_struct p[])
+/*------------------------------------------------------------------
+  Purpose  : This function prints all the information from the
+             log struct p, into the file log_structp.txt
+  Variables:
+   log_idx : The total number of log-entries in the log_struct p[]
+  Returns  : -
+  ------------------------------------------------------------------*/
+{
+   FILE *f1; // file-descriptor
+   int  i;   // loop-variable
+   static int pp_1st_time = TRUE;
+
+   if ((f1 = fopen("log_structp.txt","a")) != NULL)
+   {
+      if (pp_1st_time)
+      {
+         fprintf(f1,"ms_idx, tmr_ms_idx   , std           , start_lstd, start_lmtmr\n");
+         fprintf(f1,"sp_idx, mashing_start, sparging_start, boil_start, chill_start\n");
+         pp_1st_time = FALSE;
+      } // if
+      for (i = 0; i < log_idx; i++)
+      {
+         fprintf(f1,"%02d: %s, %d-%d, %s-%s\n",i,
+                 p[i].brew_date,
+                 p[i].bline,
+                 p[i].eline,
+                 p[i].btime,
+                 p[i].etime);
+         fprintf(f1,"%d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
+                 p[i].lms_idx,        // Last known value of ms_idx
+                 p[i].tmr_ms_idx,     // Timer value of ms_idx timer
+                 p[i].std_val,        // Last known value of std_state
+                 p[i].start_lstd,     // The start line number of the latest ebrew_std
+                 p[i].start_lmtmr,    // The start line number of the latest mash timer start
+                 p[i].lsp_idx,        // Number of Sparging cycles
+                 p[i].mashing_start,  // Start line of Mashing
+                 p[i].sparging_start, // Start line of Sparging
+                 p[i].boil_start,     // Start line of Boiling
+                 p[i].chill_start);   // Start line of Chilling
+         fprintf(f1,"------------------------------------------------------------------\n");
+      } // for
+      fclose(f1);
+   } // if
+} // print_p_struct()
+
 int decode_log_file(FILE *fd, log_struct p[])
 /*------------------------------------------------------------------
   Purpose  : This function reads all the information from the
@@ -383,10 +370,11 @@ int decode_log_file(FILE *fd, log_struct p[])
    int  log_idx  = 0; /* log entry index */
    int  line_nr  = 1; /* start at line 1 in log file */
    int  rval     = 0; /* return value */
+   int  i;
 
    /*-----------------------------------------------------------------*/
    /* 1) Go through the log-file and determine the brew-date and the  */
-   /*    and the begin- and end-lines of every log-entry.             */
+   /*    begin- and end-lines of every log-entry.                     */
    /*-----------------------------------------------------------------*/
    do
    {
@@ -394,30 +382,38 @@ int decode_log_file(FILE *fd, log_struct p[])
       {
          if (((phlp = strstr(tmp,sstart)) != NULL) || !strncmp(tmp,sstart,sslen))
          {
-            /*---------------------------------------------------*/
-            /* We found the start of a new log-entry in the file */
-            /*---------------------------------------------------*/
-            strncpy(p[log_idx].brew_date, phlp + sslen, 10);
-            p[log_idx].brew_date[10] = '\0'; /* terminate with '\0' */
-
-            p[log_idx].bline = line_nr + LOG_HDR_SIZE;
-            /* Init. some values that we need later on */
-            p[log_idx].mashing_start  = 0;
-            p[log_idx].sparging_start = 0;
-            p[log_idx].boil_start     = 0;
-            p[log_idx].chill_start    = 0;
-            p[log_idx].tmr_ms_idx     = 0;
-            p[log_idx].sp_idx         = 0;
-            p[log_idx].max_std        = 0;
-
+            //--------------------------------------------------------
+            // We found the start of a new log-entry in the file
+            // Start with writing the last line of the previous entry.
+            //--------------------------------------------------------
             if (log_idx > 0)
             {
               /*--------------------------------------------------------*/
               /* fill in the last valid line of the previous log entry. */
               /* Assume that the last entry may be wrong.               */
+              /* Overwrite log-entry if it is less than a minute.       */
               /*--------------------------------------------------------*/
               CALC_LAST_LINE;
             } /* if */
+            //--------------------------------------------------
+            // Initialize log-entry and fill in bline and eline
+            //--------------------------------------------------
+            strncpy(p[log_idx].brew_date, phlp + sslen, 10);
+            p[log_idx].brew_date[10] = '\0'; /* terminate with '\0' */
+            p[log_idx].bline = line_nr + LOG_HDR_SIZE;
+            /* Init. some values that we need later on */
+            p[log_idx].btime[0]       = '\0';
+            p[log_idx].etime[0]       = '\0';
+            p[log_idx].lms_idx        = 0;
+            p[log_idx].std_val        = 0;
+            p[log_idx].start_lstd     = 0;
+            p[log_idx].start_lmtmr    = 0;
+            p[log_idx].mashing_start  = 0;
+            p[log_idx].sparging_start = 0;
+            p[log_idx].boil_start     = 0;
+            p[log_idx].chill_start    = 0;
+            p[log_idx].tmr_ms_idx     = 0;
+            p[log_idx].lsp_idx        = 0;
             log_idx++; /* increment log entry index */
          } /* if */
       } /* if */
@@ -425,23 +421,30 @@ int decode_log_file(FILE *fd, log_struct p[])
    } while (!feof(fd));
    CALC_LAST_LINE;
    rval = log_idx; /* return value */
+
    /*------------------------------------------------------------------------*/
    /* 2) Go through the log-file again and add additional information,       */
-   /*    such as the begin- and end-time, ms_idx and std_state.              */
+   /*    such as the begin- and end-time, ms_idx, sp_idx and std_state.      */
    /*------------------------------------------------------------------------*/
    calc_phases_start(fd,p);
 
-   /*---------------------------------------------------------------*/
-   /* 3) Go through the log-file AGAIN and fill in mash timer info. */
-   /*---------------------------------------------------------------*/
-   calc_mash_timer_info(fd,p);
+   /*-----------------------------------------------------------------*/
+   /* 3) Go through the log-file AGAIN and find the start line number */
+   /*    where the last mash timer was started and the the start line */
+   /*    number of the last ebrew_std value                           */
+   /*-----------------------------------------------------------------*/
+   calc_sp_idx(fd,p);
 
-   /*---------------------------------------------------------------*/
-   /* 4) Go through the log-file AGAIN and find sp_idx,             */
-   /*    this is the number of sparging cycles already done.        */
-   /*---------------------------------------------------------------*/
-   calc_sp_idx(fd,p); /* find sp_idx if relevant */
-
+   /*---------------------------------*/
+   /* 4) Fill in the mash timer info. */
+   /*---------------------------------*/
+   for (i = 0; i <= log_idx; i++)
+   {
+      // Estimate the time for the crash + rebooting at 4 * 5 seconds.
+      //------------------------------------------------------------
+      p[i].tmr_ms_idx = p[i].eline + 1 + 4 - p[i].start_lmtmr;
+   } // for
+   print_p_struct(log_idx,p); // Debug: print p struct to a file
    return rval;
 } /* decode_log_file() */
 
@@ -721,9 +724,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
               // This is the last mash phase, continue with sparging
               if (ms[std->ms_idx].timer >= ms[std->ms_idx].time) // time-out?
               {
-                 std->sp_idx    = 0;                  // init. sparging index
-                 std->timer1    = sps->sp_time_ticks; // timer1 -> TIME-OUT
-                 std->ebrew_std = S05_SPARGING_REST;  // goto SPARGING phase
+                 std->sp_idx    = 0;                       // init. sparging index
+                 std->timer1    = sps->sp_time_ticks - 10; // timer1 -> TIME-OUT - 10 sec.
+                 std->ebrew_std = S05_SPARGING_REST;       // goto SPARGING phase
               } // if
               // else remain in this state (timer is incremented)
            } // else

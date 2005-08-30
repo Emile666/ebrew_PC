@@ -6,6 +6,12 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.13  2005/03/26 13:53:21  Emile
+// - During State "Mash Preheat" pump is set to ON (again)
+// - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
+//   variables are introduced (BURNER_HHYST and BURNER_LHYST)
+// - Various screens a little enlarged (no scrollbars visible anymore)
+//
 // Revision 1.12  2004/05/13 20:51:00  emile
 // - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
 //   timing is now reset after 100 loops (5 seconds)
@@ -144,13 +150,12 @@ typedef struct _log_struct
    int  tmr_ms_idx;     /* Timer value of ms_idx timer */
    int  std_val;        /* Last known value of std_state */
    int  start_lstd;     /* The start line number of the latest ebrew_std */
-   int  sp_idx;         /* Number of Sparging cycles */
+   int  start_lmtmr;    /* The start line number of the start of the latest mash timer */
+   int  lsp_idx;        /* Last known value of sp_idx */
    int  mashing_start;  /* Start line of Mashing */
    int  sparging_start; /* Start line of Sparging */
    int  boil_start;     /* Start line of Boiling */
    int  chill_start;    /* Start line of Chilling */
-   int  max_std;        /* Max. value of ebrew_std */
-   double vmash;        /* Value of vmash = Vmlt if ebrew_std 3 -> 5 */
 } log_struct;
 
 typedef struct _maisch_schedule

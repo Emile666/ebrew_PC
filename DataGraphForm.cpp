@@ -4,6 +4,13 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2005/08/28 22:17:30  Emile
+// - DataGrapfForm: TTimer replaced again for TAnimTimer
+// - Debug-code added for MA filter of Vmlt
+// - 'H' key now toggles heater between 0% and 100%
+// - Text Temp. Sensor 1 & 2 replaced by Temp. Sensor HLT & MLT
+// - Printing of vmlt_unf (padc.ad4) removed again from log-file
+//
 // Revision 1.11  2005/06/11 12:35:07  Emile
 // - Keyboard shortcuts 'P' (Pump toggle) and '1' .. '7' (valve toggles) added.
 // - Added transition from state 8 back to state 6. This prevents a transition
@@ -135,7 +142,7 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
                                                       MainForm->tmlt,
                                                       MainForm->ttriac,
                                                       MainForm->volumes.Vmlt,
-                                                      MainForm->PID_RB->ItemIndex,
+                                                      MainForm->std.sp_idx,
                                                       MainForm->std.ms_idx,
                                                       MainForm->std.ebrew_std,
                                                       MainForm->gamma);

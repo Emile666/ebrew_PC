@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.42  2005/08/28 22:17:30  Emile
+// - DataGrapfForm: TTimer replaced again for TAnimTimer
+// - Debug-code added for MA filter of Vmlt
+// - 'H' key now toggles heater between 0% and 100%
+// - Text Temp. Sensor 1 & 2 replaced by Temp. Sensor HLT & MLT
+// - Printing of vmlt_unf (padc.ad4) removed again from log-file
+//
 // Revision 1.41  2005/06/11 12:35:07  Emile
 // - Keyboard shortcuts 'P' (Pump toggle) and '1' .. '7' (valve toggles) added.
 // - Added transition from state 8 back to state 6. This prevents a transition
@@ -351,7 +358,7 @@ void __fastcall TMainForm::Restore_Settings(void)
                                                          p1[k].btime,
                                                          p1[k].etime,
                                                          p1[k].lms_idx,
-                                                         p1[k].sp_idx,
+                                                         p1[k].lsp_idx,
                                                          p1[k].std_val);
             prps->ComboBox1->Items->Add(s);
          } // if
@@ -374,39 +381,39 @@ void __fastcall TMainForm::Restore_Settings(void)
          {
             ms[j].timer = ms[j].time; // set previous timers to time-out
          } // for j
-         if (p1[k].std_val >= S05_SPARGING_REST)
-         {
-            ms[std.ms_idx].timer = ms[std.ms_idx].time; // set to time-out if mashing is finished
+         if (p1[k].sparging_start)
+         {  // set to time-out if mashing is finished
+            ms[std.ms_idx].timer = ms[std.ms_idx].time;
          }
          else
-         {
-            ms[std.ms_idx].timer = p1[k].tmr_ms_idx; // do a best guess for the timer value
+         {  // mash was in progress, do a best guess for the timer value
+            // Log-file -> 5 sec.: STD called -> 1 sec.
+            ms[std.ms_idx].timer = 5 * p1[k].tmr_ms_idx;
          } // else
+
          //----------------------------
          // Restore Sparging parameters
          //----------------------------
          std.ebrew_std = p1[k].std_val; // Current state
-         std.sp_idx    = p1[k].sp_idx;  // Sparging sessions done
+         std.sp_idx    = p1[k].lsp_idx; // Sparging sessions done
          x             = p1[k].eline + 1 - p1[k].start_lstd;
          x            *= 5;             // Log-file -> 5 sec.: STD called -> 1 sec.
          switch (std.ebrew_std) // init. timers for states that have timers
          {
-            case S05_SPARGING_REST:        std.timer1 = x;
-                                           break;
-            case S08_DELAY_xSEC:           std.timer2 = x;
-                                           break;
-            case S10_BOILING:              if (p1[k].max_std > S10_BOILING)
+            case S05_SPARGING_REST:        if (std.sp_idx > 0)
                                            {
-                                              std.timer3 = NOT_STARTED;
-                                              std.timer4 = sp.to4;
-                                              std.timer5 = x + sp.to3 + sp.to4;
+                                              std.timer1 = x;
                                            }
                                            else
-                                           {
-                                              std.timer3 = x;
-                                              std.timer4 = 0;
-                                              std.timer5 = x;
+                                           {  // if crash occurs in state 5 when sp_idx==0
+                                              std.timer1 = sp.sp_time_ticks;
                                            }
+                                           break;
+            case S08_DELAY_xSEC:           std.timer2 = 1;
+                                           break;
+            case S10_BOILING:              std.timer3 = x;
+                                           std.timer4 = 0;
+                                           std.timer5 = x;
                                            break;
             case S11_EMPTY_HEAT_EXCHANGER: std.timer4 = x;
                                            std.timer5 = x + sp.to3;
@@ -717,8 +724,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
       fprintf(fd,"Vref1 = %3d, Vref2 = %3d, Vref3 = %3d, Vref4 = %3d, DAC-value = %3d\n\n",
                  padc.vref1,padc.vref2,padc.vref3,padc.vref4,padc.dac);
-      fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt PID ms_ ebrew Gamma\n");
-      fprintf(fd,"[hh:mm:ss]  [°C]    [°C]     [°C]   [°C]   [°C]    [L]  _on idx _std   [%]\n");
+      fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt sp_ ms_ ebrew Gamma\n");
+      fprintf(fd,"[hh:mm:ss]  [°C]    [°C]     [°C]   [°C]   [°C]    [L]  idx idx _std   [%]\n");
       fprintf(fd,"---------------------------------------------------------------------------\n");
       fclose(fd);
    } // else
