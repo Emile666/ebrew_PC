@@ -4,6 +4,26 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.14  2005/10/23 12:44:38  Emile
+// Several changes because of new hardware (MAX1238 instead of PCF8591):
+// - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
+//   PCF8591 is still supported).
+// - 2 time-slices added, Vhlt, Vmlt and Ttriac are read in 3 different time-slices.
+// - Ttriac also printed as label to screen, plus Switch and Fix added
+// - Alive bit is now active-low, changed in exit_ebrew()
+// - Registry vars removed: VREF3, VREF4, DAC, VHLT_SIMULATED
+// - Registry vars added: VHLT_SRC, VHLT_A, VHLT_B, VMLT_SRC, VMLT_A, VMLT_B,
+//                        TTRIAC_SRC, TTRIAC_A, TTRIAC_B and MA_VHLT
+// - Debugging for ma filter removed again
+// Changes to i2c_dll:
+// - File reorganised into 4 layers with routines for more clarity
+// - i2c_read/i2c_write: i2c_address() call added in VELLEMAN_CARD mode
+// - i2c_address: i2c_start() call added in VELLEMAN_CARD mode
+// - Routines added: get_analog_input() and max1238_read()
+// - i2c_stop() changed into i2c_stop(enum pt_action pta) so that PortTalk
+//   can be closed or remain open
+// - init_adc() removed
+//
 // Revision 1.13  2005/08/30 09:17:42  Emile
 // - Bug-fix reading log-file. Only entries > 1 minute can be imported.
 // - sp_idx added to log-file, instead of PID_ON.
@@ -138,18 +158,19 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
    if ((fd = fopen(LOGFILE,"a")) != NULL)
    {
       gettime(&t1);
-      fprintf(fd,"%02d:%02d:%02d, ",t1.ti_hour,t1.ti_min,t1.ti_sec);
-      fprintf(fd,"%6.2f, %6.2f, %6.2f, %6.2f, %5.1f, %6.2f,%3d,%3d,%3d, %5.1f\n",
-                                                      MainForm->tset_mlt,
-                                                      MainForm->tset_hlt,
-                                                      MainForm->thlt,
-                                                      MainForm->tmlt,
-                                                      MainForm->ttriac,
-                                                      MainForm->volumes.Vmlt,
-                                                      MainForm->std.sp_idx,
-                                                      MainForm->std.ms_idx,
-                                                      MainForm->std.ebrew_std,
-                                                      MainForm->gamma);
+      fprintf(fd,"%02d:%02d:%02d,",t1.ti_hour,t1.ti_min,t1.ti_sec);
+      fprintf(fd,"%6.2f,%6.2f,%6.2f,%6.2f,%5.1f,%6.1f,%2d,%2d,%3d, %5.1f,%6.1f\n",
+                 MainForm->tset_mlt,
+                 MainForm->tset_hlt,
+                 MainForm->thlt,
+                 MainForm->tmlt,
+                 MainForm->ttriac,
+                 MainForm->volumes.Vmlt,
+                 MainForm->std.sp_idx,
+                 MainForm->std.ms_idx,
+                 MainForm->std.ebrew_std,
+                 MainForm->gamma,
+                 MainForm->volumes.Vhlt);
       fclose(fd);
    } /* if */
 

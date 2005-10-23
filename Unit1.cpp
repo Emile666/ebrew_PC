@@ -6,6 +6,26 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.44  2005/10/23 12:44:38  Emile
+// Several changes because of new hardware (MAX1238 instead of PCF8591):
+// - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
+//   PCF8591 is still supported).
+// - 2 time-slices added, Vhlt, Vmlt and Ttriac are read in 3 different time-slices.
+// - Ttriac also printed as label to screen, plus Switch and Fix added
+// - Alive bit is now active-low, changed in exit_ebrew()
+// - Registry vars removed: VREF3, VREF4, DAC, VHLT_SIMULATED
+// - Registry vars added: VHLT_SRC, VHLT_A, VHLT_B, VMLT_SRC, VMLT_A, VMLT_B,
+//                        TTRIAC_SRC, TTRIAC_A, TTRIAC_B and MA_VHLT
+// - Debugging for ma filter removed again
+// Changes to i2c_dll:
+// - File reorganised into 4 layers with routines for more clarity
+// - i2c_read/i2c_write: i2c_address() call added in VELLEMAN_CARD mode
+// - i2c_address: i2c_start() call added in VELLEMAN_CARD mode
+// - Routines added: get_analog_input() and max1238_read()
+// - i2c_stop() changed into i2c_stop(enum pt_action pta) so that PortTalk
+//   can be closed or remain open
+// - init_adc() removed
+//
 // Revision 1.43  2005/08/30 09:17:42  Emile
 // - Bug-fix reading log-file. Only entries > 1 minute can be imported.
 // - sp_idx added to log-file, instead of PID_ON.
@@ -735,18 +755,19 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
       fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, Ts = %5.2f, ",pid_pars.kc,pid_pars.ti,pid_pars.td,pid_pars.ts);
       fprintf(fd,"PID_Model =%2d\n",pid_pars.pid_model);
-      fprintf(fd,"k0 = %6.2f, k1 = %6.2f, k2 = %6.2f, k3 = %6.2f; ",pid_pars.k0,pid_pars.k1,pid_pars.k2,pid_pars.k3);
+      fprintf(fd,"ma_thlt=%6.2f, ma_tmlt=%6.2f, ma_vhlt=%6.2f, ma_vmlt=%6.2f; ",
+                 str_thlt.N, str_tmlt.N, str_vhlt.N, str_vmlt.N);
       strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
       s[4] = '\0';
-      fprintf(fd,"ebrew CVS Revision %s\n",s);
+      fprintf(fd,"ebrew CVS Rev. %s\n",s);
       fprintf(fd,"hw_status = 0x%02X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,
                                                                           std.ms_tot,
                                                                           fscl_prescaler);
       fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
-      fprintf(fd,"\n\n");
-      fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt sp_ ms_ ebrew Gamma\n");
-      fprintf(fd,"[hh:mm:ss]  [°C]    [°C]     [°C]   [°C]   [°C]    [L]  idx idx _std   [%]\n");
-      fprintf(fd,"---------------------------------------------------------------------------\n");
+      fprintf(fd,"Vhlt_a=%7.4f, Vhlt_b=%7.4f, Vmlt_a=%7.4f, Vmlt_b=%7.4f\n\n",vhlt_a,vhlt_b,vmlt_a,vmlt_b);
+      fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms STD  Gamma  Vhlt\n");
+      fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id       [%]    [L]\n");
+      fprintf(fd,"-------------------------------------------------------------------------\n");
       fclose(fd);
    } // else
 
@@ -1361,7 +1382,7 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
                          break;
    }
    sprintf(tmp_str,"%s while accessing I2C device 0x%2x",err_txt,i2c_bus_id);
-   if (i2c_stop(PT_CLOSE) != I2C_NOERR)
+   if (i2c_stop(PT_OPEN) != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
       MessageBox(NULL,I2C_STOP_ERR_TXT,tmp_str,MB_OK);
       exit_ebrew(); // Exit ebrew program
