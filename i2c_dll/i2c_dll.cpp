@@ -28,17 +28,35 @@
 //            used to directly access the parallel port. You should install
 //            PortTalk first before using the routines in this DLL.
 //
-//            The I2C DLL supports the following I2C devices:
+//            The I2C DLL contains four layers of software routines:
+//            - I2C_DEVICE_LAYER: the highest layer. This layer contains all
+//                                functions that deals with I2C ICs.
+//            - I2C_BUS_LAYER   : this layer contains the functions for the I2C bus.
+//                                i2c_init(), i2c_start(), i2c_stop(),
+//                                i2c_address(), i2c_write() and i2c_read()
+//            - I2C_HW_LAYER    : the layer contains the functions that deal with
+//                                interfacing to the hardware connected to the PC
+//            - I2C_PHYS_LAYER  : the lowest layer. This contains deals with
+//                                actually reading and writing a byte
+//
+//            An application may only call routines from the I2C_BUS_LAYER and
+//            from the I2C_DEVICE_LAYER!
+//
+//            The I2C_DEVICE_LAYER currently supports the following I2C devices:
 //            - PCF 8584 I2C bus controller
 //            - PCF 8571 I2C 8-bit IO chip
 //            - PCF 8591 I2C 8-bit AD-DA converter
 //            - LM92 I2C 12 + 1 (sign) bit temperature sensor
 //            - LM76 I2C 10 + 1 (sign) bit temperature sensor (identical to LM92)
-//            - FM24C08 2048 * 8 bit EEPROM (routines not tested yet!)
+//            - FM24C08 2048 * 8 bit EEPROM
+//            - MAX1238 12-bit 12-channel AD-Converter
 //
 //           The DLL is built with Borland C++ Builder 4.0.
 // ----------------------------------------------------------------------------
 // $Log$
+// Revision 1.17  2005/03/26 13:42:01  Emile
+// - Added functionality for Velleman card. i2c_init() is changed by this!!!
+//
 // Revision 1.16  2004/02/25 18:21:36  emile
 // - Undo of previous revision. Porttalk was not the problem here.
 //
@@ -160,8 +178,6 @@
 #define AASb (0x04)
 #define LABb (0x02)
 #define  BBb (0x01)
-
-#define  RWb (0x01)
 
 //---------------------------------------------------------------------------
 // The PCF8584 uses register S2 to set the proper SCL frequency. It contains
@@ -292,6 +308,12 @@ static int led_decode[] = {0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
 #define ADDA_CONTROL_BYTE (0x44)
 #define ADDA_BUF          (0x05)
 
+//----------------------------------------------------------------------------
+// List of all available AD-channels where analog values can be connected to
+//----------------------------------------------------------------------------
+int  base_adc[] = {0x00, ADDA_BASE,    ADDA_BASE,    ADDA_BASE,    ADDA_BASE,
+                         MAX1238_BASE, MAX1238_BASE, MAX1238_BASE, MAX1238_BASE};
+
 //---------------------------
 // Internal i2c_dll variables
 //---------------------------
@@ -312,7 +334,11 @@ static byte dataL;        // Low nibble read from multiplexer
 char   *i2c_dll_revision = "$Revision$";
 
 //----------------------------------------------------------------------------
-// Start of i2c_dll routines
+//----------------------------------------------------------------------------
+// Start of I2C_PHYS_LAYER routines
+// - inportb()
+// - outportb()
+//----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
 
 unsigned char inportb(unsigned short port)
@@ -356,6 +382,19 @@ void outportb(unsigned short port, unsigned char val)
       asm     out     dx, al
    }
 } // outportb()
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// Start of I2C_PHYS_LAYER routines
+// - Routines that belong to the Elektuur PCF8584 LPT-interface card:
+//   - write_S023()           - write_S1()            - read_mpx()
+//   - convert_mpx()          - read_S023()           - read_S1()
+//   - pauze()                - delay()               - wait_byte()
+//   - terminate_read()
+// - Routines that deal with LPT-port bit-banging (no PCF8584)
+//   - i2c_output_bb()       - i2c_input_bb()
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
 
 void write_S023(unsigned char val)
 /*------------------------------------------------------------------
@@ -564,6 +603,173 @@ int i2c_berr_check(void)
    }
 } // i2c_berr_check()
 
+
+int wait_byte(void)
+/*------------------------------------------------------------------
+  Purpose  : This function waits until a complete byte has been
+             send or received from the PCF8584 I2C bus controller.
+             Time-out value is a multiple of the delay in pauze()
+             and is approx. 0.5 second.
+  Variables: None
+      bytes: Number of bytes to write
+  Returns  : Error: I2C_NOERR  : No error
+                    I2C_TIMEOUT: I2C bus time-out
+  ------------------------------------------------------------------*/
+{
+   int i = 0; // timer value
+
+   while (((read_S1() & PINb) == PINb) && (i++ < TO_VAL))
+   {
+      pauze(); // loop until PIN bit is 0
+   } // while
+   pauze();
+   if (i >= TO_VAL)
+   {
+      return I2C_TIMEOUT;
+   }
+   else
+   {
+      return I2C_NOERR;
+   }
+} // wait_byte()
+
+int terminate_read(void)
+/*------------------------------------------------------------------
+  Purpose  : If an IC is waiting for a negative acknowledgement before
+             it releases the SDA, we first turn off the ACK bit in the
+             control register of the PCF8584. Then we read the last
+             received byte, so the next received byte will not be
+             acknowledged, and the slave transmitter stops transmitting
+             and releases SDA. Finally we have to wait for reception of
+             the last byte. Notice that the last two bytes read are LOST!
+  Variables: None
+  Returns  : Error: I2C_NOERR  : No error
+                    I2C_TIMEOUT: I2C bus time-out
+  ------------------------------------------------------------------*/
+{
+   write_S1(0x40);  // set ACK to negative acknowledgement
+   pauze();
+   read_S023();      // get one-before-last byte: goes LOST!
+   pauze();
+   return wait_byte(); // wait for last byte: goes LOST! Return result.
+} // terminate_read()
+
+i2c_acks i2c_output_bb(byte serdata)
+/*------------------------------------------------------------------
+  Purpose  : Send one byte directly to the I2C Hardware, using a
+             mechanism called 'bit-banging'.
+  Variables:
+    serdata: the byte to write to the I2C bus
+  Returns  : ACK : The byte has been sent successfully
+             NACK: The slave I2C chip responded with a NACK
+  ------------------------------------------------------------------*/
+{
+   i2c_acks ret; // return value
+   byte     p[] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
+   int      i;   // loop counter
+   byte     temp;
+
+   for (i = 0; i < 8; i++)
+   {  // start with MSB first!
+      if (serdata & p[i])
+      {
+         outportb(lpt_ctrl,I2C_SCL0_SDA1); // bit is a '1'
+      }
+      else
+      {
+         outportb(lpt_ctrl,I2C_SCL0_SDA0); // bit is a '0'
+      } // else
+      pauze();
+      temp = inportb(lpt_ctrl) & 0x07; // set SCL to 1
+      outportb(lpt_ctrl,temp);
+      pauze();
+      temp = inportb(lpt_ctrl) | 0x08; // set SCL to 0
+      outportb(lpt_ctrl,temp);
+      pauze();
+   } // for
+   //-------------------------------------------------------------
+   //Now 8 bits have been transferred, Read back the ACK/NACK bit
+   //-------------------------------------------------------------
+   outportb(lpt_ctrl,I2C_SCL0_SDA1);
+   pauze();
+   outportb(lpt_ctrl,I2C_SCL1_SDA1);
+   pauze();
+   // Read ACK value. This should be 0 for ACK and 1 for NACK
+   ret = (inportb(lpt_stat) & I2C_SDA_IN) ? I2C_NACK : I2C_ACK;
+   pauze();
+   outportb(lpt_ctrl,I2C_SCL0_SDA1);
+   pauze();
+   return ret;
+} // i2c_output_bb()
+
+byte i2c_input_bb(bool last)
+/*------------------------------------------------------------------
+  Purpose  : Reads one byte directly to the I2C Hardware, using a
+             mechanism called 'bit-banging'.
+  Variables:
+       last: TRUE = this is the last byte to read from the device
+  Returns  : the byte read from the I2C device
+  ------------------------------------------------------------------*/
+{
+   byte  result = 0; // byte read from HW device
+   byte  p[] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
+   int   i;   // loop counter
+   byte  temp;
+
+   temp = inportb(lpt_ctrl) & 0x0D; // start with SDA = 1
+   pauze();
+   outportb(lpt_ctrl,temp);
+   pauze();
+   for (i = 0; i < 8; i++)
+   {  // start with MSB first!
+      temp = inportb(lpt_ctrl) & 0x05; // set SCL = 1
+      pauze();
+      outportb(lpt_ctrl,temp);
+      pauze();
+      if (inportb(lpt_stat) & I2C_SDA_IN) // read one bit
+      {
+         result |= p[i];
+         pauze();
+      } // if
+      temp = inportb(lpt_ctrl) | 0x08; // set SCL = 0
+      pauze();
+      outportb(lpt_ctrl,temp);
+      pauze();
+   } // for
+   //-------------------------------------------------------------
+   //Now 8 bits have been read, send an ACK/NACK bit
+   //-------------------------------------------------------------
+   if (last)
+   {  // send a NACK
+      outportb(lpt_ctrl,I2C_SCL0_SDA1); // 1 = NACK
+   }
+   else
+   {  // send an ACK
+      outportb(lpt_ctrl,I2C_SCL0_SDA0); // 0 = ACK
+   } // else
+   pauze();
+   temp = inportb(lpt_ctrl) & 0x07; // set SCL = 1
+   pauze();
+   outportb(lpt_ctrl,temp);
+   pauze();
+   temp = inportb(lpt_ctrl) | 0x08; // set SCL = 0 again
+   pauze();
+   outportb(lpt_ctrl,temp);
+   pauze();
+
+   outportb(lpt_ctrl,I2C_SCL0_SDA1); // set CLK = 0 again
+   pauze();
+   return result;
+} // i2c_input_bb()
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// Start of I2C_BUS_LAYER routines
+// - i2c_init()           - i2c_start()            - i2c_address()
+// - i2c_write()          - i2c_read()             - i2c_stop()
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+
 extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
                                                         byte control,
                                                         byte clock_reg_val)
@@ -715,162 +921,6 @@ extern "C" __declspec(dllexport) int __stdcall i2c_start(void)
    return err; // return-value
 } // i2c_start()
 
-int wait_byte(void)
-/*------------------------------------------------------------------
-  Purpose  : This function waits until a complete byte has been
-             send or received from the PCF8584 I2C bus controller.
-             Time-out value is a multiple of the delay in pauze()
-             and is approx. 0.5 second.
-  Variables: None
-      bytes: Number of bytes to write
-  Returns  : Error: I2C_NOERR  : No error
-                    I2C_TIMEOUT: I2C bus time-out
-  ------------------------------------------------------------------*/
-{
-   int i = 0; // timer value
-
-   while (((read_S1() & PINb) == PINb) && (i++ < TO_VAL))
-   {
-      pauze(); // loop until PIN bit is 0
-   } // while
-   pauze();
-   if (i >= TO_VAL)
-   {
-      return I2C_TIMEOUT;
-   }
-   else
-   {
-      return I2C_NOERR;
-   }
-} // wait_byte()
-
-int terminate_read(void)
-/*------------------------------------------------------------------
-  Purpose  : If an IC is waiting for a negative acknowledgement before
-             it releases the SDA, we first turn off the ACK bit in the
-             control register of the PCF8584. Then we read the last
-             received byte, so the next received byte will not be
-             acknowledged, and the slave transmitter stops transmitting
-             and releases SDA. Finally we have to wait for reception of
-             the last byte. Notice that the last two bytes read are LOST!
-  Variables: None
-  Returns  : Error: I2C_NOERR  : No error
-                    I2C_TIMEOUT: I2C bus time-out
-  ------------------------------------------------------------------*/
-{
-   write_S1(0x40);  // set ACK to negative acknowledgement
-   pauze();
-   read_S023();      // get one-before-last byte: goes LOST!
-   pauze();
-   return wait_byte(); // wait for last byte: goes LOST! Return result.
-} // terminate_read()
-
-i2c_acks i2c_output_bb(byte serdata)
-/*------------------------------------------------------------------
-  Purpose  : Send one byte directly to the I2C Hardware, using a
-             mechanism called 'bit-banging'.
-  Variables:
-    serdata: the byte to write to the I2C bus
-  Returns  : ACK : The byte has been sent successfully
-             NACK: The slave I2C chip responded with a NACK
-  ------------------------------------------------------------------*/
-{
-   i2c_acks ret; // return value
-   byte     p[] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
-   int      i;   // loop counter
-
-   for (i = 0; i < 8; i++)
-   {  // start with MSB first!
-      if (serdata & p[i])
-      {
-         outportb(lpt_ctrl,I2C_SCL0_SDA1); // bit is a '1'
-         pauze();
-         outportb(lpt_ctrl,I2C_SCL1_SDA1); // set SCL to 1
-         pauze();
-         outportb(lpt_ctrl,I2C_SCL0_SDA1); // set SCL to 0 again
-         pauze();
-         outportb(lpt_ctrl,I2C_SCL0_SDA0); // set SDA to 0 again
-         pauze();
-      }
-      else
-      {
-         outportb(lpt_ctrl,I2C_SCL0_SDA0); // bit is a '0'
-         pauze();
-         outportb(lpt_ctrl,I2C_SCL1_SDA0); // set SCL to 1
-         pauze();
-         outportb(lpt_ctrl,I2C_SCL0_SDA0); // set SCL to 0 again
-         pauze();
-      }
-   } // for
-   //-------------------------------------------------------------
-   //Now 8 bits have been transferred, Read back the ACK/NACK bit
-   //-------------------------------------------------------------
-   outportb(lpt_ctrl,I2C_SCL0_SDA1);
-   pauze();
-   outportb(lpt_ctrl,I2C_SCL1_SDA1);
-   pauze();
-   // Read ACK value. This should be 0 for ACK and 1 for NACK
-   // Input data-bit is inverted on the Velleman board!
-   ret = (inportb(lpt_stat) & I2C_SDA_IN) ? I2C_ACK : I2C_NACK;
-   pauze();
-   outportb(lpt_ctrl,I2C_SCL0_SDA1);
-   pauze();
-   return ret;
-} // i2c_output_bb()
-
-byte i2c_input_bb(bool last)
-/*------------------------------------------------------------------
-  Purpose  : Reads one byte directly to the I2C Hardware, using a
-             mechanism called 'bit-banging'.
-  Variables:
-       last: TRUE = this is the last byte to read from the device
-  Returns  : the byte read from the I2C device
-  ------------------------------------------------------------------*/
-{
-   byte  result = 0; // byte read from HW device
-   byte  p[] = {0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01};
-   int   i;   // loop counter
-
-   outportb(lpt_ctrl,I2C_SCL0_SDA1); // start with SDA_OUT = 1
-   pauze();
-   for (i = 0; i < 8; i++)
-   {  // start with MSB first!
-      outportb(lpt_ctrl,I2C_SCL1_SDA1); // now set SCL = 1
-      pauze();
-      if (inportb(lpt_stat) & I2C_SDA_IN) // read one bit
-      {
-         result |= p[i];
-      } // if
-      pauze();
-      outportb(lpt_ctrl,I2C_SCL0_SDA1); // now set SCL = 0 again
-      pauze();
-   } // for
-   //-------------------------------------------------------------
-   //Now 8 bits have been read, send an ACK/NACK bit
-   //-------------------------------------------------------------
-   if (last)
-   {  // send a NACK
-      outportb(lpt_ctrl,I2C_SCL0_SDA1); // 1 = NACK
-      pauze();
-      outportb(lpt_ctrl,I2C_SCL1_SDA1); // set CLK = 1
-      pauze();
-      outportb(lpt_ctrl,I2C_SCL0_SDA1); // set CLK = 0 again
-      pauze();
-      outportb(lpt_ctrl,I2C_SCL0_SDA0); // set CLK = 0 again
-      pauze();
-   }
-   else
-   {  // send an ACK
-      outportb(lpt_ctrl,I2C_SCL0_SDA0); // 0 = ACK
-      pauze();
-      outportb(lpt_ctrl,I2C_SCL1_SDA0); // set CLK = 1
-      pauze();
-      outportb(lpt_ctrl,I2C_SCL0_SDA0); // set CLK = 0 again
-      pauze();
-   }
-   return result;
-} // i2c_input_bb()
-
 extern "C" __declspec(dllexport) int __stdcall i2c_address(byte address)
 /*------------------------------------------------------------------
   Purpose  : Send a 'REPEAT START' condition, followed by the address.
@@ -882,12 +932,20 @@ extern "C" __declspec(dllexport) int __stdcall i2c_address(byte address)
                     I2C_TIMEOUT : I2C bus time-out
   ------------------------------------------------------------------*/
 {
-   int err;         // error return-value
-   byte x; // temp. variable
+   int err; // error return-value
+   byte x;  // temp. variable
 
    if (i2c_method == VELLEMAN_CARD)
    {
-      return (i2c_output_bb(address) == I2C_ACK) ? I2C_NOERR : I2C_BB;
+      err = i2c_start(); // send (repeated) start command
+      if (err != I2C_NOERR)
+      {
+         return err;
+      }
+      else
+      {
+         return (i2c_output_bb(address) == I2C_ACK) ? I2C_NOERR : I2C_BB;
+      } // else
    }
    else
    {   // ISA_CARD or LPT_CARD: both have a PCF8584 controller
@@ -960,6 +1018,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_write(byte address, byte *p, 
 
    if (i2c_method == VELLEMAN_CARD)
    {
+      err = i2c_address(address & ~RWb); // prepare I2C bus for writing
       while ((b < bytes) && (retn == I2C_ACK))
       {
          retn = i2c_output_bb(p[b++]);
@@ -1002,9 +1061,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_write(byte address, byte *p, 
 
 extern "C" __declspec(dllexport) int __stdcall i2c_read(byte address, byte *p, int bytes)
 /*------------------------------------------------------------------
-  Purpose  : This function reads a number of bytes from the I2C bus,
-             The address on the I2C bus was set by a call to the
-             function i2c_address(), prior to calling this function.
+  Purpose  : This function reads a number of bytes from the I2C bus.
   Variables:
     address: The I2C address of the chip to read from
           p: Pointer to an array where the bytes read from the I2C
@@ -1022,6 +1079,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_read(byte address, byte *p, i
 
    if (i2c_method == VELLEMAN_CARD)
    {
+      err = i2c_address(address | RWb); // prepare I2C bus for reading
       while (b < bytes)
       {
          last = (b == bytes-1);
@@ -1059,12 +1117,13 @@ extern "C" __declspec(dllexport) int __stdcall i2c_read(byte address, byte *p, i
 
 /*------------------------------------------------------------------
   Purpose  : Closes the I2C bus.
-  Variables: None
+  Variables: pta = PT_OPEN : do not close PortTalk handle
+             pta = PT_CLOSE: close PortTalk handle
   Returns  : Error: I2C_NOERR : No error
                     I2C_BB    : I2C bus is still busy
                     I2C_BERR  : I2C bus error occurred
   ------------------------------------------------------------------*/
-extern "C" __declspec(dllexport) int __stdcall i2c_stop(void)
+extern "C" __declspec(dllexport) int __stdcall i2c_stop(enum pt_action pta)
 {
    int err = I2C_NOERR; // error return-value
 
@@ -1102,9 +1161,18 @@ extern "C" __declspec(dllexport) int __stdcall i2c_stop(void)
        write_S1(0x00);         // turn serial interface OFF
        pauze();
    } // else
-   ClosePortTalk();
+   if (pta == PT_CLOSE)
+   {
+      ClosePortTalk();
+   } // if
    return err;
 } // i2c_stop()
+
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+// Start of I2C_DEVICE_LAYER routines
+//----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
 
 extern "C" __declspec(dllexport) int __stdcall set_led(int number, int dp, int which_led, int visibility)
 /*------------------------------------------------------------------
@@ -1185,7 +1253,7 @@ extern "C" __declspec(dllexport) void __stdcall check_i2c_hw(int *HW_present)
 /*------------------------------------------------------------------
   Purpose  : This function checks all I2C Hardware if they are present
   Variables: HW_present: each bit set indicates that device is present.
-                         See i2c.h for bit-details
+                         See i2c_dll.h for bit-details
   Returns  : nothing
   ------------------------------------------------------------------*/
 {
@@ -1241,31 +1309,11 @@ extern "C" __declspec(dllexport) void __stdcall check_i2c_hw(int *HW_present)
    {
       *HW_present |= FM24C08_OK;
    }
+   if (i2c_address(MAX1238_BASE) == I2C_NOERR)
+   {
+      *HW_present |= MAX1238_OK;
+   }
 } // check_i2c_hw()
-
-extern "C" __declspec(dllexport) void __stdcall init_adc(adda_t *p)
-/*------------------------------------------------------------------
-  Purpose  : This function calculates the conversion constant for the
-             four AD Converters. Input is Vrefx (x = 1..4), output is
-             adxc (x=1..4).
-             Note that the ref. voltage is approx. 1.848 Volt for all ADCs.
-             The value of every Vrefx is always as [E-1 unity], with unity
-             being Litres or °C.
-
-             AD1..AD3: Every LM35 output (10 mV/°C) is amplified by 2 approx.
-                       So the effective Vref would be close to 90 °C, but
-                       should be calibrated for every AD channel.
-             AD4     : Pressure transducer,
-  Variables: p: pointer to a struct that will contain the values.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   // 8 bit AD = 256 steps; 10.0 -> E-1
-   p->ad1c = (double)(p->vref1) / 2560.0;
-   p->ad2c = (double)(p->vref2) / 2560.0;
-   p->ad3c = (double)(p->vref3) / 2560.0;
-   p->ad4c = (double)(p->vref4) / 2560.0;
-} // init_adc()
 
 /*------------------------------------------------------------------
   Purpose  : This function reads one AD channel of the ADS7828.
@@ -1323,7 +1371,7 @@ extern "C" __declspec(dllexport) int __stdcall read_adc(adda_t *p)
 
    r1       = i2c_address(ADDA_BASE); // Put ADC address on I2C bus
    to_ad[0] = ADDA_CONTROL_BYTE;      // Next byte should be a control byte
-   to_ad[1] = (byte)(p->dac);         // Value for DA Converter
+   to_ad[1] = p->dac;                 // Value for DA Converter
    r1   |= i2c_write(ADDA_BASE,to_ad,2); // send control byte + DAC value
 
    //-----------------------------
@@ -1331,10 +1379,10 @@ extern "C" __declspec(dllexport) int __stdcall read_adc(adda_t *p)
    //-----------------------------
    r1 |= i2c_read(ADDA_BASE | RWb,buffer,ADDA_BUF); // read dummy byte+AD1+AD2+AD3+AD4
 
-   p->ad1 = (double)(buffer[1]) * p->ad1c; // convert to °C
-   p->ad2 = (double)(buffer[2]) * p->ad2c; // convert to °C
-   p->ad3 = (double)(buffer[3]) * p->ad3c; // convert to °C
-   p->ad4 = (double)(buffer[4]) * p->ad4c; // convert to °C
+   p->ad1 = buffer[1]; // converted ADC1 value
+   p->ad2 = buffer[2]; // converted ADC2 value
+   p->ad3 = buffer[3]; // converted ADC3 value
+   p->ad4 = buffer[4]; // converted ADC4 value
    return r1;
 } // read_adc()
 
@@ -1392,7 +1440,7 @@ extern "C" __declspec(dllexport) int __stdcall eewrite(int addr, byte *p, byte n
    x    = (byte)(addr & 0x0ff);
    res |= i2c_write(FM24C08_BASE,&x,1); // write byte address
    res |= i2c_write(FM24C08_BASE,p,nr); // write data
-   res |= i2c_stop();  // Gen. stop condition = start write to EEPROM
+   res |= i2c_stop(PT_CLOSE);  // Gen. stop condition = start write to EEPROM
    res |= i2c_start(); // Gen. start condition again
    return res;
 } // eewrite()
@@ -1502,6 +1550,175 @@ extern "C" __declspec(dllexport) double __stdcall lm92_read(byte dvc)
    } // else
    return temp;     // Return value now in °C
 } // lm92_read()
+
+extern "C" __declspec(dllexport) int __stdcall max1238_read(byte dvc)
+/*------------------------------------------------------------------
+  Purpose  : This function reads the MAXIM MAX1238 12-channel, 12-bit
+             AD Converter. The configuration is set as follows:
+             - single-ended instead of differential
+             - no scanning, only convert channel selected by 'dvc'
+             - Use internal reference, set AIN_/REF as input and set
+               internal state of reference to 'always off'
+  Variables:
+       dvc : [0..11] The number of the ADC to read (AIN0..AIN11)
+  Returns  : The 12-bit number (0..4095) read from the AD-converter
+             On error, a value < 0 is returned.
+  ------------------------------------------------------------------*/
+{
+   int    res = I2C_NOERR;   // return result
+   byte   buffer[2];         // array to store data from i2c_read()
+
+   if (dvc > 11)
+   {
+      res  = I2C_ARGS; // wrong argument
+   }
+   else
+   {
+      res  = i2c_address(MAX1238_BASE);
+      if (res == I2C_NOERR)
+      {
+         //---------------------------------------------------------
+         // Start with writing 1101 0010 into the setup byte
+         // Internal reference, AIN_/REF = internal input
+         // Internal reference always on, unipolar, internal clock
+         //
+         // Next, write the configuration byte:
+         // - Single-ended, convert requested channel
+         //---------------------------------------------------------
+         buffer[0] = 0xD2; // 1101 0010, setup byte
+         buffer[1] = 0x61 | (dvc << 1); // configuration byte
+         res = i2c_write(MAX1238_BASE,buffer,2);
+         if (res == I2C_NOERR)
+         {
+            //i2c_start();
+            //res = i2c_address(MAX1238_BASE | RWb);
+            res = i2c_read(MAX1238_BASE | RWb,buffer,2); // read 2 bytes from MAX1238
+            if (res == I2C_NOERR)
+            {
+               res = buffer[0] & 0x0F; // first 4 bits are always 1, set to 0
+               res <<= 8;              // SHL 8 bits (this is the MSB)
+               res |= buffer[1];       // OR with LSB
+            } // if
+         } // if
+      } // if
+   } // else
+   return res; // Return value, return < 0 if error occurred
+} // max1238_read()
+
+extern "C" __declspec(dllexport) double __stdcall get_analog_input(int  hw_present,
+                                                                   enum i2c_adc ad_channel,
+                                                                   double a, double b,
+                                                                   int *err)
+/*------------------------------------------------------------------
+  Purpose  : This function is a wrapper function for all ADC functions.
+             Currently the PCF8591 and the MAX1238 AD-converters are
+             supported. Based on the selected device, the appropriate
+             function is called.
+             The n-bit result from the AD-channel is then converted into
+             an SI-code with the a and b parameters.
+             Example: ADC-channel = 127 with a = 1.0, b = 5.0
+                      y = 127 * 1.0 + 5.0 = 132.0
+  Variables:
+   hw_present : I2C HW status, see i2c_dll.h for bit settings
+   ad_channel : see enum i2c_adc in i2c_dll.h
+            a : a-coefficient for y=a.x+b calculation
+            b : b-coefficient for y=a.x+b calculation
+          err : TRUE : something went wrong
+                FALSE: everything is OK
+  Returns  : The converted number read from the AD-converter
+  ------------------------------------------------------------------*/
+{
+   adda_t adc;       // struct needed for PCF8591
+   int    x;         // temp. variable
+   double ret = 0.0; // the return value
+
+   *err = I2C_NOERR; //init. to no error
+
+   switch (ad_channel)
+   {
+
+      case AIN0_PCF8591:
+           if (hw_present & ADDA_OK)
+           {
+              *err = read_adc(&adc);
+              ret  = adc.ad1 * a  + b;
+           }
+           break;
+      case AIN1_PCF8591:
+           if (hw_present & ADDA_OK)
+           {
+              *err = read_adc(&adc);
+              ret  = adc.ad2 * a + b;
+           }
+           break;
+      case AIN2_PCF8591:
+           if (hw_present & ADDA_OK)
+           {
+              *err = read_adc(&adc);
+              ret  = adc.ad3 * a + b;
+           }
+           break;
+      case AIN3_PCF8591:
+           if (hw_present & ADDA_OK)
+           {
+              *err = read_adc(&adc);
+              ret  = adc.ad4 * a + b;
+           }
+           break;
+      case AIN0_MAX1238:
+           if (hw_present & MAX1238_OK)
+           {
+              x = max1238_read(0);
+              if (x < 0)
+              {  // error!
+                 ret  = 0.0;
+                 *err = I2C_BB;
+              }
+              else ret = x * a + b;
+           }
+           break;
+      case AIN1_MAX1238:
+           if (hw_present & MAX1238_OK)
+           {
+              x = max1238_read(1);
+              if (x < 0)
+              {  // error!
+                 ret  = 0.0;
+                 *err = !I2C_BB;
+              }
+              else ret = x * a + b;
+           }
+           break;
+      case AIN2_MAX1238:
+           if (hw_present & MAX1238_OK)
+           {
+              x = max1238_read(2);
+              if (x < 0)
+              {  // error!
+                 ret  = 0.0;
+                 *err = !I2C_BB;
+              }
+              else ret = x * a + b;
+           }
+           break;
+      case AIN3_MAX1238:
+           if (hw_present & MAX1238_OK)
+           {
+              x = max1238_read(3);
+              if (x < 0)
+              {  // error!
+                 ret  = 0.0;
+                 *err = !I2C_BB;
+              }
+              else ret = x * a + b;
+           }
+           break;
+      case NONE: // return 0.0 in all other cases
+      default:
+           break;
+   } // switch
+   return ret; // return value
+} // get_analog_input()
 
 //---------------------------------------------------------------------------
 //   Important note about DLL memory management in a VCL DLL:

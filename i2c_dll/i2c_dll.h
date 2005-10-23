@@ -9,6 +9,13 @@
 //           the I2C Hardware.
 // ----------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2005/08/28 22:17:41  Emile
+// - DataGrapfForm: TTimer replaced again for TAnimTimer
+// - Debug-code added for MA filter of Vmlt
+// - 'H' key now toggles heater between 0% and 100%
+// - Text Temp. Sensor 1 & 2 replaced by Temp. Sensor HLT & MLT
+// - Printing of vmlt_unf (padc.ad4) removed again from log-file
+//
 // Revision 1.11  2005/03/26 13:42:01  Emile
 // - Added functionality for Velleman card. i2c_init() is changed by this!!!
 //
@@ -91,6 +98,8 @@
 #define WIN_9X        (0)
 #define WIN_XP        (1)
 
+#define RWb        (0x01)
+
 #define ISA_CARD      (0)
 #define LPT_CARD      (2)
 #define VELLEMAN_CARD (4)
@@ -98,6 +107,9 @@
 
 // I2C slave HW responds with an ACK (0) or an NACK (1)
 enum i2c_acks {I2C_ACK, I2C_NACK};
+
+// Parameter value for i2c_stop to have PortTalk opened or to close it
+enum pt_action {PT_OPEN, PT_CLOSE};
 
 //-----------------------------------------------------------------
 // The LM92 sign bit is normally bit 12. The value read from the
@@ -132,6 +144,7 @@ enum i2c_acks {I2C_ACK, I2C_NACK};
 #define LCD_BASE         (0x40)
 #define DIG_IO_LSB_BASE  (0x42)
 #define DIG_IO_MSB_BASE  (0x44)
+#define MAX1238_BASE     (0x6A)
 #define LED1_BASE        (0x70)
 #define LED2_BASE        (0x72)
 #define LED3_BASE        (0x74)
@@ -154,7 +167,8 @@ enum i2c_acks {I2C_ACK, I2C_NACK};
 #define LM92_2_OK        (0x0200)
 #define LM92_3_OK        (0x0400)
 #define FM24C08_OK       (0x0800)
-#define ALL_OK           (0x0FFF)
+#define MAX1238_OK       (0x1000)
+#define ALL_OK           (0x1FFF)
 
 #define NOT_TXT          "NOT"
 #define YES_TXT          "IS "
@@ -170,6 +184,7 @@ enum i2c_acks {I2C_ACK, I2C_NACK};
 #define LM92_2_TXT       "Temp. Sensor MLT\tLM92\t0x94 : %s Present\n"
 #define LM92_3_TXT       "Temp. Sensor 3\tLM92\t0x96 : %s Present\n"
 #define FM24C08_TXT      "EEPROM Device\tFM24C08\t0xA0 : %s Present\n"
+#define MAX1238_TXT      "ADC, 12-bit 12 ch.\tMAX1238\t0x6A : %s Present\n"
 
 //------------------------------------------------------------------
 // This struct is needed for the PCF8591 ADC/DAC. For every channel,
@@ -177,34 +192,47 @@ enum i2c_acks {I2C_ACK, I2C_NACK};
 //------------------------------------------------------------------
 typedef struct
 {
-   double ad1; // The measured temperature (ADC1) in E-1 °C
-   double ad2; // The measured temperature (ADC2) in E-1 °C
-   double ad3; // The measured temperature (ADC3) in E-1 °C
-   double ad4; // The measured temperature (ADC4) in E-1 °C
-   double ad1c; // Conversion factor for AD1
-   double ad2c; // Conversion factor for AD2
-   double ad3c; // Conversion factor for AD3
-   double ad4c; // Conversion factor for AD4
-   int    vref1; // Reference voltage for AD1 in mV
-   int    vref2; // Reference voltage for AD2 in mV
-   int    vref3; // Reference voltage for AD3 in mV
-   int    vref4; // Reference voltage for AD4 in mV
-   int    dac;   // Value for DA Converter
+   byte    ad1; // ADC1 value
+   byte    ad2; // ADC2 value
+   byte    ad3; // ADC3 value
+   byte    ad4; // ADC4 value
+   byte    dac; // Value for DA Converter
 } adda_t;
 
+//----------------------------------------------------------------------------
+// List of all available AD-channels where analog values can be connected to
+//----------------------------------------------------------------------------
+enum i2c_adc {NONE, AIN0_PCF8591, AIN1_PCF8591, AIN2_PCF8591, AIN3_PCF8591,
+                    AIN0_MAX1238, AIN1_MAX1238, AIN2_MAX1238, AIN3_MAX1238};
+
+//----------------------------------------------------------------------------
+// I2C_BUS_LAYER routines
+//----------------------------------------------------------------------------
 extern "C" __declspec(dllexport) int    __stdcall i2c_init(int address, byte control, byte clock_reg_val);
 extern "C" __declspec(dllexport) int    __stdcall i2c_start(void);
 extern "C" __declspec(dllexport) int    __stdcall i2c_address(byte address);
 extern "C" __declspec(dllexport) int    __stdcall i2c_write(byte address, byte *p, int bytes);
 extern "C" __declspec(dllexport) int    __stdcall i2c_read(byte address, byte *p, int bytes);
-extern "C" __declspec(dllexport) int    __stdcall i2c_stop(void);
+extern "C" __declspec(dllexport) int    __stdcall i2c_stop(enum pt_action);
+
+//----------------------------------------------------------------------------
+// I2C_DEVICE_LAYER routines
+//----------------------------------------------------------------------------
 extern "C" __declspec(dllexport) int    __stdcall set_led(int number, int dp, int which_led, int visibility);
 extern "C" __declspec(dllexport) void   __stdcall check_i2c_hw(int *HW_present);
-extern "C" __declspec(dllexport) void   __stdcall init_adc(adda_t *p);
 //extern "C" __declspec(dllexport) int    __stdcall read_ads7828(int channel, int *value);
 extern "C" __declspec(dllexport) int    __stdcall read_adc(adda_t *p);
 extern "C" __declspec(dllexport) int    __stdcall WriteIOByte(byte value, byte LorH);
 extern "C" __declspec(dllexport) int    __stdcall eewrite(int addr, byte *p, byte nr);
 extern "C" __declspec(dllexport) int    __stdcall eeread(int addr, byte *p, byte nr);
 extern "C" __declspec(dllexport) double __stdcall lm92_read(byte dvc);
+extern "C" __declspec(dllexport) int    __stdcall max1238_read(byte dvc);
+extern "C" __declspec(dllexport) double __stdcall get_analog_input(int  hw_present,
+                                                                   enum i2c_adc ad_channel,
+                                                                   double a, double b, int *err);
+
+i2c_acks i2c_output_bb(byte serdata);
+byte     i2c_input_bb(bool last);
+void     delay(int x);
+
 #endif
