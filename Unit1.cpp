@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.45  2005/10/23 17:50:26  Emile
+// - Writing to log-file updated with Vhlt
+//
 // Revision 1.44  2005/10/23 12:44:38  Emile
 // Several changes because of new hardware (MAX1238 instead of PCF8591):
 // - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
@@ -753,9 +756,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
       date d1;
       getdate(&d1);
       fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
-      fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, Ts = %5.2f, ",pid_pars.kc,pid_pars.ti,pid_pars.td,pid_pars.ts);
+      fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, K_lpf = %6.2f, Ts = %5.2f, ",
+                 pid_pars.kc, pid_pars.ti, pid_pars.td, pid_pars.k_lpf, pid_pars.ts);
       fprintf(fd,"PID_Model =%2d\n",pid_pars.pid_model);
-      fprintf(fd,"ma_thlt=%6.2f, ma_tmlt=%6.2f, ma_vhlt=%6.2f, ma_vmlt=%6.2f; ",
+      fprintf(fd,"ma_thlt=%d, ma_tmlt=%d, ma_vhlt=%d, ma_vmlt=%d; ",
                  str_thlt.N, str_tmlt.N, str_vhlt.N, str_vmlt.N);
       strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
       s[4] = '\0';
@@ -829,13 +833,13 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           led3 = 2; Reg->WriteInteger("LED3",led3);   // Tset_hlt
           led4 = 3; Reg->WriteInteger("LED4",led4);   // Tset_mlt
 
-          led1_vis = 4; // 12 mA visibility
+          led1_vis = 3; // 12 mA visibility
           Reg->WriteInteger("LED1_VIS",led1_vis); // LED1 Visibility
-          led2_vis = 4; // 12 mA visibility
+          led2_vis = 3; // 12 mA visibility
           Reg->WriteInteger("LED2_VIS",led2_vis); // LED2 Visibility
-          led3_vis = 4; // 12 mA visibility
+          led3_vis = 3; // 12 mA visibility
           Reg->WriteInteger("LED3_VIS",led3_vis); // LED3 Visibility
-          led4_vis = 4; // 12 mA visibility
+          led4_vis = 3; // 12 mA visibility
           Reg->WriteInteger("LED4_VIS",led4_vis); // LED4 Visibility
 
           ttriac_hlim = 70; // Upper limit for triac temp.
@@ -844,17 +848,17 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
           cb_i2c_err_msg          = true;
           Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
-          known_hw_devices = DIG_IO_LSB_OK | LED1_OK | LED2_OK   | LED3_OK |
-                             LED4_OK       | ADDA_OK | LM92_1_OK | LM92_2_OK;
+          known_hw_devices = DIG_IO_LSB_OK | LED1_OK    | LED2_OK   | LED3_OK |
+                             LED4_OK       | MAX1238_OK | LM92_1_OK | LM92_2_OK;
 
           // Init values for mash scheme variables
           Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
           // Init values for Sparge Settings
-          Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
+          Reg->WriteInteger("SP_BATCHES",5);    // #Sparge Batches
           Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
           Reg->WriteInteger("MASH_VOL",30);     // Total Mash Volume (L)
           Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
-          Reg->WriteInteger("BOIL_TIME",90);    // Total Boil Time (min.)
+          Reg->WriteInteger("BOIL_TIME",120);    // Total Boil Time (min.)
           // Init values for STD
           Reg->WriteInteger("PREHEAT_TIME",0);// PREHEAT_TIME [sec]
           Reg->WriteFloat("VMLT_EMPTY", 3.0); // Vmlt_EMPTY [L]
@@ -866,18 +870,18 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
           Reg->WriteInteger("MA_TMLT",5);      // Order MA filter Tmlt
           Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
-          Reg->WriteInteger("MA_VMLT",1);      // Order MA filter Vmlt
-          Reg->WriteInteger("MA_VHLT",1);      // Order MA filter Vhlt
+          Reg->WriteInteger("MA_VMLT",5);      // Order MA filter Vmlt
+          Reg->WriteInteger("MA_VHLT",5);      // Order MA filter Vhlt
           volumes.Vhlt_start = 90;             // Starting volume of HLT
           Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
           Reg->WriteInteger("VHLT_SRC",6);     // Vhlt = AIN1_MAX1238
-          Reg->WriteFloat("VHLT_A",1.0);       // a-coefficient for y=a.x+b
+          Reg->WriteFloat("VHLT_A",0.025);     // a-coefficient for y=a.x+b
           Reg->WriteFloat("VHLT_B",0.0);       // b-coefficient for y=a.x+b
           Reg->WriteInteger("VMLT_SRC",7);     // Vmlt = AIN2_MAX1238
-          Reg->WriteFloat("VMLT_A",1.0);       // a-coefficient for y=a.x+b
+          Reg->WriteFloat("VMLT_A",0.025);     // a-coefficient for y=a.x+b
           Reg->WriteFloat("VMLT_B",0.0);       // b-coefficient for y=a.x+b
           Reg->WriteInteger("TTRIAC_SRC",5);   // Ttriac = AIN0_MAX1238
-          Reg->WriteFloat("TTRIAC_A",1.0);     // a-coefficient for y=a.x+b
+          Reg->WriteFloat("TTRIAC_A",0.1);     // a-coefficient for y=a.x+b
           Reg->WriteFloat("TTRIAC_B",0.0);     // b-coefficient for y=a.x+b
           volumes.Vboil_simulated = true;
           Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
