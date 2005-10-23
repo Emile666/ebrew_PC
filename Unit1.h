@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.29  2005/08/28 22:17:30  Emile
+// - DataGrapfForm: TTimer replaced again for TAnimTimer
+// - Debug-code added for MA filter of Vmlt
+// - 'H' key now toggles heater between 0% and 100%
+// - Text Temp. Sensor 1 & 2 replaced by Temp. Sensor HLT & MLT
+// - Printing of vmlt_unf (padc.ad4) removed again from log-file
+//
 // Revision 1.28  2005/06/11 12:35:07  Emile
 // - Keyboard shortcuts 'P' (Pump toggle) and '1' .. '7' (valve toggles) added.
 // - Added transition from state 8 back to state 6. This prevents a transition
@@ -294,8 +301,12 @@ typedef struct _swfx_struct
    double tmlt_fx;      // Fix value for Tmlt [Celsius]
    bool   std_sw;       // Switch value for STD state
    int    std_fx;       // Fix value for STD state
+   bool   ttriac_sw;    // Switch value for Ttriac
+   double ttriac_fx;    // Fix value for Ttriac
    bool   vmlt_sw;      // Switch value for Vmlt
    double vmlt_fx;      // Fix value for Vmlt
+   bool   vhlt_sw;      // Switch value for Vhlt
+   double vhlt_fx;      // Fix value for Vhlt
 } swfx_struct;
 
 //---------------------------------------------------------------------------
@@ -361,6 +372,7 @@ __published:	// IDE-managed Components
         TMenuItem *NetworkListening1;
         TMenuItem *NetworkDisconnect1;
         TLabel *PID_dbg;
+        TLabel *Ttriac_lbl;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -433,9 +445,18 @@ private:	// User declarations
         double          thlt_offset;      // calibration offset to add to Thlt measurement
         double          tmlt_offset;      // calibration offset to add to Tmlt measurement
         bool            cb_pid_dbg;       // true = Show PID Debug label
+        enum i2c_adc    vhlt_src;         // Vhlt source AD channel
+        double          vhlt_a;           // a-coefficient for y=a.x+b
+        double          vhlt_b;           // b-coefficient for y=a.x+b
+        enum i2c_adc    vmlt_src;         // Vmlt source AD channel
+        double          vmlt_a;           // a-coefficient for y=a.x+b
+        double          vmlt_b;           // b-coefficient for y=a.x+b
+        enum i2c_adc    ttriac_src;       // Ttriac source AD channel
+        double          ttriac_a;         // a-coefficient for y=a.x+b
+        double          ttriac_b;         // b-coefficient for y=a.x+b
 public:		// User declarations
+        ma              str_vhlt;   // Struct for MA5 filter for HLT volume
         ma              str_vmlt;   // Struct for MA5 filter for MLT volume
-        double          vmlt_old;   // For debugging of Vmlt
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
         adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output
@@ -445,7 +466,7 @@ public:		// User declarations
         double          tmlt;       // MLT actual temperature
         double          ttriac;     // Triac electronics actual temperature
         pid_params      pid_pars;   // struct containing PID parameters
-        int             hw_status;  // I2C HW status, see i2c.h for bit settings
+        int             hw_status;  // I2C HW status, see i2c_dll.h for bit settings
         maisch_schedule ms[MAX_MS]; // struct containing maisch schedule
         sparge_struct   sp;         // Values for Sparging
         std_struct      std;        // Values for State Transition Diagram

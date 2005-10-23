@@ -5,6 +5,20 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2004/05/08 14:52:50  emile
+// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+// - View mash progress screen: reorganised, pre-heat timers added, timers are now
+//   in seconds instead of minutes.
+// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+// - 'Apply' Button added to Fix parameters dialog screen.
+// - 'Edit mash scheme' no longer resets the (running) mash timers
+// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+//   also removed.
+// - Changing init. volume of HLT did not result in an update on screen. Corrected.
+//
 // Revision 1.5  2004/03/10 10:10:38  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -100,6 +114,18 @@ void __fastcall TFix_Params::CB_stdClick(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 
+void __fastcall TFix_Params::CB_ttriacClick(TObject *Sender)
+{
+   Ttriac_MEdit->Enabled = CB_ttriac->Checked;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TFix_Params::Ttriac_MEditClick(TObject *Sender)
+{
+   Ttriac_MEdit->SelectAll();
+}
+//---------------------------------------------------------------------------
+
 void __fastcall TFix_Params::STD_MEditClick(TObject *Sender)
 {
    STD_MEdit->SelectAll();
@@ -118,6 +144,18 @@ void __fastcall TFix_Params::Vmlt_MEditClick(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 
+void __fastcall TFix_Params::CB_vhltClick(TObject *Sender)
+{
+   Vhlt_MEdit->Enabled = CB_vhlt->Checked;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TFix_Params::Vhlt_MEditClick(TObject *Sender)
+{
+   Vhlt_MEdit->SelectAll();
+}
+//---------------------------------------------------------------------------
+
 #define IDH_FIXPARAMETERS (0x010050)
 void __fastcall TFix_Params::Help_ButtonClick(TObject *Sender)
 {
@@ -127,17 +165,17 @@ void __fastcall TFix_Params::Help_ButtonClick(TObject *Sender)
 
 void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
 {
-      // Get PID Output (Gamma)
-      MainForm->swfx.gamma_sw = CB_Gamma->Checked;
-      if (MainForm->swfx.gamma_sw)
-      {
-         MainForm->swfx.gamma_fx = Gamma_MEdit->Text.ToDouble();
-      } // if
       // Get Ref. Temp (Tset_hlt)
       MainForm->swfx.tset_hlt_sw = CB_Tset->Checked;
       if (MainForm->swfx.tset_hlt_sw)
       {
          MainForm->swfx.tset_hlt_fx = Tset_MEdit->Text.ToDouble();
+      } // if
+      // Get PID Output (Gamma)
+      MainForm->swfx.gamma_sw = CB_Gamma->Checked;
+      if (MainForm->swfx.gamma_sw)
+      {
+         MainForm->swfx.gamma_fx = Gamma_MEdit->Text.ToDouble();
       } // if
       // Get Thlt
       MainForm->swfx.thlt_sw = CB_Tad1->Checked;
@@ -155,7 +193,7 @@ void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
       MainForm->swfx.std_sw = CB_std->Checked;
       if (MainForm->swfx.std_sw)
       {
-         // Value must be between 0 and 12
+         // Value must be between 0 and 13
          MainForm->swfx.std_fx = STD_MEdit->Text.ToInt();
          if (MainForm->swfx.std_fx < 0 ||
              MainForm->swfx.std_fx > S13_MASH_PREHEAT_HLT)
@@ -163,12 +201,24 @@ void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
             MainForm->swfx.std_fx = 0; // reset to a safe value
          }
       } // if
+      // Get Ttriac value
+      MainForm->swfx.ttriac_sw = CB_ttriac->Checked;
+      if (MainForm->swfx.ttriac_sw)
+      {
+         MainForm->swfx.ttriac_fx = Ttriac_MEdit->Text.ToDouble();
+      } // if
+      // Get Vhlt value
+      MainForm->swfx.vhlt_sw = CB_vhlt->Checked;
+      if (MainForm->swfx.vhlt_sw)
+      {
+         MainForm->swfx.vhlt_fx = Vhlt_MEdit->Text.ToDouble();
+      } // if
       // Get Vmlt value
       MainForm->swfx.vmlt_sw = CB_vmlt->Checked;
       if (MainForm->swfx.vmlt_sw)
       {
          MainForm->swfx.vmlt_fx = Vmlt_MEdit->Text.ToDouble();
-      }
+      } // if
 } // TFix_Params::Apply_ButtonClick()
 //---------------------------------------------------------------------------
 

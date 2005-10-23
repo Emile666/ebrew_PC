@@ -4,6 +4,12 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.13  2005/08/30 09:17:42  Emile
+// - Bug-fix reading log-file. Only entries > 1 minute can be imported.
+// - sp_idx added to log-file, instead of PID_ON.
+// - Stay 10 seconds in state 5 at start of sparging for logging purposes
+// - Reorganisation of routines of reading log file, added print_p_struct().
+//
 // Revision 1.12  2005/08/28 22:17:30  Emile
 // - DataGrapfForm: TTimer replaced again for TAnimTimer
 // - Debug-code added for MA filter of Vmlt
@@ -127,10 +133,8 @@ void __fastcall TShowDataGraphs::Button1Click(TObject *Sender)
 void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
 {
    FILE *fd;
-   FILE *fd2;
    struct time t1;
-   int  i;
-    
+
    if ((fd = fopen(LOGFILE,"a")) != NULL)
    {
       gettime(&t1);
@@ -146,27 +150,6 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
                                                       MainForm->std.ms_idx,
                                                       MainForm->std.ebrew_std,
                                                       MainForm->gamma);
-      // Debugging of MLT Volume
-      if ((MainForm->volumes.Vmlt < 0.9 * MainForm->vmlt_old) &&
-          (MainForm->volumes.Vmlt > 10.0))
-      {
-         if ((fd2 = fopen("ma_mlt.log","a")) != NULL)
-         {
-            fprintf(fd2,"%02d:%02d:%02d, ",t1.ti_hour,t1.ti_min,t1.ti_sec);
-            fprintf(fd2,"%6.2f %6.2f %3d %3d\n",MainForm->padc.ad4,
-                                                MainForm->str_vmlt.sum,
-                                                MainForm->str_vmlt.N,
-                                                MainForm->str_vmlt.index);
-            for (i = 0; i < MainForm->str_vmlt.N; i++)
-            {
-               fprintf(fd2,"%6.2f",MainForm->str_vmlt.T[i]);
-            } // for
-            fprintf(fd2,"\n\n");
-            fclose(fd2);
-         } // if
-      } // if
-      // Debugging of MLT Volume
-
       fclose(fd);
    } /* if */
 

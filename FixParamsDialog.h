@@ -5,6 +5,20 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2004/05/08 14:52:50  emile
+// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+// - View mash progress screen: reorganised, pre-heat timers added, timers are now
+//   in seconds instead of minutes.
+// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+// - 'Apply' Button added to Fix parameters dialog screen.
+// - 'Edit mash scheme' no longer resets the (running) mash timers
+// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+//   also removed.
+// - Changing init. volume of HLT did not result in an update on screen. Corrected.
+//
 // Revision 1.6  2004/03/10 10:10:38  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -69,6 +83,13 @@ __published:	// IDE-managed Components
         TMaskEdit *Vmlt_MEdit;
         TLabel *Label3;
         TButton *Apply_Button;
+        TLabel *Label4;
+        TCheckBox *CB_vhlt;
+        TMaskEdit *Vhlt_MEdit;
+        TLabel *Label5;
+        TCheckBox *CB_ttriac;
+        TMaskEdit *Ttriac_MEdit;
+        TLabel *Label6;
         void __fastcall CB_GammaClick(TObject *Sender);
         void __fastcall CB_TsetClick(TObject *Sender);
         void __fastcall Gamma_MEditClick(TObject *Sender);
@@ -83,6 +104,10 @@ __published:	// IDE-managed Components
         void __fastcall Vmlt_MEditClick(TObject *Sender);
         void __fastcall Help_ButtonClick(TObject *Sender);
         void __fastcall Apply_ButtonClick(TObject *Sender);
+        void __fastcall CB_vhltClick(TObject *Sender);
+        void __fastcall Vhlt_MEditClick(TObject *Sender);
+        void __fastcall CB_ttriacClick(TObject *Sender);
+        void __fastcall Ttriac_MEditClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TFix_Params(TComponent* Owner);

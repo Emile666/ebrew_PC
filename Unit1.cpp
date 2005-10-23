@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.43  2005/08/30 09:17:42  Emile
+// - Bug-fix reading log-file. Only entries > 1 minute can be imported.
+// - sp_idx added to log-file, instead of PID_ON.
+// - Stay 10 seconds in state 5 at start of sparging for logging purposes
+// - Reorganisation of routines of reading log file, added print_p_struct().
+//
 // Revision 1.42  2005/08/28 22:17:30  Emile
 // - DataGrapfForm: TTimer replaced again for TAnimTimer
 // - Debug-code added for MA filter of Vmlt
@@ -291,6 +297,7 @@
 
 #include "i2c_dll.h"
 extern byte fscl_values[]; // defined in i2c_dll.cpp
+extern byte base_adc[];    // defined in i2c_dll.cpp
 
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
@@ -304,6 +311,7 @@ extern byte fscl_values[]; // defined in i2c_dll.cpp
 
 TMainForm *MainForm;
 //---------------------------------------------------------------------------
+
 void __fastcall TMainForm::Restore_Settings(void)
 /*------------------------------------------------------------------
   Purpose  : This function reads all relevant info from the log-file,
@@ -425,6 +433,7 @@ void __fastcall TMainForm::Restore_Settings(void)
    } // else
    delete Dlg; // prevent memory leaks
 } // TMainForm::Restore_Settings()
+//---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Start_I2C_Communication(int known_status)
 /*------------------------------------------------------------------
@@ -498,6 +507,9 @@ void __fastcall TMainForm::Start_I2C_Communication(int known_status)
                        PR_HW_STAT(DIG_IO_MSB_OK); // IO Port MSB
                        sprintf(s,DIG_IO_MSB_TXT,s1);
                        strcat(st,s);
+                       PR_HW_STAT(MAX1238_OK);    // MAX1238 ADC 12-bit 12-ch.
+                       sprintf(s,MAX1238_TXT,s1);
+                       strcat(st,s);
                        PR_HW_STAT(LED1_OK);       // LED1
                        sprintf(s,LED1_TXT,s1);
                        strcat(st,s);
@@ -522,6 +534,7 @@ void __fastcall TMainForm::Start_I2C_Communication(int known_status)
                        PR_HW_STAT(FM24C08_OK);    // FM24C08 EEPROM
                        sprintf(s,FM24C08_TXT,s1);
                        strcat(st,s);
+
                        if (hw_status != known_status)
                        {  // Print only if HW device configuration has changed
                           MessageBox(NULL,st,"Results of I2C Hardware Check",MB_OK);
@@ -530,6 +543,7 @@ void __fastcall TMainForm::Start_I2C_Communication(int known_status)
      } // switch
    } // else
 } // TMainForm::Start_I2C_Communication()
+//---------------------------------------------------------------------------
 
 void __fastcall TMainForm::print_mash_scheme_to_statusbar(void)
 /*------------------------------------------------------------------
@@ -557,6 +571,7 @@ void __fastcall TMainForm::print_mash_scheme_to_statusbar(void)
    } // for
    StatusBar->Panels->Items[PANEL_MASHS]->Text = AnsiString(s);
 } // TMainForm::print_mash_scheme_to_statusbar()
+//---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Main_Initialisation(void)
 /*------------------------------------------------------------------
@@ -570,7 +585,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    FILE *fd;            // Log File Descriptor
    int  i;              // temp. variable
    char s[40];          // Temp. string
-   int test;
 
    //----------------------------------------
    // Initialise all variables from Registry
@@ -579,7 +593,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    {
       if (Reg->KeyExists(REGKEY))
       {
-         test = Reg->OpenKey(REGKEY,FALSE);
+         Reg->OpenKey(REGKEY,FALSE);
          known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
          pid_pars.ts = Reg->ReadFloat("TS");  // Read TS from registry
          pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
@@ -600,16 +614,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
          led3_vis = Reg->ReadInteger("LED3_VIS"); // Read led3 Visibility
          led4_vis = Reg->ReadInteger("LED4_VIS"); // Read led4 Visibility
 
-         padc.vref1 = Reg->ReadInteger("VREF1"); // Read Vref1 [Future use]
-         padc.vref2 = Reg->ReadInteger("VREF2"); // Read Vref2 [Future use]
-
-         padc.vref3  = Reg->ReadInteger("VREF3"); // Full-Scale value for Triac Temperature
          ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
          tm_triac->SetPoint->Value = ttriac_hlim;       // update object on screen
          ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
 
          volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
-         volumes.Vhlt_simulated  = Reg->ReadBool("VHLT_SIMULATED");
          volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
          cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG"); // display message
 
@@ -618,11 +627,23 @@ void __fastcall TMainForm::Main_Initialisation(void)
          init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT"),tmlt); // MA filter for Tmlt
          tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");         // offset calibration
          init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT"),volumes.Vmlt); // MA filter for Vmlt
-         padc.vref4 = Reg->ReadInteger("VREF4"); // Full-Scale value for Vmlt
-         padc.dac   = Reg->ReadInteger("DAC");   // DAC value for offset compensation of Vmlt
+         init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt); // MA filter for Vhlt
+         //--------------------------------------------------------------------
+         // The enum i2c_adc starts at NONE (0), which is also the start value
+         // of the first entry of the combo-box.
+         //--------------------------------------------------------------------
+         vhlt_src   = (enum i2c_adc)Reg->ReadInteger("VHLT_SRC");    // source AD channel
+         volumes.Vhlt_simulated = vhlt_src;           // needed for STD
+         vhlt_a     = Reg->ReadFloat("VHLT_A");       // a-coefficient for y=a.x+b
+         vhlt_b     = Reg->ReadFloat("VHLT_B");       // b-coefficient for y=a.x+b
+         vmlt_src   = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");   // source AD channel
+         vmlt_a     = Reg->ReadFloat("VMLT_A");       // a-coefficient for y=a.x+b
+         vmlt_b     = Reg->ReadFloat("VMLT_B");       // b-coefficient for y=a.x+b
+         ttriac_src = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC"); // source AD channel
+         ttriac_a   = Reg->ReadFloat("TTRIAC_A");     // a-coefficient for y=a.x+b
+         ttriac_b   = Reg->ReadFloat("TTRIAC_B");     // b-coefficient for y=a.x+b
 
          Reg->CloseKey();      // Close the Registry
-         init_adc(&padc);      // Calculate ADC conversion constants
          switch (pid_pars.pid_model)
          {
             case 0 : init_pid1(&pid_pars); break; // First   ebrew PID controller
@@ -722,8 +743,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
                                                                           std.ms_tot,
                                                                           fscl_prescaler);
       fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
-      fprintf(fd,"Vref1 = %3d, Vref2 = %3d, Vref3 = %3d, Vref4 = %3d, DAC-value = %3d\n\n",
-                 padc.vref1,padc.vref2,padc.vref3,padc.vref4,padc.dac);
+      fprintf(fd,"\n\n");
       fprintf(fd,"Time-stamp Tset_mlt Tset_hlt Thlt   Tmlt  TTriac   Vmlt sp_ ms_ ebrew Gamma\n");
       fprintf(fd,"[hh:mm:ss]  [°C]    [°C]     [°C]   [°C]   [°C]    [L]  idx idx _std   [%]\n");
       fprintf(fd,"---------------------------------------------------------------------------\n");
@@ -808,11 +828,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 
           // Init values for mash scheme variables
           Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
-          Reg->WriteInteger("VREF1",VREF_INIT); // init. ADC1 VREF
-          Reg->WriteInteger("VREF2",VREF_INIT); // init. ADC2 VREF
-          Reg->WriteInteger("VREF3",VREF_INIT); // init. ADC3 VREF
-          Reg->WriteInteger("VREF4",VREF_INIT); // init. ADC4 VREF
-          Reg->WriteInteger("DAC",0);           // Init. DA Converter
           // Init values for Sparge Settings
           Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
           Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
@@ -827,14 +842,22 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
           // Measurements
           Reg->WriteInteger("MA_THLT",5);      // Order MA filter Thlt
-          Reg->WriteFloat("THLT_OFFSET",0.0); // Offset for Thlt
+          Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
           Reg->WriteInteger("MA_TMLT",5);      // Order MA filter Tmlt
-          Reg->WriteFloat("TMLT_OFFSET",0.0); // Offset for Tmlt
+          Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
           Reg->WriteInteger("MA_VMLT",1);      // Order MA filter Vmlt
-          volumes.Vhlt_start = 90; // Starting volume of HLT
+          Reg->WriteInteger("MA_VHLT",1);      // Order MA filter Vhlt
+          volumes.Vhlt_start = 90;             // Starting volume of HLT
           Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
-          volumes.Vhlt_simulated  = true;
-          Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
+          Reg->WriteInteger("VHLT_SRC",6);     // Vhlt = AIN1_MAX1238
+          Reg->WriteFloat("VHLT_A",1.0);       // a-coefficient for y=a.x+b
+          Reg->WriteFloat("VHLT_B",0.0);       // b-coefficient for y=a.x+b
+          Reg->WriteInteger("VMLT_SRC",7);     // Vmlt = AIN2_MAX1238
+          Reg->WriteFloat("VMLT_A",1.0);       // a-coefficient for y=a.x+b
+          Reg->WriteFloat("VMLT_B",0.0);       // b-coefficient for y=a.x+b
+          Reg->WriteInteger("TTRIAC_SRC",5);   // Ttriac = AIN0_MAX1238
+          Reg->WriteFloat("TTRIAC_A",1.0);     // a-coefficient for y=a.x+b
+          Reg->WriteFloat("TTRIAC_B",0.0);     // b-coefficient for y=a.x+b
           volumes.Vboil_simulated = true;
           Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
           cb_pid_dbg = false;
@@ -863,7 +886,8 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
     //----------------------------------------
     // Init. volumes. Should be done only once
     //----------------------------------------
-    if (volumes.Vhlt_simulated)
+    volumes.Vhlt_simulated = vhlt_src; // needed for STD
+    if (vhlt_src == 0)
     {  // Vhlt is not measured but calculated from Vmlt
        volumes.Vhlt  = volumes.Vhlt_start;
     }
@@ -975,6 +999,7 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
 {
    exit_ebrew();
 }
+//---------------------------------------------------------------------------
 
 void __fastcall TMainForm::exit_ebrew(void)
 /*------------------------------------------------------------------
@@ -1009,8 +1034,11 @@ void __fastcall TMainForm::exit_ebrew(void)
    }
    if (hw_status & DIG_IO_LSB_OK)
    {
-      // Disable Heater and Pump (active-low) and Alive LED and Gas Burner (active-high)
-      err = WriteIOByte(PUMPb | HEATERb,LSB_IO);
+      //-------------------------------------------------------------
+      // Disable Heater, Pump and Alive LED (active-low)
+      // Disable Gas Burner (active-high). See misc.h for declaration
+      //-------------------------------------------------------------
+      err = WriteIOByte(HEATERb | ALIVEb | PUMPb,LSB_IO);
       sprintf(s,"Error %d while closing LSB_IO",err);
       if (err) MessageBox(NULL,s,"ERROR",MB_OK);
    } // if
@@ -1047,7 +1075,7 @@ void __fastcall TMainForm::exit_ebrew(void)
    } // if
    if ((hw_status > 0) && !err)
    {
-      err = i2c_stop(); // Stop I2C Communication, close PortTalk
+      err = i2c_stop(PT_CLOSE); // Stop I2C Communication, close PortTalk
       if (err)
       {
          sprintf(s,"Error %d while closing I2C Bus",err);
@@ -1090,38 +1118,55 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
    // 1. Get Switch/Fix settings from struct
    // 2. Initialise Dialog values and execute Dialog
    // 3. Write values to struct
+   //-------------------------------------------------------------------------
+   ptmp->CB_Tset->Checked = swfx.tset_hlt_sw; // Set Checkbox for Tset_hlt
+   if (swfx.tset_hlt_sw)
+   {
+      ptmp->Tset_MEdit->Text = AnsiString(swfx.tset_hlt_fx); // Set fix value
+   } // if
+   //-------------------------------------------------------------------------
    ptmp->CB_Gamma->Checked = swfx.gamma_sw; // Set Checkbox for Gamma
    if (swfx.gamma_sw)
    {
       ptmp->Gamma_MEdit->Text = AnsiString(swfx.gamma_fx); // Set fix value
    } // if
-   // Set HLT Reference Temperature (tset_hlt)
-   ptmp->CB_Tset->Checked = swfx.tset_hlt_sw; // Set Checkbox for Tset
-   if (swfx.tset_hlt_sw)
-   {
-      ptmp->Tset_MEdit->Text = AnsiString(swfx.tset_hlt_fx); // Set fix value
-   } // if
+   //-------------------------------------------------------------------------
    ptmp->CB_Tad1->Checked = swfx.thlt_sw; // Set Checkbox for Thlt
    if (swfx.thlt_sw)
    {
       ptmp->Tad1_MEdit->Text = AnsiString(swfx.thlt_fx); // Set fix value
    } // if
+   //-------------------------------------------------------------------------
    ptmp->CB_Tad2->Checked = swfx.tmlt_sw; // Set Checkbox for Tmlt
    if (swfx.tmlt_sw)
    {
       ptmp->Tad2_MEdit->Text = AnsiString(swfx.tmlt_fx); // Set fix value
    } // if
-   ptmp->CB_std->Checked = swfx.std_sw; // Set Checkbox for Tad1
+   //-------------------------------------------------------------------------
+   ptmp->CB_std->Checked = swfx.std_sw; // Set Checkbox for ebrew_std
    if (swfx.std_sw)
    {
       ptmp->STD_MEdit->Text = AnsiString(swfx.std_fx); // Set fix value
    } // if
+   //-------------------------------------------------------------------------
+   ptmp->CB_ttriac->Checked = swfx.ttriac_sw; // Set Checkbox for Ttriac
+   if (swfx.ttriac_sw)
+   {
+      ptmp->Ttriac_MEdit->Text = AnsiString(swfx.ttriac_fx); // Set fix value
+   } // if
+   //-------------------------------------------------------------------------
+   ptmp->CB_vhlt->Checked = swfx.vhlt_sw; // Set Checkbox for Vhlt
+   if (swfx.vhlt_sw)
+   {
+      ptmp->Vhlt_MEdit->Text = AnsiString(swfx.vhlt_fx); // Set fix value
+   } // if
+   //-------------------------------------------------------------------------
    ptmp->CB_vmlt->Checked = swfx.vmlt_sw; // Set Checkbox for Vmlt
    if (swfx.vmlt_sw)
    {
       ptmp->Vmlt_MEdit->Text = AnsiString(swfx.vmlt_fx); // Set fix value
    } // if
-
+   //-------------------------------------------------------------------------
    if (ptmp->ShowModal() == 0x1) // mrOK
    {
       ptmp->Apply_ButtonClick(this);
@@ -1248,7 +1293,7 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                // New I2C HW Base Address or SCL prescaler was changed,
                // call i2c_stop() and init I2C Bus communication again.
                //--------------------------------------------------------
-               if (i2c_stop() != I2C_NOERR)
+               if (i2c_stop(PT_CLOSE) != I2C_NOERR)
                {  // i2c bus locked, i2c_stop() did not work
                   MessageBox(NULL,I2C_STOP_ERR_TXT,"ERROR",MB_OK);
                   exit_ebrew(); // Exit ebrew program
@@ -1316,7 +1361,7 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
                          break;
    }
    sprintf(tmp_str,"%s while accessing I2C device 0x%2x",err_txt,i2c_bus_id);
-   if (i2c_stop() != I2C_NOERR)
+   if (i2c_stop(PT_CLOSE) != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
       MessageBox(NULL,I2C_STOP_ERR_TXT,tmp_str,MB_OK);
       exit_ebrew(); // Exit ebrew program
@@ -1512,28 +1557,69 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
 
    //----------------------------------------------------------------
    // TIME-SLICE: this time-slice is executed once every second.
-   //             Read AD-Converters and call MA filter for Vmlt.
+   //             Read HLT volume (Vhlt) and call MA filter for Vhlt.
    //----------------------------------------------------------------
    if (tmr.pid_tmr % ONE_SECOND == 1)
    {
-       // Read values from all AD Coverters
-       if (hw_status & ADDA_OK)
+       if (vhlt_src != NONE) // get real value from ADC
        {
-          err = read_adc(&padc); // Read the value of all ADCs
-          if (err) Reset_I2C_Bus(ADDA_BASE,err);
+          volumes.Vhlt = get_analog_input(hw_status, vhlt_src, vhlt_a, vhlt_b, &err);
+          if (err) Reset_I2C_Bus(base_adc[vhlt_src],err);
+       } // if
+       //--------------------------------------------------------------------
+       // else: in case Vhlt is simulated and not read from an ADC, the value
+       //       is determined in the state transition diagram.
+       //--------------------------------------------------------------------
+       if (swfx.vhlt_sw)
+       {
+          volumes.Vhlt = swfx.vhlt_fx;
        }
        else
        {
-          padc.ad1 = 0.0; // Future use
-          padc.ad2 = 0.0; // Future use
-          padc.ad3 = 0.0; // Triac temperature
-          padc.ad4 = 0.0; // Pressure transducer
-       } // else
+          volumes.Vhlt = moving_average(&str_vhlt,volumes.Vhlt); // Call MA filter
+       }
+   } // if time-slice
+
+   //----------------------------------------------------------------
+   // TIME-SLICE: this time-slice is executed once every second.
+   //             Read MLT volume (Vmlt) and call MA filter for Vmlt.
+   //----------------------------------------------------------------
+   if (tmr.pid_tmr % ONE_SECOND == 2)
+   {
+       if (vmlt_src != NONE) // get real value from ADC
+       {
+          volumes.Vmlt = get_analog_input(hw_status, vmlt_src, vmlt_a, vmlt_b, &err);
+          if (err) Reset_I2C_Bus(base_adc[vmlt_src],err);
+       } // if
+       if (swfx.vmlt_sw)
+       {
+          volumes.Vmlt = swfx.vmlt_fx;
+       }
+       else
+       {
+          volumes.Vmlt = moving_average(&str_vmlt,volumes.Vmlt); // Call MA filter
+       }
+   } // if time-slice
+
+   //----------------------------------------------------------------------
+   // TIME-SLICE: this time-slice is executed once every second. Read
+   //             Triac Temperature (Ttriac) and check if it is too high.
+   //----------------------------------------------------------------------
+   if (tmr.pid_tmr % ONE_SECOND == 3)
+   {
+       if (ttriac_src != NONE) // get real value from ADC
+       {
+          ttriac = get_analog_input(hw_status, ttriac_src, ttriac_a, ttriac_b, &err);
+          if (err) Reset_I2C_Bus(base_adc[ttriac_src],err);
+       } // if
+       if (swfx.ttriac_sw)
+       {
+          ttriac = swfx.ttriac_fx;
+       } // if
 
        //---------------------------------------------------
        // Triac Temperature Protection: hysteresis function
        //---------------------------------------------------
-       ttriac = padc.ad3; // Triac temperature
        if (triac_too_hot)
        {
           if (ttriac < ttriac_llim)
@@ -1548,26 +1634,13 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
              triac_too_hot = true;
           }
        }
-
-       //-------------------------------------
-       // Pressure sensor, AD4, Volume of MLT
-       //-------------------------------------
-       if (swfx.vmlt_sw)
-       {
-          volumes.Vmlt = swfx.vmlt_fx;
-       }
-       else
-       {
-          vmlt_old     = volumes.Vmlt; // debugging of Vmlt
-          volumes.Vmlt = moving_average(&str_vmlt,padc.ad4); // Call MA filter
-       }
-   } // else if
+   } // if time-slice
 
    //----------------------------------------------------------------
    // TIME-SLICE: this time-slice is executed once every second.
    //             It reads the LM92 temperature sensor (HLT)
    //----------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 2)
+   else if (tmr.pid_tmr % ONE_SECOND == 4)
    {
        if (hw_status & LM92_1_OK)
        {
@@ -1592,7 +1665,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // TIME-SLICE: this time-slice is executed once every second.
    //             It reads the LM92 temperature sensor (MLT)
    //----------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 3)
+   else if (tmr.pid_tmr % ONE_SECOND == 5)
    {
        if (hw_status & LM92_2_OK)
        {
@@ -1617,7 +1690,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // TIME-SLICE: Time switch controller. Enable PI controller
    // [TS sec.]   if current date & time matches the date & time set.
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % pid_pars.ts_ticks == 4)
+   else if (tmr.pid_tmr % pid_pars.ts_ticks == 6)
    {
       // Only useful if PID controller is disabled AND time_switch is enabled
       if ((PID_RB->ItemIndex != 1) && (time_switch == 1))
@@ -1662,7 +1735,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 5)
+   else if (tmr.pid_tmr % ONE_SECOND == 7)
    {
       // Now update the LEDs with the proper values by calling macro SET_LED
       //      HW_BIT, which display, which var., Visibility, LEDx_BASE
@@ -1672,7 +1745,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 6)
+   else if (tmr.pid_tmr % ONE_SECOND == 8)
    {
       SET_LED(LED2_OK,2,led2,led2_vis,LED2_BASE);
    } // else if
@@ -1680,7 +1753,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 7)
+   else if (tmr.pid_tmr % ONE_SECOND == 9)
    {
       SET_LED(LED3_OK,3,led3,led3_vis,LED3_BASE);
    } // else if
@@ -1688,7 +1761,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 8)
+   else if (tmr.pid_tmr % ONE_SECOND == 10)
    {
       SET_LED(LED4_OK,4,led4,led4_vis,LED4_BASE);
    } // else if
@@ -1697,7 +1770,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // TIME-SLICE: Calculate State Transition Diagram (STD) and determine
    //             new settings of the valves (every second)
    //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 9)
+   else if (tmr.pid_tmr % ONE_SECOND == 11)
    {
       int std_tmp;
       if (swfx.std_sw)
@@ -1850,6 +1923,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
      return;
   } // catch
 } // TMainForm::Init_Sparge_Settings()
+//---------------------------------------------------------------------------
 
 void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
 /*------------------------------------------------------------------
@@ -2104,6 +2178,9 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
    tm_mlt->Value->Value = tmlt;     // update MLT thermometer object
 
    tm_triac->Value->Value = ttriac; // Update thermometer object
+   sprintf(tmp_str,"%2.0f",ttriac);
+   Ttriac_lbl->Caption    = tmp_str;
+   
    //---------------------------------------------------
    // Triac Temperature Protection: hysteresis function
    //---------------------------------------------------
@@ -2263,6 +2340,7 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
       network_handler();
    } // if
 } // ebrew_idle_handler()
+//---------------------------------------------------------------------------
 
 void __fastcall TMainForm::FormCreate(TObject *Sender)
 {
@@ -2276,7 +2354,7 @@ void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
    // Stop all I2C bus communication, then restart and print all devices found.
    // Next: continue with ebrew program by calling Main_Initialisation().
    //---------------------------------------------------------------------------
-   if (i2c_stop() != I2C_NOERR)
+   if (i2c_stop(PT_CLOSE) != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
       Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
       exit_ebrew(); // Exit ebrew program
@@ -2284,7 +2362,7 @@ void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
    else
    {
       Start_I2C_Communication(-1); // print all I2C devices found
-      if (i2c_stop() != I2C_NOERR)
+      if (i2c_stop(PT_CLOSE) != I2C_NOERR)
       {  // i2c bus locked, i2c_stop() did not work
          Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
          exit_ebrew(); // Exit ebrew program
@@ -2329,17 +2407,26 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          //------------------
          // HLT Volume
          //------------------
+         ptmp->UpDown1->Position        = Reg->ReadInteger("MA_VHLT");
          volumes.Vhlt_start             = Reg->ReadInteger("VHLT_START");
          vhlt_start_old                 = volumes.Vhlt_start; // save value
          ptmp->Vhlt_init_Edit->Text     = AnsiString(volumes.Vhlt_start);
-         volumes.Vhlt_simulated         = Reg->ReadBool("VHLT_SIMULATED");
-         ptmp->Vhlt_simulated->Checked  = volumes.Vhlt_simulated;
+         vhlt_src                       = (enum i2c_adc)Reg->ReadInteger("VHLT_SRC");
+         ptmp->Vhlt_src->ItemIndex      = vhlt_src;
+         vhlt_a                         = Reg->ReadFloat("VHLT_A");
+         ptmp->Vhlt_a->Text             = vhlt_a;
+         vhlt_b                         = Reg->ReadFloat("VHLT_B");
+         ptmp->Vhlt_b->Text             = vhlt_b;
          //------------------
          // MLT Volume
          //------------------
          ptmp->UpDown4->Position        = Reg->ReadInteger("MA_VMLT");
-         ptmp->UpDown3->Position        = Reg->ReadInteger("DAC"); // value for DA Converter
-         ptmp->Vref4_edit->Text         = Reg->ReadInteger("VREF4");
+         vmlt_src                       = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");
+         ptmp->Vmlt_src->ItemIndex      = vmlt_src;
+         vmlt_a                         = Reg->ReadFloat("VMLT_A");
+         ptmp->Vmlt_a->Text             = vmlt_a;
+         vmlt_b                         = Reg->ReadFloat("VMLT_B");
+         ptmp->Vmlt_b->Text             = vmlt_b;
          //-------------------
          // Boil Kettle Volume
          //-------------------
@@ -2348,7 +2435,12 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          //------------------
          // Triac Temperature
          //------------------
-         ptmp->Vref3_edit->Text         = Reg->ReadInteger("VREF3");
+         ttriac_src                     = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC");
+         ptmp->Ttriac_src->ItemIndex    = ttriac_src;
+         ttriac_a                       = Reg->ReadFloat("TTRIAC_A");
+         ptmp->Ttriac_a->Text           = ttriac_a;
+         ttriac_b                       = Reg->ReadFloat("TTRIAC_B");
+         ptmp->Ttriac_b->Text           = ttriac_b;
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
@@ -2369,24 +2461,32 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             //------------------
             // HLT Volume
             //------------------
+            init_ma(&str_vhlt,ptmp->MA_HLT_Edit->Text.ToInt(),volumes.Vhlt); // order of MA filter
+            Reg->WriteInteger("MA_VHLT",ptmp->MA_HLT_Edit->Text.ToInt());
             volumes.Vhlt_start = ptmp->Vhlt_init_Edit->Text.ToInt();
             Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
-            volumes.Vhlt_simulated = ptmp->Vhlt_simulated->Checked;
-            Reg->WriteBool("VHLT_SIMULATED",volumes.Vhlt_simulated);
-            if (volumes.Vhlt_simulated && (volumes.Vhlt_start != vhlt_start_old))
-            {
-               // Update Vhlt if start value has changed and Vhlt is simulated
+            vhlt_src = (enum i2c_adc)ptmp->Vhlt_src->ItemIndex;
+            Reg->WriteInteger("VHLT_SRC",vhlt_src);
+            volumes.Vhlt_simulated = vhlt_src;
+            if ((vhlt_src == 0) && (volumes.Vhlt_start != vhlt_start_old))
+            {  // Update Vhlt if start value has changed and Vhlt is simulated
                volumes.Vhlt += volumes.Vhlt_start - vhlt_start_old;
             } // if
+            vhlt_a = ptmp->Vhlt_a->Text.ToDouble();
+            Reg->WriteFloat("VHLT_A",vhlt_a);
+            vhlt_b = ptmp->Vhlt_b->Text.ToDouble();
+            Reg->WriteFloat("VHLT_B",vhlt_b);
             //------------------
             // MLT Volume
             //------------------
             init_ma(&str_vmlt,ptmp->NMA_edit->Text.ToInt(),volumes.Vmlt); // order of MA filter
             Reg->WriteInteger("MA_VMLT",ptmp->NMA_edit->Text.ToInt());
-            padc.dac   = ptmp->DAC_edit->Text.ToInt();   // DAC value
-            Reg->WriteInteger("DAC"  ,padc.dac);
-            padc.vref4 = ptmp->Vref4_edit->Text.ToInt(); // Vref4
-            Reg->WriteInteger("VREF4",padc.vref4);
+            vmlt_src = (enum i2c_adc)ptmp->Vmlt_src->ItemIndex;
+            Reg->WriteInteger("VMLT_SRC",vmlt_src);
+            vmlt_a = ptmp->Vmlt_a->Text.ToDouble();
+            Reg->WriteFloat("VMLT_A",vmlt_a);
+            vmlt_b = ptmp->Vmlt_b->Text.ToDouble();
+            Reg->WriteFloat("VMLT_B",vmlt_b);
             //-------------------
             // Boil Kettle Volume
             //-------------------
@@ -2395,10 +2495,13 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             //------------------
             // Triac Temperature
             //------------------
-            padc.vref3 = ptmp->Vref3_edit->Text.ToInt();
-            Reg->WriteInteger("VREF3",padc.vref3);
+            ttriac_src = (enum i2c_adc)ptmp->Ttriac_src->ItemIndex;
+            Reg->WriteInteger("TTRIAC_SRC",ttriac_src);
+            ttriac_a = ptmp->Ttriac_a->Text.ToDouble();
+            Reg->WriteFloat("TTRIAC_A",ttriac_a);
+            ttriac_b = ptmp->Ttriac_b->Text.ToDouble();
+            Reg->WriteFloat("TTRIAC_B",ttriac_b);
 
-            init_adc(&padc); // recalculate conversion constants
          } // if
          Reg->CloseKey(); // Close the Registry
       } // if
@@ -2464,12 +2567,7 @@ void __fastcall TMainForm::network_handler(void)
                p->SendText(Reg->ReadInteger("TTRIAC_HLIM"));
                p->SendText(Reg->ReadInteger("TTRIAC_LLIM"));
                p->SendText(Reg->ReadInteger("ms_idx"));
-      /*          Reg->WriteInteger("VREF1",VREF_INIT); // init. ADC1 VREF
-                Reg->WriteInteger("VREF2",VREF_INIT); // init. ADC2 VREF
-                Reg->WriteInteger("VREF3",VREF_INIT); // init. ADC3 VREF
-                Reg->WriteInteger("VREF4",VREF_INIT); // init. ADC4 VREF
-                Reg->WriteInteger("DAC",0);           // Init. DA Converter
-                Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
+      /*        Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
                 Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
                 Reg->WriteInteger("MASH_VOL",30);     // Total Mash Volume (L)
                 Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
@@ -2672,6 +2770,7 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
       std_out |= (V1M << (Key - '1')); // set corresponding V1M..V7M bit
       std_out ^= (V1b << (Key - '1')); // set corresponding V1b..V7b bit
    }
-}
+} // FormKeyPress()
 //---------------------------------------------------------------------------
+
 

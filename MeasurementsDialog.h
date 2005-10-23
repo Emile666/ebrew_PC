@@ -5,6 +5,15 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.1  2004/04/19 21:55:49  emile
+// - Added calibration offsets and MA-filters for Thlt and Tmlt:
+//   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
+//   - New Measurement Dialog screen
+//   - Several parameters moved from HW Settings Dialog Screen
+// - Added new Registry variable MA_VMLT: MA filter order of Vmlt is now
+//   also stored in Registry
+// - Help-file is updated
+//
 // ---------------------------------------------------------------------------
 #ifndef MeasurementsDialogH
 #define MeasurementsDialogH
@@ -21,7 +30,6 @@ __published:	// IDE-managed Components
         TButton *Button1;
         TButton *Button2;
         TButton *Help_Button;
-        TCheckBox *Vhlt_simulated;
         TCheckBox *Vboil_simulated;
         TLabel *Label8;
         TEdit *Vhlt_init_Edit;
@@ -33,13 +41,8 @@ __published:	// IDE-managed Components
         TLabel *Label4;
         TLabel *Label5;
         TLabel *Label6;
-        TLabel *Label7;
-        TEdit *DAC_edit;
-        TUpDown *UpDown3;
-        TLabel *Vref4_Label;
-        TEdit *Vref4_edit;
         TLabel *Vref3_Label;
-        TEdit *Vref3_edit;
+        TEdit *Ttriac_a;
         TLabel *Label9;
         TLabel *Label10;
         TUpDown *UD_MA_HLT;
@@ -51,6 +54,25 @@ __published:	// IDE-managed Components
         TEdit *Thlt_Offset;
         TLabel *Label13;
         TEdit *Tmlt_Offset;
+        TComboBox *Vhlt_src;
+        TLabel *Label14;
+        TLabel *Label15;
+        TComboBox *Vmlt_src;
+        TComboBox *Ttriac_src;
+        TLabel *Label16;
+        TLabel *Label7;
+        TEdit *Ttriac_b;
+        TLabel *Label17;
+        TEdit *Vmlt_a;
+        TLabel *Label18;
+        TEdit *Vmlt_b;
+        TLabel *Label19;
+        TEdit *Vhlt_a;
+        TLabel *Label20;
+        TEdit *Vhlt_b;
+        TLabel *Label21;
+        TUpDown *UpDown1;
+        TEdit *MA_Vhlt;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
