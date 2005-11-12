@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.46  2005/10/23 20:00:30  Emile
+// - Bug-fix writing to log-file
+// - Default values of Registry variables updated when created initially.
+//
 // Revision 1.45  2005/10/23 17:50:26  Emile
 // - Writing to log-file updated with Vhlt
 //
@@ -626,6 +630,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.pid_model = Reg->ReadInteger("PID_Model"); // [0..3]
          pid_pars.burner_hyst_h = Reg->ReadInteger("BURNER_HHYST");
          pid_pars.burner_hyst_l = Reg->ReadInteger("BURNER_LHYST");
+         // Send PID-Output to the various heaters / burners
+         cb_pid_out = Reg->ReadInteger("CB_PID_OUT");
+         dac_a = Reg->ReadFloat("DAC_A"); // a-coefficient for y=a.x+b DAC calc.
+         dac_b = Reg->ReadFloat("DAC_B"); // b-coefficient for y=a.x+b DAC calc.
 
          led1 = Reg->ReadInteger("LED1"); // Read led1 from registry
          led2 = Reg->ReadInteger("LED2"); // Read led2 from registry
@@ -665,7 +673,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          ttriac_src = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC"); // source AD channel
          ttriac_a   = Reg->ReadFloat("TTRIAC_A");     // a-coefficient for y=a.x+b
          ttriac_b   = Reg->ReadFloat("TTRIAC_B");     // b-coefficient for y=a.x+b
-
+         Reg->SaveKey(REGKEY,"ebrew_reg");
          Reg->CloseKey();      // Close the Registry
          switch (pid_pars.pid_model)
          {
@@ -823,23 +831,30 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("BURNER_HHYST",35); // Gas Burner Hysteresis High Limit
           Reg->WriteInteger("BURNER_LHYST",30); // Gas Burner Hysteresis Low Limit
           Reg->WriteString("SERVER_NAME","PC-EMILE"); // Server to connect to
+          // Send PID-Output to the various heaters / burners
+          cb_pid_out = 0; // The PID-output is not connected to anything
+          Reg->WriteInteger("CB_PID_OUT",cb_pid_out);
+          dac_a = -2.04; dac_b = 232.05;  // 5% -> just on, 95% -> full on
+          Reg->WriteFloat("DAC_A",dac_a); // default value for DAC calculations
+          Reg->WriteFloat("DAC_B",dac_b);
 
-          //-------------------------------------------------------
-          // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
-          //                       3=Tset_mlt, 4=Ttriac, 5=Vmlt
-          //-------------------------------------------------------
+          //---------------------------------------------------------------
+          // For the LED Displays: 0=Thlt  , 1=Tmlt, 2=Tset_hlt, 3=Tset_mlt
+          //                       4=Ttriac, 5=Vmlt, 6=Vhlt    , 7=gamma
+          // Macro, used in TMainForm::T50msec2Timer()
+          //---------------------------------------------------------------
           led1 = 0; Reg->WriteInteger("LED1",led1);   // Thlt
           led2 = 1; Reg->WriteInteger("LED2",led2);   // Tmlt
-          led3 = 2; Reg->WriteInteger("LED3",led3);   // Tset_hlt
-          led4 = 3; Reg->WriteInteger("LED4",led4);   // Tset_mlt
+          led3 = 5; Reg->WriteInteger("LED3",led3);   // Tset_hlt
+          led4 = 6; Reg->WriteInteger("LED4",led4);   // Tset_mlt
 
-          led1_vis = 3; // 12 mA visibility
+          led1_vis = 1; // 3 mA visibility
           Reg->WriteInteger("LED1_VIS",led1_vis); // LED1 Visibility
-          led2_vis = 3; // 12 mA visibility
+          led2_vis = 1; // 3 mA visibility
           Reg->WriteInteger("LED2_VIS",led2_vis); // LED2 Visibility
-          led3_vis = 3; // 12 mA visibility
+          led3_vis = 2; // 6 mA visibility
           Reg->WriteInteger("LED3_VIS",led3_vis); // LED3 Visibility
-          led4_vis = 3; // 12 mA visibility
+          led4_vis = 2; // 6 mA visibility
           Reg->WriteInteger("LED4_VIS",led4_vis); // LED4 Visibility
 
           ttriac_hlim = 70; // Upper limit for triac temp.
@@ -885,7 +900,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TTRIAC_B",0.0);     // b-coefficient for y=a.x+b
           volumes.Vboil_simulated = true;
           Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
-          cb_pid_dbg = false;
+          cb_pid_dbg       = false; // no PID debug to screen
           PID_dbg->Visible = false;
        } // if
        Reg->CloseKey();
@@ -900,8 +915,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
     //-------------------------------------
     // Set rev. number in Tstatusbar panel
     //-------------------------------------
-    NetworkDisconnect1Click(NULL);
-    network_init = true;
     strcpy(s,"ebrew revision ");
     strncat(s,&ebrew_revision[11],4); // extract the CVS revision number
     s[19] = '\0';
@@ -954,6 +967,18 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->Burner_Off->Text     = AnsiString(Reg->ReadInteger("BURNER_LHYST"));
          ptmp->RG2->ItemIndex       = time_switch; // Value of time-switch [off, on]
          ptmp->CB_PID_dbg->Checked  = cb_pid_dbg;   // PID debug info
+         // Send PID-Output to the various heaters / burners
+         cb_pid_out = Reg->ReadInteger("CB_PID_OUT");
+         ptmp->CB_Pid_out0->Checked = (cb_pid_out & PID_OUT_ELECTRIC);
+         ptmp->CB_Pid_out1->Checked = (cb_pid_out & PID_OUT_GAS_NON_MOD);
+         ptmp->CB_Pid_out2->Checked = (cb_pid_out & PID_OUT_GAS_MODULATE);
+         ptmp->CB_Pid_out1Click(this); // Enable/disable labels/Edit fields in form
+         ptmp->CB_Pid_out2Click(this); // Enable/disable labels/Edit fields in form
+         dac_a = Reg->ReadFloat("DAC_A");
+         ptmp->DAC_A_Edit->Text     = AnsiString(dac_a);
+         dac_b = Reg->ReadFloat("DAC_B");
+         ptmp->DAC_B_Edit->Text     = AnsiString(dac_b);
+
          if (time_switch)
          {
             ptmp->Date_Edit->Text = DateToStr(dt_time_switch);
@@ -961,6 +986,7 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             s.SetLength(s.Length()-3); // remove seconds
             ptmp->Time_Edit->Text = s;
          } // if
+
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
             pid_pars.ts = ptmp->TS_edit->Text.ToDouble();
@@ -990,6 +1016,25 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteInteger("PID_Model",pid_pars.pid_model);
             cb_pid_dbg  = ptmp->CB_PID_dbg->Checked; // PID debug info
             PID_dbg->Visible = cb_pid_dbg;
+
+            cb_pid_out = 0x00; // value in Registry
+            if (ptmp->CB_Pid_out0->Checked)
+            {  // Electrical Heating Element
+               cb_pid_out |= PID_OUT_ELECTRIC;
+            } // if
+            if (ptmp->CB_Pid_out1->Checked)
+            {  // Non-modulating Gas-Burner
+               cb_pid_out |= PID_OUT_GAS_NON_MOD;
+            } // if
+            if (ptmp->CB_Pid_out2->Checked)
+            {  // Modulating Gas-Burner
+               cb_pid_out |= PID_OUT_GAS_MODULATE;
+            } // if
+            Reg->WriteInteger("CB_PID_OUT",cb_pid_out);
+            dac_a = ptmp->DAC_A_Edit->Text.ToDouble();
+            Reg->WriteFloat("DAC_A",dac_a);
+            dac_b = ptmp->DAC_B_Edit->Text.ToDouble();
+            Reg->WriteFloat("DAC_B",dac_b);
 
             time_switch = ptmp->RG2->ItemIndex; // 0 = off, 1 = on
             if (time_switch)
@@ -1034,8 +1079,9 @@ void __fastcall TMainForm::exit_ebrew(void)
   ------------------------------------------------------------------*/
 {
    TRegistry *Reg = new TRegistry();
-   int err = 0;
-   char s[80];
+   int    err = 0; // error return code from I2C routines
+   char   s[80];   // temp. string for error messages
+   adda_t adc;     // struct containing 4 ADC values + DA value
 
    T50msec->Enabled = false; // Disable Interrupt Timer
    if (ShowDataGraphs)
@@ -1057,13 +1103,23 @@ void __fastcall TMainForm::exit_ebrew(void)
       delete ViewMashProgress;  // close modeless dialog
       ViewMashProgress = 0;     // null the pointer
    }
+   if (hw_status & ADDA_OK)
+   {
+      //-------------------------------------------------------------
+      // Reset DA-Converter to 0 to prevent gas-burner from burning.
+      //-------------------------------------------------------------
+      adc.dac = 0;
+      err     = read_adc(&adc); // Send value to DA-Converter
+      sprintf(s,"Error %d while closing PCF8591 ADC-DAC",err);
+      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
+   } // if
    if (hw_status & DIG_IO_LSB_OK)
    {
       //-------------------------------------------------------------
       // Disable Heater, Pump and Alive LED (active-low)
       // Disable Gas Burner (active-high). See misc.h for declaration
       //-------------------------------------------------------------
-      err = WriteIOByte(HEATERb | ALIVEb | PUMPb,LSB_IO);
+      err = WriteIOByte(HEATERb | ALIVEb | PUMPb, LSB_IO);
       sprintf(s,"Error %d while closing LSB_IO",err);
       if (err) MessageBox(NULL,s,"ERROR",MB_OK);
    } // if
@@ -1107,7 +1163,6 @@ void __fastcall TMainForm::exit_ebrew(void)
          MessageBox(NULL,s,"ERROR",MB_OK);
       } // if
    } // if
-   NetworkDisconnect1Click(NULL); // close network connections
 
    try
    {
@@ -1281,10 +1336,11 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
             } // if
 
-            //-------------------------------------------------------
-            // For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
-            //                       3=Tset_mlt, 4=Ttriac, 5=Vmlt
-            //-------------------------------------------------------
+            //---------------------------------------------------------------
+            // For the LED Displays: 0=Thlt  , 1=Tmlt, 2=Tset_hlt, 3=Tset_mlt
+            //                       4=Ttriac, 5=Vmlt, 6=Vhlt    , 7=gamma
+            // Macro, used in TMainForm::T50msec2Timer()
+            //---------------------------------------------------------------
             led1 = ptmp->RG1->ItemIndex;
             Reg->WriteInteger("LED1",led1);
             led2 = ptmp->RG2->ItemIndex;
@@ -1428,10 +1484,11 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
    {
       case 0: //---------------------------------------------------------
               // State 0: Enable heating element
-              // Goto 'disable heating element' if triac_too_hot or
-              //                          (timeout_htimer && !100%_gamma)
+              // Goto 'disable heating element' if triac_too_hot     or
+              //      pid output not routed to triac/electric heater or
+              //      (timeout_htimer && !100%_gamma)
               //---------------------------------------------------------
-              if (triac_too_hot)
+              if (triac_too_hot || !(cb_pid_out & PID_OUT_ELECTRIC))
               {
                  lsb_io &= ~HEATERb; // set heater OFF
                  tmr.isrstate = 1;   // go to 'disable heater' state
@@ -1461,7 +1518,8 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
       case 1: //---------------------------------------------------------
               // State 1: Disable heating element
               // Goto 'enable heating element' if timeout_ltimer &&
-              //                                  !0%_gamma && !triac_too_hot
+              //      pid output routed to triac/electric heater &&
+              //      !0%_gamma && !triac_too_hot
               //---------------------------------------------------------
               if (tmr.ltimer == 0)
               {  // timer has counted down
@@ -1471,7 +1529,7 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
                     tmr.ltimer = tmr.time_low; // init. timer again
                     lsb_io &= ~HEATERb; // set heater OFF
                  }
-                 else if (!triac_too_hot)
+                 else if (!triac_too_hot && (cb_pid_out & PID_OUT_ELECTRIC))
                  {
                     lsb_io |= HEATERb; // set heater ON
                     tmr.isrstate = 0;  // go to 'enable heater' state
@@ -1520,26 +1578,36 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
       lsb_io &= ~PUMPb;
    } // else
 
-   //----------------------------------------------------
-   // Send Gas Burner On/Off signal to DIG_IO_LSB_BASE.
+   //-----------------------------------------------------------------
+   // Send Non-Modulating Gas-Burner On/Off signal to DIG_IO_LSB_BASE.
+   // Activate this only when the PID-output is routed to a non-
+   // modulating gas-burner. Disable burner if deselected.
    // Safety: disable gas burner when time_switch is true
-   //----------------------------------------------------
-   if (!time_switch && (tmr.time_high > pid_pars.burner_hyst_h))
-   {
-      burner_on = true;
-   }
-   else if (tmr.time_high < pid_pars.burner_hyst_l)
+   //-----------------------------------------------------------------
+   if (time_switch || !(cb_pid_out & PID_OUT_GAS_NON_MOD))
    {
       burner_on = false;
-   } // else if
-   // else: do nothing (hysteresis)
+   }
+   else
+   {   // time-switch is disabled and non-modulating gas-burner is selected
+       if (tmr.time_high > pid_pars.burner_hyst_h)
+       {
+          burner_on = true;
+       }
+       else if (tmr.time_high < pid_pars.burner_hyst_l)
+       {
+          burner_on = false;
+       } // else if
+       // else: do nothing (hysteresis)
+   } // else
+
    if (burner_on)
    {
-      lsb_io |= BURNERb;
+      lsb_io |= BURNERb; // Fire it up!
    }
    else
    {
-      lsb_io &= ~BURNERb;
+      lsb_io &= ~BURNERb; // Disable gas-burner
    } // else
 
    //-------------------------------------------------
@@ -1572,6 +1640,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    TDateTime  td_now;        // holds current date and time
    double     thlt_unf;      // unfiltered version of thlt
    double     tmlt_unf;      // unfiltered version of tmlt
+   adda_t     adc;           // struct containing 4 ADC values + DA value
+   double     dac_x;         // temp. variable for calculating DA value
 
    //--------------------------------------------------------------
    // This is the main control loop, executed once every 50 msec.
@@ -1758,9 +1828,41 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    } // else if
 
    //-----------------------------------------------------------------------
-   // TIME-SLICE: Output values to I2C LED Display every second
+   // TIME-SLICE: Output values to DA-Converter to create a PWM signal for
+   //             the modulating gas-burner
    //-----------------------------------------------------------------------
    else if (tmr.pid_tmr % ONE_SECOND == 7)
+   {
+       //---------------------------------------------------------------------
+       // Send Modulating Gas-Burner On/Off signal to the DAC of the PCF8591.
+       // Activate this only when the PID-output is routed to a modulating
+       // gas-burner. Disable burner if deselected.
+       // Safety: disable gas burner when time_switch is true
+       //---------------------------------------------------------------------
+       if (!time_switch && (cb_pid_out & PID_OUT_GAS_MODULATE) && (hw_status & ADDA_OK))
+       {
+          dac_x   = gamma * dac_a + dac_b; // convert from [0..100%] to value for DAC
+          if (dac_x > 255.0)
+          {
+             adc.dac = 255;
+          }
+          else if (dac_x < 0.0)
+          {
+             adc.dac = 0;
+          }
+          else
+          {
+             adc.dac = (byte)dac_x;
+          } // else
+          err = read_adc(&adc);                  // Send value to DA-Converter
+          if (err) Reset_I2C_Bus(ADDA_BASE,err); // Reset if necessary
+       } // if
+   } // else if
+
+   //-----------------------------------------------------------------------
+   // TIME-SLICE: Output values to I2C LED Display every second
+   //-----------------------------------------------------------------------
+   else if (tmr.pid_tmr % ONE_SECOND == 8)
    {
       // Now update the LEDs with the proper values by calling macro SET_LED
       //      HW_BIT, which display, which var., Visibility, LEDx_BASE
@@ -1770,7 +1872,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 8)
+   else if (tmr.pid_tmr % ONE_SECOND == 9)
    {
       SET_LED(LED2_OK,2,led2,led2_vis,LED2_BASE);
    } // else if
@@ -1778,7 +1880,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 9)
+   else if (tmr.pid_tmr % ONE_SECOND == 10)
    {
       SET_LED(LED3_OK,3,led3,led3_vis,LED3_BASE);
    } // else if
@@ -1786,7 +1888,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //-----------------------------------------------------------------------
    // TIME-SLICE: Output values to I2C LED Display every second
    //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 10)
+   else if (tmr.pid_tmr % ONE_SECOND == 11)
    {
       SET_LED(LED4_OK,4,led4,led4_vis,LED4_BASE);
    } // else if
@@ -1795,7 +1897,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // TIME-SLICE: Calculate State Transition Diagram (STD) and determine
    //             new settings of the valves (every second)
    //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 11)
+   else if (tmr.pid_tmr % ONE_SECOND == 12)
    {
       int std_tmp;
       if (swfx.std_sw)
@@ -2344,6 +2446,31 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
    //-------------------------------------------
    // Update the various panels of the Statusbar
    //-------------------------------------------
+   i = 0; // number of burners
+   if (cb_pid_out & PID_OUT_ELECTRIC)
+   {
+      sprintf(tmp_str,"Electric");
+      i++;
+   }
+   else sprintf(tmp_str,"");
+   if (cb_pid_out & PID_OUT_GAS_NON_MOD)
+   {
+      if (++i > 1)
+      {
+         strcat(tmp_str," + ");
+      }
+      strcat(tmp_str,"Non-Mod.");
+   } // if
+   if (cb_pid_out & PID_OUT_GAS_MODULATE)
+   {
+      if (++i > 1)
+      {
+         strcat(tmp_str," + ");
+      }
+      strcat(tmp_str,"Modulating");
+   } // if
+   StatusBar->Panels->Items[PANEL_TCPIP]->Text = AnsiString(tmp_str);
+
    sprintf(tmp_str,"ms_idx = %d",std.ms_idx);
    StatusBar->Panels->Items[PANEL_MSIDX]->Text = AnsiString(tmp_str);
    sprintf(tmp_str,"sp_idx = %d",std.sp_idx);
@@ -2357,13 +2484,6 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
    } // for
    strcat(tmp_str,"] V1");
    StatusBar->Panels->Items[PANEL_VALVE]->Text = AnsiString(tmp_str);
-   //-------------------------------------------
-   // Communication with another PC
-   //-------------------------------------------
-   if (network_alive)
-   {
-      network_handler();
-   } // if
 } // ebrew_idle_handler()
 //---------------------------------------------------------------------------
 
@@ -2377,9 +2497,8 @@ void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
 {
    //---------------------------------------------------------------------------
    // Stop all I2C bus communication, then restart and print all devices found.
-   // Next: continue with ebrew program by calling Main_Initialisation().
    //---------------------------------------------------------------------------
-   if (i2c_stop(PT_CLOSE) != I2C_NOERR)
+   if (i2c_stop(PT_OPEN) != I2C_NOERR)
    {  // i2c bus locked, i2c_stop() did not work
       Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
       exit_ebrew(); // Exit ebrew program
@@ -2387,15 +2506,11 @@ void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
    else
    {
       Start_I2C_Communication(-1); // print all I2C devices found
-      if (i2c_stop(PT_CLOSE) != I2C_NOERR)
+      if (i2c_stop(PT_OPEN) != I2C_NOERR)
       {  // i2c bus locked, i2c_stop() did not work
          Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
          exit_ebrew(); // Exit ebrew program
       }
-      else
-      {
-         Main_Initialisation(); // continue with init. process
-      } // else
    } // else
 } // MenuView_I2C_HW_DevicesClick()
 //---------------------------------------------------------------------------
@@ -2466,6 +2581,9 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          ptmp->Ttriac_a->Text           = ttriac_a;
          ttriac_b                       = Reg->ReadFloat("TTRIAC_B");
          ptmp->Ttriac_b->Text           = ttriac_b;
+
+         ptmp->Vhlt_srcChange(this);   // enable/disable fields in form
+         ptmp->Vmlt_srcChange(this);   // enable/disable fields in form
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
@@ -2552,222 +2670,6 @@ void __fastcall TMainForm::HowtoUseHelp1Click(TObject *Sender)
 {
    Application->HelpCommand(HELP_HELPONHELP,0);
 } // TMainForm::HowtoUseHelp1Click()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::network_handler(void)
-{
-   TRegistry *Reg = new TRegistry();
-   AnsiString s;
-   int i;
-   double f;
-   TCustomWinSocket *p; // help pointer
-
-   try
-   {
-      if (Reg->KeyExists(REGKEY))
-      {
-         Reg->OpenKey(REGKEY,FALSE);
-         if (network_init == true)
-         {
-            // Start with check on revision numbers
-            if (IsServer)
-            {
-               //-------------------------------------------------
-               // Server: The PC in control of the brewing process
-               //-------------------------------------------------
-               p = ServerSocket1->Socket->Connections[0];
-               p->SendText(ebrew_revision);
-               //----------------------------------------------
-               // Start sending all registry keys to the server
-               //----------------------------------------------
-               s = AnsiString(Reg->ReadFloat("TS"));
-               p->SendText(s);
-               p->SendText(Reg->ReadFloat("Kc"));
-               p->SendText(Reg->ReadFloat("Ti"));
-               p->SendText(Reg->ReadFloat("Td"));
-               p->SendText(Reg->ReadFloat("K_LPF"));
-               p->SendText(Reg->ReadFloat("TOffset"));
-               p->SendText(Reg->ReadFloat("TOffset2"));
-               p->SendText(Reg->ReadInteger("PID_Model"));
-               p->SendText(Reg->ReadInteger("TTRIAC_HLIM"));
-               p->SendText(Reg->ReadInteger("TTRIAC_LLIM"));
-               p->SendText(Reg->ReadInteger("ms_idx"));
-      /*        Reg->WriteInteger("SP_BATCHES",4);    // #Sparge Batches
-                Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
-                Reg->WriteInteger("MASH_VOL",30);     // Total Mash Volume (L)
-                Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
-                Reg->WriteInteger("BOIL_TIME",90);    // Total Boil Time (min.)
-                Reg->WriteInteger("PREHEAT_TIME",0);// PREHEAT_TIME [sec]
-                Reg->WriteFloat("VMLT_EMPTY", 3.0); // Vmlt_EMPTY [L]
-                Reg->WriteInteger("TO_XSEC",1);     // TIMEOUT_xSEC [sec]
-                Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
-                Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
-                Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
-      */
-            } // if IsServer
-            else
-            {
-               //------------------------------------------------------------
-               // Client: the remote PC NOT in control of the brewing process
-               //------------------------------------------------------------
-               s = ClientSocket1->Socket->ReceiveText();
-               if (s.AnsiCompare(ebrew_revision))
-               {
-                  Application->MessageBox("Both ebrew revisions should be the same!","ERROR",MB_OK);
-               } // if
-               s = ClientSocket1->Socket->ReceiveText(); // TS
-               if (s.AnsiCompare(AnsiString(Reg->ReadFloat("TS"))) &&
-                   (Application->MessageBox("One or more Registry variables differ.",
-                                            "OK to overwrite current Registry Settings?",MB_OKCANCEL) == IDOK))
-               {
-                  Reg->WriteFloat("TS",s.ToDouble());
-               } // if
-      /*               p->SendText(Reg->ReadFloat("TS"));
-                     p->SendText(Reg->ReadFloat("Kc"));
-                     p->SendText(Reg->ReadFloat("Ti"));
-                     p->SendText(Reg->ReadFloat("Td"));
-                     p->SendText(Reg->ReadFloat("K_LPF"));
-                     p->SendText(Reg->ReadFloat("TOffset"));
-                     p->SendText(Reg->ReadFloat("TOffset2"));
-                     p->SendText(Reg->ReadInteger("PID_Model"));
-                     p->SendText(Reg->ReadInteger("TTRIAC_HLIM"));
-                     p->SendText(Reg->ReadInteger("TTRIAC_LLIM"));
-                     p->SendText(Reg->ReadInteger("ms_idx"));
-      */      } // else
-              network_init = false;
-         } // if network_init
-         Reg->CloseKey(); // Close the Registry
-      } // if Reg->KeyExists
-   } // try
-   catch (ERegistryException &E)
-   {
-      ShowMessage(E.Message);
-   } // catch
-   delete Reg; // Clean up
-} // TMainForm::network_handler()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::ServerSocket1Listen(TObject *Sender,
-      TCustomWinSocket *Socket)
-{
-   char s[100];
-   sprintf(s,"Listening on Port %d...",ServerSocket1->Port);
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = AnsiString(s);
-} // ServerSocket1Listen()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::Connect1Click(TObject *Sender)
-{
-   AnsiString Server; // computer name of network computer
-   TRegistry *Reg = new TRegistry();
-
-   NetworkDisconnect1Click(NULL);
-   // Get Server Name from the Registry
-   try
-   {
-      if (Reg->KeyExists(REGKEY))
-      {
-         Reg->OpenKey(REGKEY,FALSE);
-         Server = Reg->ReadString("SERVER_NAME");
-         if (InputQuery("Computer to connect to: ","Address Name: ",Server))
-         {
-            if (Server.Length() > 0)
-            {
-               Reg->WriteString("SERVER_NAME",Server);
-               ClientSocket1->Host   = Server;
-               ClientSocket1->Active = true;
-            } // if
-         } //if
-         Reg->CloseKey(); // Close the Registry
-      } // if
-   } // try
-   catch (ERegistryException &E)
-   {
-      ShowMessage(E.Message);
-   } // catch
-   delete Reg; // Clean up
-} // TMainForm::Connect1Click()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::NetworkListening1Click(TObject *Sender)
-{
-   NetworkDisconnect1Click(NULL);
-   ServerSocket1->Active = true; // start listening on Port 1008
-} // TMainForm::NetworkListening1Click()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::NetworkDisconnect1Click(TObject *Sender)
-{
-   if (ClientSocket1->Active)
-   {
-      ClientSocket1->Close();
-   } // if
-   if (ServerSocket1->Active)
-   {
-      ServerSocket1->Close();
-   } // if
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Disconnected from network";
-   network_alive = false;
-   network_init  = true;
-} // TMainForm::NetworkDisconnect1Click()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::ClientSocket1Connect(TObject *Sender,
-      TCustomWinSocket *Socket)
-{
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Connected to " + Socket->RemoteHost;
-   IsServer      = false;
-   network_alive = true;
-} // TMainForm::ClientSocket1Connect()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::ClientSocket1Disconnect(TObject *Sender,
-      TCustomWinSocket *Socket)
-{
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Disconnected from network";
-} // TMainForm::ClientSocket1Disconnect()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::ServerSocket1ClientDisconnect(TObject *Sender,
-      TCustomWinSocket *Socket)
-{
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Disconnected from network";
-} // TMainForm::ServerSocket1ClientDisconnect()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::ClientSocket1Connecting(TObject *Sender,
-      TCustomWinSocket *Socket)
-{
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Now connecting to " + Socket->RemoteHost;
-} // TMainForm::ClientSocket1Connecting()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::ServerSocket1ClientConnect(TObject *Sender,
-      TCustomWinSocket *Socket)
-{
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = "Connected to " + Socket->RemoteHost;
-   IsServer      = true;
-   network_alive = true;
-} // TMainForm::ServerSocket1ClientConnect()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::ClientSocket1Error(TObject *Sender,
-      TCustomWinSocket *Socket, TErrorEvent ErrorEvent, int &ErrorCode)
-{
-   char s[50];
-
-   switch (ErrorEvent)
-   {
-      case eeSend      : strcpy(s,"Send error");    break;
-      case eeReceive   : strcpy(s,"Read error");    break;
-      case eeConnect   : strcpy(s,"Request could not be completed"); break;
-      case eeDisconnect: strcpy(s,"Error when closing a connection"); break;
-      case eeAccept    : strcpy(s,"Error when accepting a request"); break;
-      default          : strcpy(s,"General error"); break;
-   } // switch
-   ErrorCode = 0; // prevent exception
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = AnsiString(s);
-} // TMainForm::ClientSocket1Error()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)

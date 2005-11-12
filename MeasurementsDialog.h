@@ -5,6 +5,26 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2005/10/23 12:44:38  Emile
+// Several changes because of new hardware (MAX1238 instead of PCF8591):
+// - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
+//   PCF8591 is still supported).
+// - 2 time-slices added, Vhlt, Vmlt and Ttriac are read in 3 different time-slices.
+// - Ttriac also printed as label to screen, plus Switch and Fix added
+// - Alive bit is now active-low, changed in exit_ebrew()
+// - Registry vars removed: VREF3, VREF4, DAC, VHLT_SIMULATED
+// - Registry vars added: VHLT_SRC, VHLT_A, VHLT_B, VMLT_SRC, VMLT_A, VMLT_B,
+//                        TTRIAC_SRC, TTRIAC_A, TTRIAC_B and MA_VHLT
+// - Debugging for ma filter removed again
+// Changes to i2c_dll:
+// - File reorganised into 4 layers with routines for more clarity
+// - i2c_read/i2c_write: i2c_address() call added in VELLEMAN_CARD mode
+// - i2c_address: i2c_start() call added in VELLEMAN_CARD mode
+// - Routines added: get_analog_input() and max1238_read()
+// - i2c_stop() changed into i2c_stop(enum pt_action pta) so that PortTalk
+//   can be closed or remain open
+// - init_adc() removed
+//
 // Revision 1.1  2004/04/19 21:55:49  emile
 // - Added calibration offsets and MA-filters for Thlt and Tmlt:
 //   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
@@ -41,7 +61,7 @@ __published:	// IDE-managed Components
         TLabel *Label4;
         TLabel *Label5;
         TLabel *Label6;
-        TLabel *Vref3_Label;
+        TLabel *Label7a;
         TEdit *Ttriac_a;
         TLabel *Label9;
         TLabel *Label10;
@@ -60,7 +80,7 @@ __published:	// IDE-managed Components
         TComboBox *Vmlt_src;
         TComboBox *Ttriac_src;
         TLabel *Label16;
-        TLabel *Label7;
+        TLabel *Label7b;
         TEdit *Ttriac_b;
         TLabel *Label17;
         TEdit *Vmlt_a;
@@ -74,6 +94,9 @@ __published:	// IDE-managed Components
         TUpDown *UpDown1;
         TEdit *MA_Vhlt;
         void __fastcall Help_ButtonClick(TObject *Sender);
+        void __fastcall Vhlt_srcChange(TObject *Sender);
+        void __fastcall Vmlt_srcChange(TObject *Sender);
+        void __fastcall Ttriac_srcChange(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TMeasurements(TComponent* Owner);

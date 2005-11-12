@@ -5,6 +5,12 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2005/03/26 13:53:21  Emile
+// - During State "Mash Preheat" pump is set to ON (again)
+// - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
+//   variables are introduced (BURNER_HHYST and BURNER_LHYST)
+// - Various screens a little enlarged (no scrollbars visible anymore)
+//
 // Revision 1.8  2004/05/13 20:50:59  emile
 // - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
 //   timing is now reset after 100 loops (5 seconds)
@@ -118,8 +124,18 @@ __published:
         TLabel *Label13;
         TEdit *Burner_On;
         TEdit *Burner_Off;
+        TGroupBox *PID_Out;
+        TCheckBox *CB_Pid_out0;
+        TCheckBox *CB_Pid_out1;
+        TCheckBox *CB_Pid_out2;
+        TLabel *Label14;
+        TLabel *Label16;
+        TEdit *DAC_A_Edit;
+        TEdit *DAC_B_Edit;
         void __fastcall RG2Click(TObject *Sender);
         void __fastcall Button3Click(TObject *Sender);
+        void __fastcall CB_Pid_out1Click(TObject *Sender);
+        void __fastcall CB_Pid_out2Click(TObject *Sender);
 private:
 public:
 	virtual __fastcall TPID_Settings(TComponent *Owner);

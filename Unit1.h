@@ -6,6 +6,26 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.30  2005/10/23 12:44:39  Emile
+// Several changes because of new hardware (MAX1238 instead of PCF8591):
+// - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
+//   PCF8591 is still supported).
+// - 2 time-slices added, Vhlt, Vmlt and Ttriac are read in 3 different time-slices.
+// - Ttriac also printed as label to screen, plus Switch and Fix added
+// - Alive bit is now active-low, changed in exit_ebrew()
+// - Registry vars removed: VREF3, VREF4, DAC, VHLT_SIMULATED
+// - Registry vars added: VHLT_SRC, VHLT_A, VHLT_B, VMLT_SRC, VMLT_A, VMLT_B,
+//                        TTRIAC_SRC, TTRIAC_A, TTRIAC_B and MA_VHLT
+// - Debugging for ma filter removed again
+// Changes to i2c_dll:
+// - File reorganised into 4 layers with routines for more clarity
+// - i2c_read/i2c_write: i2c_address() call added in VELLEMAN_CARD mode
+// - i2c_address: i2c_start() call added in VELLEMAN_CARD mode
+// - Routines added: get_analog_input() and max1238_read()
+// - i2c_stop() changed into i2c_stop(enum pt_action pta) so that PortTalk
+//   can be closed or remain open
+// - init_adc() removed
+//
 // Revision 1.29  2005/08/28 22:17:30  Emile
 // - DataGrapfForm: TTimer replaced again for TAnimTimer
 // - Debug-code added for MA filter of Vmlt
@@ -246,33 +266,36 @@
 // Macro, used in TMainForm::Main_Initialisation()
 #define PR_HW_STAT(x)   hw_status & x ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT)
 
-//--------------------------------------------------------
-// For the LED Displays: 0=Thlt    , 1=Tmlt  , 2=Tset_hlt
-//                       3=Tset_mlt, 4=Ttriac, 5=Vmlt
+//---------------------------------------------------------------
+// For the LED Displays: 0=Thlt  , 1=Tmlt, 2=Tset_hlt, 3=Tset_mlt
+//                       4=Ttriac, 5=Vmlt, 6=Vhlt    , 7=gamma
 // Macro, used in TMainForm::T50msec2Timer()
-//--------------------------------------------------------
+//---------------------------------------------------------------
 #define SET_LED(LEDX_OK,w_disp,ledx,ledx_vis,ledx_base)                        \
-  if (hw_status & (LEDX_OK))                                                   \
-  {                                                                            \
-     switch (ledx)                                                             \
-     {                                                                         \
-        case 0: err  = set_led((int)(100.0 * thlt),2,(w_disp),(ledx_vis));     \
-                break;                                                         \
-        case 1: err  = set_led((int)(100.0 * tmlt),2,(w_disp),(ledx_vis));     \
-                break;                                                         \
-        case 2: err  = set_led((int)(100.0 * tset_hlt),2,(w_disp),(ledx_vis)); \
-                break;                                                         \
-        case 3: err  = set_led((int)(100.0 * tset_mlt),2,(w_disp),(ledx_vis)); \
-                break;                                                         \
-        case 4: err  = set_led((int)(100.0 * ttriac),2,(w_disp),(ledx_vis));   \
-                break;                                                         \
-        case 5: err  = set_led((int)(100.0 * volumes.Vmlt),2,(w_disp),(ledx_vis)); \
-                break;                                                         \
-       default: break;                                                         \
-     }                                                                         \
-     if (err) Reset_I2C_Bus(ledx_base,err);                                    \
-                                                                         \
-  }
+ if (hw_status & (LEDX_OK))                                                    \
+ {                                                                             \
+   switch (ledx)                                                               \
+   {                                                                           \
+     case 0: err  = set_led((int)(100.0 * thlt),2,(w_disp),(ledx_vis));        \
+             break;                                                            \
+     case 1: err  = set_led((int)(100.0 * tmlt),2,(w_disp),(ledx_vis));        \
+             break;                                                            \
+     case 2: err  = set_led((int)(100.0 * tset_hlt),2,(w_disp),(ledx_vis));    \
+             break;                                                            \
+     case 3: err  = set_led((int)(100.0 * tset_mlt),2,(w_disp),(ledx_vis));    \
+             break;                                                            \
+     case 4: err  = set_led((int)(10.0 * ttriac),3,(w_disp),(ledx_vis));       \
+             break;                                                            \
+     case 5: err  = set_led((int)(10.0 * volumes.Vmlt),3,(w_disp),(ledx_vis)); \
+             break;                                                            \
+     case 6: err  = set_led((int)(10.0 * volumes.Vhlt),3,(w_disp),(ledx_vis)); \
+             break;                                                            \
+     case 7: err  = set_led((int)(10.0 * gamma),3,(w_disp),(ledx_vis));        \
+             break;                                                            \
+    default: break;                                                            \
+   }                                                                           \
+   if (err) Reset_I2C_Bus(ledx_base,err);                                      \
+ }
 
 //------------------------------
 // Defines for StatusBar object
@@ -283,6 +306,17 @@
 #define PANEL_SPIDX (3)
 #define PANEL_VALVE (4)
 #define PANEL_REVIS (5)
+
+//----------------------------------------------------------------------
+// Defines for cb_pid_out. This is an indicator where the output of the
+// PID-Controller [%] is sent to. There are three possibilities:
+// ELECTRIC    : the output is sent to an electric heating element
+// GAS_NON_MOD : the output is sent to a non-modulating gas-burner
+// GAS_MODULATE: the output is sent to a modulating gas-burner
+//----------------------------------------------------------------------
+#define PID_OUT_ELECTRIC     (0x01)
+#define PID_OUT_GAS_NON_MOD  (0x02)
+#define PID_OUT_GAS_MODULATE (0x04)
 
 //------------------------------------------------------------------------------
 // The text I2C_STOP_ERR_TXT is printed whenever i2c_stop() was not successful
@@ -328,8 +362,6 @@ __published:	// IDE-managed Components
         TMenuItem *MenuEditMashScheme;
         TMenuItem *File2;
         TMenuItem *MenuFileExit;
-        TMenuItem *N1;
-        TMenuItem *Connect1;
         TMenuItem *MenuEditFixParameters;
         TLabel *Val_Thlt;
         TLabel *Val_Tset_hlt;
@@ -366,11 +398,7 @@ __published:	// IDE-managed Components
         TMenuItem *Measurements;
         TImage *Image1;
         TStatusBar *StatusBar;
-        TClientSocket *ClientSocket1;
-        TServerSocket *ServerSocket1;
         TMenuItem *N2;
-        TMenuItem *NetworkListening1;
-        TMenuItem *NetworkDisconnect1;
         TLabel *PID_dbg;
         TLabel *Ttriac_lbl;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
@@ -394,27 +422,8 @@ __published:	// IDE-managed Components
         void __fastcall MeasurementsClick(TObject *Sender);
         void __fastcall Contents1Click(TObject *Sender);
         void __fastcall HowtoUseHelp1Click(TObject *Sender);
-        void __fastcall ServerSocket1Listen(TObject *Sender,
-          TCustomWinSocket *Socket);
-        void __fastcall Connect1Click(TObject *Sender);
-        void __fastcall NetworkListening1Click(TObject *Sender);
-        void __fastcall NetworkDisconnect1Click(TObject *Sender);
-        void __fastcall ClientSocket1Connect(TObject *Sender,
-          TCustomWinSocket *Socket);
-        void __fastcall ClientSocket1Disconnect(TObject *Sender,
-          TCustomWinSocket *Socket);
-        void __fastcall ServerSocket1ClientDisconnect(TObject *Sender,
-          TCustomWinSocket *Socket);
-        void __fastcall ClientSocket1Connecting(TObject *Sender,
-          TCustomWinSocket *Socket);
-        void __fastcall ServerSocket1ClientConnect(TObject *Sender,
-          TCustomWinSocket *Socket);
-        void __fastcall ClientSocket1Error(TObject *Sender,
-          TCustomWinSocket *Socket, TErrorEvent ErrorEvent,
-          int &ErrorCode);
         void __fastcall FormKeyPress(TObject *Sender, char &Key);
 private:	// User declarations
-        void __fastcall network_handler(void);
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall Start_I2C_Communication(int known_status);
         void __fastcall print_mash_scheme_to_statusbar(void);
@@ -424,6 +433,7 @@ private:	// User declarations
         void __fastcall exit_ebrew(void);
         void __fastcall Reset_I2C_Bus(int i2c_bus_id, int err);
         void __fastcall Generate_IO_Signals(void);
+
         timer_vars      tmr;        // struct with timer variables
         ma              str_thlt;   // Struct for MA5 filter for HLT temperature
         ma              str_tmlt;   // Struct for MA5 filter for MLT temperature
@@ -445,6 +455,9 @@ private:	// User declarations
         double          thlt_offset;      // calibration offset to add to Thlt measurement
         double          tmlt_offset;      // calibration offset to add to Tmlt measurement
         bool            cb_pid_dbg;       // true = Show PID Debug label
+        byte            cb_pid_out;       // [ELECTRIC, GAS_NON_MOD, GAS_MODULATE]
+        double          dac_a;            // a-coefficient for y=a.x+b DAC calc.
+        double          dac_b;            // b-coefficient for y=a.x+b DAC calc.
         enum i2c_adc    vhlt_src;         // Vhlt source AD channel
         double          vhlt_a;           // a-coefficient for y=a.x+b
         double          vhlt_b;           // b-coefficient for y=a.x+b
@@ -458,7 +471,6 @@ public:		// User declarations
         ma              str_vhlt;   // Struct for MA5 filter for HLT volume
         ma              str_vmlt;   // Struct for MA5 filter for MLT volume
         swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
-        adda_t          padc;       // struct containing the 4 ADC values in mV
         double          gamma;      // PID controller output
         double          tset_hlt;   // HLT reference temperature
         double          tset_mlt;   // MLT reference temperature
@@ -477,8 +489,6 @@ public:		// User declarations
         TDateTime       dt_time_switch;  // object holding date and time
         volume_struct   volumes;         // Struct for Volumes
         bool            IsServer;        // true = server (not the client)
-        bool            network_init;    // true = network init. to be done
-        bool            network_alive;   // true = network connection is established
         bool            burner_on;       // true = gas burner is on
         char            *ebrew_revision; // contains CVS revision number
         __fastcall TMainForm(TComponent* Owner);
