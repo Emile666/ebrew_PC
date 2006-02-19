@@ -6,6 +6,12 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.14  2005/08/30 09:17:42  Emile
+// - Bug-fix reading log-file. Only entries > 1 minute can be imported.
+// - sp_idx added to log-file, instead of PID_ON.
+// - Stay 10 seconds in state 5 at start of sparging for logging purposes
+// - Reorganisation of routines of reading log file, added print_p_struct().
+//
 // Revision 1.13  2005/03/26 13:53:21  Emile
 // - During State "Mash Preheat" pump is set to ON (again)
 // - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
@@ -141,21 +147,21 @@ extern "C" {
 
 typedef struct _log_struct
 {
-   char brew_date[20];  /* Brew date */
-   int  bline;          /* First line with valid information */
-   int  eline;          /* Last line with valid information */
-   char btime[20];      /* Begin time of brew session */
-   char etime[20];      /* End time of brew session */
-   int  lms_idx;        /* Last known value of ms_idx */
-   int  tmr_ms_idx;     /* Timer value of ms_idx timer */
-   int  std_val;        /* Last known value of std_state */
-   int  start_lstd;     /* The start line number of the latest ebrew_std */
-   int  start_lmtmr;    /* The start line number of the start of the latest mash timer */
-   int  lsp_idx;        /* Last known value of sp_idx */
-   int  mashing_start;  /* Start line of Mashing */
-   int  sparging_start; /* Start line of Sparging */
-   int  boil_start;     /* Start line of Boiling */
-   int  chill_start;    /* Start line of Chilling */
+   char          brew_date[20];  /* Brew date */
+   unsigned int  bline;          /* First line with valid information */
+   unsigned int  eline;          /* Last line with valid information */
+   char          btime[20];      /* Begin time of brew session */
+   char          etime[20];      /* End time of brew session */
+   int           lms_idx;        /* Last known value of ms_idx */
+   int           tmr_ms_idx;     /* Timer value of ms_idx timer */
+   int           std_val;        /* Last known value of std_state */
+   unsigned int  start_lstd;     /* The start line number of the latest ebrew_std */
+   unsigned int  start_lmtmr;    /* The start line number of the start of the latest mash timer */
+   int           lsp_idx;        /* Last known value of sp_idx */
+   unsigned int  mashing_start;  /* Start line of Mashing */
+   unsigned int  sparging_start; /* Start line of Sparging */
+   unsigned int  boil_start;     /* Start line of Boiling */
+   unsigned int  chill_start;    /* Start line of Chilling */
 } log_struct;
 
 typedef struct _maisch_schedule

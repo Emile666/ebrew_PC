@@ -6,6 +6,12 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.14  2005/08/30 09:17:42  Emile
+  - Bug-fix reading log-file. Only entries > 1 minute can be imported.
+  - sp_idx added to log-file, instead of PID_ON.
+  - Stay 10 seconds in state 5 at start of sparging for logging purposes
+  - Reorganisation of routines of reading log file, added print_p_struct().
+
   Revision 1.13  2005/06/11 12:35:07  Emile
   - Keyboard shortcuts 'P' (Pump toggle) and '1' .. '7' (valve toggles) added.
   - Added transition from state 8 back to state 6. This prevents a transition
@@ -169,13 +175,13 @@ void calc_phases_start(FILE *fd, log_struct p[])
   Returns  : -
   ------------------------------------------------------------------*/
 {
-   char tmp[SLEN];
-   char *phlp;             /* temp. pointer */
-   int  line_nr = 1;       /* line number */
-   int  log_idx = 0;       /* log entry index */
-   int  std = 0;           /* value of ebrew_std */
-   int  std_old;           /* previous value of std */
-   int  i;                 /* temp. variable */
+   char         tmp[SLEN];
+   char         *phlp;       /* temp. pointer */
+   unsigned int line_nr = 1; /* line number */
+   int          log_idx = 0; /* log entry index */
+   int          std = 0;     /* value of ebrew_std */
+   int          std_old;     /* previous value of std */
+   int          i;           /* temp. variable */
 
    rewind(fd); /* start again at beginning of file */
    do
@@ -243,14 +249,14 @@ void calc_sp_idx(FILE *fd, log_struct p[])
   Returns  : -
   ------------------------------------------------------------------*/
 {
-   char tmp[SLEN];
-   char *phlp;              /* temp. pointer */
-   int  line_nr    = 1;     /* line number */
-   int  log_idx    = 0;     /* log entry index */
-   int  i;                  /* temp. variable */
-   int  std;                /* value of ebrew_std */
-   int  ffound     = FALSE; /* TRUE = start of last state found */
-   int  mfound     = FALSE; /* TRUE = start of last mash timer started */
+   char         tmp[SLEN];
+   char         *phlp;              /* temp. pointer */
+   unsigned int line_nr    = 1;     /* line number */
+   int          log_idx    = 0;     /* log entry index */
+   int          i;                  /* temp. variable */
+   int          std;                /* value of ebrew_std */
+   int          ffound     = FALSE; /* TRUE = start of last state found */
+   int          mfound     = FALSE; /* TRUE = start of last mash timer started */
 
    rewind(fd); /* start again at beginning of file */
    do
@@ -363,14 +369,14 @@ int decode_log_file(FILE *fd, log_struct p[])
   Returns  : The number of log-file entries found in the log file
   ------------------------------------------------------------------*/
 {
-   char tmp[SLEN];
-   char *phlp;  /* temp. pointer */
-   char sstart[] = "Date of brewing: "; /* string to start a log-file entry */
-   int  sslen    = strlen(sstart);      /* length of sstart[] */
-   int  log_idx  = 0; /* log entry index */
-   int  line_nr  = 1; /* start at line 1 in log file */
-   int  rval     = 0; /* return value */
-   int  i;
+   char         tmp[SLEN];
+   char         *phlp;  /* temp. pointer */
+   char         sstart[] = "Date of brewing: "; /* string to start a log-file entry */
+   int          sslen    = strlen(sstart);      /* length of sstart[] */
+   int          log_idx  = 0; /* log entry index */
+   unsigned int line_nr  = 1; /* start at line 1 in log file */
+   int          rval     = 0; /* return value */
+   int          i;
 
    /*-----------------------------------------------------------------*/
    /* 1) Go through the log-file and determine the brew-date and the  */
@@ -430,8 +436,8 @@ int decode_log_file(FILE *fd, log_struct p[])
 
    /*-----------------------------------------------------------------*/
    /* 3) Go through the log-file AGAIN and find the start line number */
-   /*    where the last mash timer was started and the the start line */
-   /*    number of the last ebrew_std value                           */
+   /*    where the last mash timer was started (start_lmtmr) and the  */
+   /*    start line number of the last ebrew_std value                */
    /*-----------------------------------------------------------------*/
    calc_sp_idx(fd,p);
 
@@ -440,9 +446,22 @@ int decode_log_file(FILE *fd, log_struct p[])
    /*---------------------------------*/
    for (i = 0; i <= log_idx; i++)
    {
-      // Estimate the time for the crash + rebooting at 4 * 5 seconds.
-      //------------------------------------------------------------
-      p[i].tmr_ms_idx = p[i].eline + 1 + 4 - p[i].start_lmtmr;
+      if (p[i].start_lmtmr == 0)
+      {
+         //------------------------------------------------------------
+         // The latest mash timer has not started yet, meaning that the
+         // new reference temp. has not been reached yet.
+         //------------------------------------------------------------
+         p[i].tmr_ms_idx = NOT_STARTED;
+      }
+      else
+      {
+         //--------------------------------------------------------------
+         // The latest mash timer was running.
+         // Estimate the time for the crash + rebooting at 4 * 5 seconds.
+         //--------------------------------------------------------------
+         p[i].tmr_ms_idx = 5 * (p[i].eline + 1 + 4 - p[i].start_lmtmr);
+      } // else
    } // for
    print_p_struct(log_idx,p); // Debug: print p struct to a file
    return rval;

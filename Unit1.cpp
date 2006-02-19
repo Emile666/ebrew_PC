@@ -6,6 +6,20 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.47  2005/11/12 22:19:38  Emile
+// - PID Output (Gamma) routing added. It is now possible to send the output
+//   of the PID controller to 3 devices: 1) electrical heating element,
+//   2) Non-modulating (standard) gas-burner, 3) modulating gas-burner.
+// - PID Dialog changed, checkboxes added.
+// - New registry variables: CB_PID_OUT, DAC_A, DAC_B
+// - The conversion from gamma to a value for the DA-output is done with
+//   DAC_A and DAC_B. The DA-output is used to generate the PWM signal for
+//   the modulating gas-burner.
+// - Led visibility decreased.
+// - Bug-fix: Check_HW_Devices screen appeared twice when checking I2C HW. Fixed.
+// - Displaying of Vhlt, Vmlt and Ttriac on LED-displays changed (less resolution).
+// - Network routines removed.
+//
 // Revision 1.46  2005/10/23 20:00:30  Emile
 // - Bug-fix writing to log-file
 // - Default values of Registry variables updated when created initially.
@@ -421,9 +435,13 @@ void __fastcall TMainForm::Restore_Settings(void)
             ms[std.ms_idx].timer = ms[std.ms_idx].time;
          }
          else
-         {  // mash was in progress, do a best guess for the timer value
-            // Log-file -> 5 sec.: STD called -> 1 sec.
-            ms[std.ms_idx].timer = 5 * p1[k].tmr_ms_idx;
+         {
+            //-------------------------------------------------------------------
+            // mash was in progress, Two options: (computed by decode_log_file())
+            // 1) tmr_ms_idx = NOT_STARTED: Ref. temp. was not reached yet
+            // 2) tmr_ms_idx has an actual timer value
+            //-------------------------------------------------------------------
+            ms[std.ms_idx].timer = p1[k].tmr_ms_idx;
          } // else
 
          //----------------------------
