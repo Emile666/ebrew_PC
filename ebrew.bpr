@@ -25,7 +25,7 @@ RESDEPEN = $(RESFILES) Unit1.dfm PID_Settings_Dialog.dfm FixParamsDialog.dfm \
   DataGraphForm.dfm Sparge_Settings.dfm RestoreSettings.dfm VersionAwareAbout.dfm \
   MeasurementsDialog.dfm
 LIBFILES =
-LIBRARIES = Vcwb4.lib AnimTimer.lib
+LIBRARIES = Vcwb4.lib VCLX40.lib bcbsmp40.lib AnimTimer.lib VCLJPG40.lib VCL40.lib
 SPARELIBS = VCL40.lib VCLJPG40.lib AnimTimer.lib bcbsmp40.lib VCLX40.lib Vcwb4.lib
 PACKAGES = VCL40.bpi VCLX40.bpi VCLJPG40.bpi bcbsmp40.bpi QRPT40.bpi VCLDB40.bpi \
   ibsmp40.bpi VCLDBX40.bpi TEEUI40.bpi TEEDB40.bpi TEE40.bpi nmfast40.bpi \
@@ -39,21 +39,21 @@ PATHRC = .;
 DEBUGLIBPATH = $(BCB)\lib\debug
 RELEASELIBPATH = $(BCB)\lib\release
 USERDEFINES =
-SYSDEFINES = NO_STRICT;USEPACKAGES
+SYSDEFINES = NO_STRICT
 # ---------------------------------------------------------------------------
-CFLAG1 = -Ii2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Projects\tiwc4 -Od -Hc \
+CFLAG1 = -Ii2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Lib\tiwc4 -Od -Hc \
   -H=$(BCB)\lib\vcl40.csm -wstv -wstu -w-par -wnod -w-inl -Ve -r- -a8 -4 -k -y -v \
   -vi- -c -b- -Vx -tW -tWM -D$(SYSDEFINES);$(USERDEFINES)
-PFLAGS = -Ui2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Projects\tiwc4;$(BCB)\Projects\Lib;$(DEBUGLIBPATH) \
-  -Ii2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Projects\tiwc4 -N2O -N0O \
-  -$YD -$W -$O- -v -JPHNE -M
-RFLAGS = -ii2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Projects\tiwc4
-AFLAGS = /ii2c_dll /i.. /i$(BCB)\include /i$(BCB)\include\vcl /i$(BCB)\Projects\tiwc4 \
-  /mx /w2 /zi
-LFLAGS = -Li2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Projects\tiwc4;$(BCB)\Projects\Lib;$(DEBUGLIBPATH) \
+PFLAGS = -Ui2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Lib\tiwc4;$(BCB)\Projects\Lib;$(DEBUGLIBPATH) \
+  -Ii2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Lib\tiwc4 -N2O -N0O -$YD \
+  -$W -$O- -v -JPHNE -M
+RFLAGS = -ii2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Lib\tiwc4
+AFLAGS = /ii2c_dll /i.. /i$(BCB)\include /i$(BCB)\include\vcl /i$(BCB)\Lib\tiwc4 /mx /w2 \
+  /zi
+LFLAGS = -Li2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Lib\tiwc4;$(BCB)\Projects\Lib;$(DEBUGLIBPATH) \
   -aa -Tpe -s -Gn -v
 # ---------------------------------------------------------------------------
-ALLOBJ = c0w32.obj $(PACKAGES) sysinit.obj $(OBJFILES)
+ALLOBJ = c0w32.obj sysinit.obj $(OBJFILES)
 ALLRES = $(RESFILES)
 ALLLIB = $(LIBFILES) $(LIBRARIES) import32.lib cp32mt.lib
 # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=1
 Release=0
-Build=76
+Build=78
 Debug=0
 PreRelease=0
 Special=0
@@ -77,7 +77,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=de Boezem
 FileDescription=ebrew automates the HERMS home-brewery, web-site: www.vandelogt.nl
-FileVersion=1.1.0.76
+FileVersion=1.1.0.78
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=
@@ -87,42 +87,44 @@ ProductVersion=V1.0
 Comments=
 
 [HistoryLists\hlIncludePath]
-Count=15
-Item0=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Projects\tiwc4
-Item1=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\CBuilder4\Projects\tiwc4
-Item2=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;..\..\..\..\..\..\Program Files\Borland\CBuilder4\Lib\tiwc4
-Item3=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;C:\Program Files\Borland\CBuilder4\Lib\tiwc4
-Item4=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\include\Lib\tiwc4
-Item5=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl
-Item6=$(BCB)\Lib\tiw;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
-Item7=i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
-Item8=..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
-Item9=..\..\..\Programming\bc\c\PSP\REUSE;..\..\ebrew;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
-Item10=..\..\ebrew;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
-Item11=..;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
-Item12=..\;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
-Item13=..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
-Item14=$(BCB)\include;$(BCB)\include\vcl
+Count=16
+Item0=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Lib\tiwc4
+Item1=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Projects\tiwc4
+Item2=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\CBuilder4\Projects\tiwc4
+Item3=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;..\..\..\..\..\..\Program Files\Borland\CBuilder4\Lib\tiwc4
+Item4=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;C:\Program Files\Borland\CBuilder4\Lib\tiwc4
+Item5=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\include\Lib\tiwc4
+Item6=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl
+Item7=$(BCB)\Lib\tiw;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
+Item8=i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
+Item9=..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
+Item10=..\..\..\Programming\bc\c\PSP\REUSE;..\..\ebrew;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
+Item11=..\..\ebrew;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
+Item12=..;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
+Item13=..\;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
+Item14=..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\include;$(BCB)\include\vcl
+Item15=$(BCB)\include;$(BCB)\include\vcl
 
 [HistoryLists\hlLibraryPath]
-Count=17
-Item0=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Projects\tiwc4;$(BCB)\Projects\Lib
-Item1=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;..\..\..\..\..\..\Program Files\Borland\CBuilder4\Lib\tiwc4;..\..\..\..\..\..\Program Files\Borland\CBuilder4\Projects\Lib
-Item2=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;..\..\..\..\..\..\Program Files\Borland\CBuilder4\Lib\tiwc4;C:\Program Files\Borland\CBuilder4\Projects\Lib
-Item3=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;C:\Program Files\Borland\CBuilder4\Lib\tiwc4
-Item4=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\lib\tiwc4
-Item5=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib
-Item6=\\pc-emile\c\program files\borland\cbuilder4\Lib;$(BCB)\Projects\Lib;$(BCB)\Lib\tiw;..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item7=$(BCB)\Projects\Lib;$(BCB)\Lib\tiw;..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item8=..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item9=i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item10=..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item11=..\..\..\Programming\bc\c\PSP\REUSE;..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item12=..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item13=..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item14=..\;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item15=..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
-Item16=$(BCB)\lib\obj;$(BCB)\lib
+Count=18
+Item0=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Lib\tiwc4;$(BCB)\Projects\Lib
+Item1=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Projects\tiwc4;$(BCB)\Projects\Lib
+Item2=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;..\..\..\..\..\..\Program Files\Borland\CBuilder4\Lib\tiwc4;..\..\..\..\..\..\Program Files\Borland\CBuilder4\Projects\Lib
+Item3=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;..\..\..\..\..\..\Program Files\Borland\CBuilder4\Lib\tiwc4;C:\Program Files\Borland\CBuilder4\Projects\Lib
+Item4=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;C:\Program Files\Borland\CBuilder4\Lib\tiwc4
+Item5=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\lib\tiwc4
+Item6=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib
+Item7=\\pc-emile\c\program files\borland\cbuilder4\Lib;$(BCB)\Projects\Lib;$(BCB)\Lib\tiw;..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item8=$(BCB)\Projects\Lib;$(BCB)\Lib\tiw;..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item9=..\..\program files\borland\cbuilder4\Lib;i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item10=i2c_dll;..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item11=..\..\..\Programming\bc\c\PSP\REUSE;..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item12=..\..\..\Programming\bc\c\PSP\REUSE;..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item13=..\..\ebrew;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item14=..;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item15=..\;..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item16=..\..\..\program files\borland\cbuilder4\Lib;..\..\..\Program Files\Borland\CBuilder4\Projects;$(BCB)\lib\obj;$(BCB)\lib
+Item17=$(BCB)\lib\obj;$(BCB)\lib
 
 [HistoryLists\hlDebugSourcePath]
 Count=2

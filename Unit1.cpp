@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.48  2006/02/19 13:14:35  Emile
+// - Bug-fix reading logfile(). If the latest mash timer was not started yet,
+//   it was set to a high value (which was the linenumber in the logfile).
+//   Setting the mash-timers should be oke now.
+// - Max. linenumber changed from 32767 to 65535, meaning that 91 hours in 1
+//   log-entry is possible now.
+//
 // Revision 1.47  2005/11/12 22:19:38  Emile
 // - PID Output (Gamma) routing added. It is now possible to send the output
 //   of the PID controller to 3 devices: 1) electrical heating element,
@@ -676,7 +683,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
          init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT"),tmlt); // MA filter for Tmlt
          tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");         // offset calibration
          init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT"),volumes.Vmlt); // MA filter for Vmlt
-         init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt); // MA filter for Vhlt
          //--------------------------------------------------------------------
          // The enum i2c_adc starts at NONE (0), which is also the start value
          // of the first entry of the combo-box.
@@ -685,12 +691,23 @@ void __fastcall TMainForm::Main_Initialisation(void)
          volumes.Vhlt_simulated = vhlt_src;           // needed for STD
          vhlt_a     = Reg->ReadFloat("VHLT_A");       // a-coefficient for y=a.x+b
          vhlt_b     = Reg->ReadFloat("VHLT_B");       // b-coefficient for y=a.x+b
+         if (vhlt_src == 0)
+         {
+            // Vhlt is simulated, init. MA filter for Vhlt
+            init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt_start);
+         }
+         else
+         {  // Vhlt is measured from pressure transducer, init. MA filter for Vhlt
+            init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt);
+         } // else
          vmlt_src   = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");   // source AD channel
          vmlt_a     = Reg->ReadFloat("VMLT_A");       // a-coefficient for y=a.x+b
          vmlt_b     = Reg->ReadFloat("VMLT_B");       // b-coefficient for y=a.x+b
+
          ttriac_src = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC"); // source AD channel
          ttriac_a   = Reg->ReadFloat("TTRIAC_A");     // a-coefficient for y=a.x+b
          ttriac_b   = Reg->ReadFloat("TTRIAC_B");     // b-coefficient for y=a.x+b
+
          Reg->SaveKey(REGKEY,"ebrew_reg");
          Reg->CloseKey();      // Close the Registry
          switch (pid_pars.pid_model)
