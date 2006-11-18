@@ -5,6 +5,20 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2004/05/08 14:52:52  emile
+// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+// - View mash progress screen: reorganised, pre-heat timers added, timers are now
+//   in seconds instead of minutes.
+// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+// - 'Apply' Button added to Fix parameters dialog screen.
+// - 'Edit mash scheme' no longer resets the (running) mash timers
+// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+//   also removed.
+// - Changing init. volume of HLT did not result in an update on screen. Corrected.
+//
 // Revision 1.6  2004/05/05 15:44:15  emile
 // - Main Screen picture update
 // - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
@@ -78,32 +92,20 @@ void __fastcall TViewMashProgress::CloseButtonClick(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 
-#define PRINT_TIMER_STATUS(timer,timeout)         \
-         if (timer == NOT_STARTED)                \
-         {                                        \
-            strcat(s,"Not Started");              \
-         } /* if */                               \
-         else if (timer < timeout)                \
-         {                                        \
-            strcat(s,"Running");                  \
-         }                                        \
-         else                                     \
-         {                                        \
-            strcat(s,"Time-Out");                 \
-         } /* else */                             \
-         ViewMashProgress->Memo1->Lines->Add(s)
-
 void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
 {
    int    i;
    char   s[120];
    double x;
+   char   time_stamp[50];
+   maisch_schedule *p; // pointer naar maisch_schedule structure
+   int    ltr;
 
    if (ViewMashProgress)
    {
       ViewMashProgress->Memo1->Lines->Clear();
-      ViewMashProgress->Memo1->Lines->Add("Mash  Temp. Time PH-Time Timer   Timer");
-      ViewMashProgress->Memo1->Lines->Add("Index [°C]  [sec] [sec]  [sec]   Status");
+      ViewMashProgress->Memo1->Lines->Add("Mash Temp Time  PreHt Timer Timer       Time-");
+      ViewMashProgress->Memo1->Lines->Add("idx  [°C] [sec] [sec] [sec] Status      Stamp");
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
       //------------------------------------------------------------------
       // Sample time of ms[] update is 1 second.
@@ -111,26 +113,76 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       //------------------------------------------------------------------
       for (i = 0; i < MainForm->std.ms_tot; i++)
       {
-         x = MainForm->ms[i].time - MainForm->sp.ph_timer;
+         p = &MainForm->ms[i]; // hulp pointer
+         x = p->time - MainForm->sp.ph_timer;
          if (x < 0.0)
          {
             x = 0.0;
          } // if
-         sprintf(s,"%3d %5.0f %6.0f %6.0f %6.0f ",i,
-                   MainForm->ms[i].temp,
-                   MainForm->ms[i].time,
-                   x,
-                   MainForm->ms[i].timer == NOT_STARTED ? 0.0 : MainForm->ms[i].timer);
-         PRINT_TIMER_STATUS(MainForm->ms[i].timer, MainForm->ms[i].time);
+         //---------------------------------------------------
+         // Now update time_stamp if a mash-timer has started
+         //---------------------------------------------------
+         if ((p->timer != NOT_STARTED) && (strlen(p->time_stamp) == 0))
+         {
+            strcpy(p->time_stamp, TimeToStr(Time()).c_str());
+         } // if
+         sprintf(s,"%2d %5.0f %5.0f %5.0f %5.0f ",i, p->temp, p->time, x,
+                   p->timer == NOT_STARTED ? 0.0 : p->timer);
+         if (p->timer == NOT_STARTED)
+         {
+            strcat(s,"Not Started ");
+         } /* if */
+         else if (p->timer < p->time)
+         {
+            strcat(s,"Running     ");
+         }
+         else
+         {
+            strcat(s,"Time-Out    ");
+         } /* else */
+         strcat(s,p->time_stamp);
+         ViewMashProgress->Memo1->Lines->Add(s);
       } // for
-
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
-      sprintf(s,"ebrew_std = %d, ms_idx = %d, sp_idx = %d",MainForm->std.ebrew_std,
-                                                           MainForm->std.ms_idx,
-                                                           MainForm->std.sp_idx);
+      sprintf(s,"mash index (ms_idx) = %d",MainForm->std.ms_idx);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer1 (state 05->06) = %d/%d sec.",MainForm->std.timer1,MainForm->sp.sp_time_ticks);
+
+      //-----------------------------------
+      // Now print the Sparging Information
+      //-----------------------------------
+      ViewMashProgress->Memo1->Lines->Add(" ");
+      ViewMashProgress->Memo1->Lines->Add("index  HLT to MLT   MLT to Boil  Sparging");
+      ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
+
+      ltr = MainForm->sp.sp_vol_batch;
+      if ((MainForm->std.ebrew_std == S06_PUMP_FROM_MLT_TO_BOIL) &&
+          (prev_ebrew_std == S05_SPARGING_REST))
+      {  // New transition detected, copy time-stamp into array of strings
+         strcpy(MainForm->sp.mlt2boil[MainForm->std.sp_idx],TimeToStr(Time()).c_str());
+      } // if
+      if ((MainForm->std.ebrew_std == S07_PUMP_FROM_HLT_TO_MLT) &&
+          ((prev_ebrew_std == S08_DELAY_xSEC) || (prev_ebrew_std == S06_PUMP_FROM_MLT_TO_BOIL)))
+      {  // New transition detected, copy time-stamp into array of strings
+         strcpy(MainForm->sp.hlt2mlt[1+MainForm->std.sp_idx],TimeToStr(Time()).c_str());
+      } // if
+      prev_ebrew_std = MainForm->std.ebrew_std; // update previous value
+
+      sprintf(s,"  0     - - - -  %12s    - - , %2d L",MainForm->sp.mlt2boil[0],ltr);
       ViewMashProgress->Memo1->Lines->Add(s);
+      for (i = 1; i <= MainForm->sp.sp_batches; i++)
+      {
+         if (i == MainForm->sp.sp_batches)
+              sprintf(s,"%3d %12s %12s    %2d L, Empty",i,MainForm->sp.hlt2mlt[i],MainForm->sp.mlt2boil[i],ltr);
+         else sprintf(s,"%3d %12s %12s    %2d L, %2d L",i,MainForm->sp.hlt2mlt[i],MainForm->sp.mlt2boil[i],ltr,ltr);
+         ViewMashProgress->Memo1->Lines->Add(s);
+      } // for i
+      ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
+      sprintf(s,"sp_idx = %d, Timer = %d/%d sec.",MainForm->std.sp_idx,
+                                                  MainForm->std.timer1,
+                                                  MainForm->sp.sp_time_ticks);
+      ViewMashProgress->Memo1->Lines->Add(s);
+      ViewMashProgress->Memo1->Lines->Add(" ");
+
       sprintf(s,"Timer2 (state 08->07) = %d/%d sec.",MainForm->std.timer2,MainForm->sp.to_xsec);
       ViewMashProgress->Memo1->Lines->Add(s);
       sprintf(s,"Timer3 (state 10->11) = %d/%d sec.",MainForm->std.timer3,MainForm->sp.to3);

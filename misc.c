@@ -6,6 +6,13 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.15  2006/02/19 13:14:35  Emile
+  - Bug-fix reading logfile(). If the latest mash timer was not started yet,
+    it was set to a high value (which was the linenumber in the logfile).
+    Setting the mash-timers should be oke now.
+  - Max. linenumber changed from 32767 to 65535, meaning that 91 hours in 1
+    log-entry is possible now.
+
   Revision 1.14  2005/08/30 09:17:42  Emile
   - Bug-fix reading log-file. Only entries > 1 minute can be imported.
   - sp_idx added to log-file, instead of PID_ON.
@@ -176,12 +183,15 @@ void calc_phases_start(FILE *fd, log_struct p[])
   ------------------------------------------------------------------*/
 {
    char         tmp[SLEN];
-   char         *phlp;       /* temp. pointer */
-   unsigned int line_nr = 1; /* line number */
-   int          log_idx = 0; /* log entry index */
-   int          std = 0;     /* value of ebrew_std */
-   int          std_old;     /* previous value of std */
-   int          i;           /* temp. variable */
+   char         *phlp;        /* temp. pointer */
+   unsigned int line_nr = 1;  /* line number */
+   int          log_idx = 0;  /* log entry index */
+   int          std = 0;      /* value of ebrew_std */
+   int          std_old;      /* previous value of std */
+   int          i;            /* temp. variable */
+   int          m_entry = 0;  /* new mash phase in a log-entry */
+   int          s1_entry = 0; /* new sparging phase in a log-entry */
+   int          s2_entry = 0; /* new sparging phase in a log-entry */
 
    rewind(fd); /* start again at beginning of file */
    do
@@ -209,10 +219,31 @@ void calc_phases_start(FILE *fd, log_struct p[])
             //-----------------------------------------------
             // Find 1st entries of the various brewing phases
             //-----------------------------------------------
-            FIND_PHASE(p[log_idx].mashing_start ,S04_MASH_TIMER_RUNNING, S03_MASH_IN_PROGRESS);
-            FIND_PHASE(p[log_idx].sparging_start,S05_SPARGING_REST     , S04_MASH_TIMER_RUNNING);
-            FIND_PHASE(p[log_idx].boil_start    ,S10_BOILING           , S09_EMPTY_MLT);
-            FIND_PHASE(p[log_idx].chill_start   ,S12_CHILL             , S10_BOILING);
+            // Mashing Phase
+            if ((p[log_idx].mashing_start[m_entry] == 0) &&
+                (((std == S04_MASH_TIMER_RUNNING) && (std_old == S03_MASH_IN_PROGRESS)) ||
+                 ((std == S13_MASH_PREHEAT_HLT)   && (std_old == S03_MASH_IN_PROGRESS)) ||
+                 ((std == S04_MASH_TIMER_RUNNING) && (std_old == S13_MASH_PREHEAT_HLT))))
+            {
+               p[log_idx].mashing_start[m_entry] = line_nr;
+               m_entry++;
+            } /* if */
+            // Sparging phase: MLT -> Boil
+            if ((p[log_idx].sparging_start[s1_entry] == 0) && (std_old == S05_SPARGING_REST) &&
+                ((std == S06_PUMP_FROM_MLT_TO_BOIL) || (std == S09_EMPTY_MLT)))
+            {
+               p[log_idx].sparging_start[s1_entry] = line_nr;
+               s1_entry++;
+            } /* if */
+            // Sparging phase: HLT -> MLT
+            if ((p[log_idx].sparging_start2[s2_entry] == 0) && (std == S07_PUMP_FROM_HLT_TO_MLT) &&
+                ((std_old == S06_PUMP_FROM_MLT_TO_BOIL) || (std_old == S08_DELAY_xSEC)))
+            {
+               p[log_idx].sparging_start2[s2_entry] = line_nr;
+               s2_entry++;
+            } /* if */
+            FIND_PHASE(p[log_idx].boil_start ,S10_BOILING, S09_EMPTY_MLT);
+            FIND_PHASE(p[log_idx].chill_start,S12_CHILL  , S10_BOILING);
          } /* if */
 
          if (line_nr == p[log_idx].eline)
@@ -230,7 +261,10 @@ void calc_phases_start(FILE *fd, log_struct p[])
             p[log_idx].lms_idx = atoi(phlp);
             phlp = strtok(NULL,COLON); /* next value is std_state */
             p[log_idx].std_val = atoi(phlp);
-            log_idx++; /* to next log entry */
+            log_idx++;    /* to next log entry */
+            m_entry  = 0; /* reset mash entry */
+            s1_entry = 0; /* reset sparging index */
+            s2_entry = 0; /* reset sparging index */
          } /* else if */
       } /* if */
       line_nr++; /* read next line */
@@ -325,7 +359,7 @@ void print_p_struct(int log_idx, log_struct p[])
    int  i;   // loop-variable
    static int pp_1st_time = TRUE;
 
-   if ((f1 = fopen("log_structp.txt","a")) != NULL)
+   if ((f1 = fopen("log_structp.txt","w")) != NULL)
    {
       if (pp_1st_time)
       {
@@ -348,7 +382,7 @@ void print_p_struct(int log_idx, log_struct p[])
                  p[i].start_lstd,     // The start line number of the latest ebrew_std
                  p[i].start_lmtmr,    // The start line number of the latest mash timer start
                  p[i].lsp_idx,        // Number of Sparging cycles
-                 p[i].mashing_start,  // Start line of Mashing
+                 p[i].mashing_start[0], // Start line of Mashing
                  p[i].sparging_start, // Start line of Sparging
                  p[i].boil_start,     // Start line of Boiling
                  p[i].chill_start);   // Start line of Chilling
@@ -357,6 +391,44 @@ void print_p_struct(int log_idx, log_struct p[])
       fclose(f1);
    } // if
 } // print_p_struct()
+
+void add_seconds(char *s, int seconds)
+/*------------------------------------------------------------------
+  Purpose  : This function adds a number of seconds to the time string
+             given in s
+  Variables:
+        s  : The time-string (hh:mm:ss)
+    seconds: The number of seconds to add to the time string
+  Returns  : -
+  ------------------------------------------------------------------*/
+{
+   char tmp[50];
+   char hour[10];
+   char min[10];
+   char sec[10];
+   unsigned int hi,mi,si;
+   char *p;
+
+   strcpy(tmp,s); // copy string into temp. string
+   p = strtok(tmp,":");
+   if (p == NULL) return;
+   else hi = atoi(p);
+   p = strtok(NULL,":");
+   if (p == NULL) return;
+   else mi = atoi(p);
+   p = strtok(NULL,"\0");
+   if (p == NULL) return;
+   else si = atoi(p);
+
+   si += 60 * mi + 3600 * hi; // convert to seconds
+   si += seconds;  // now add seconds
+
+   hi  = si / 3600; // calculate hours
+   si -= hi * 3600; // calculate seconds without hours
+   mi  = si / 60;   // calculate minutes
+   si -= mi * 60;   // calculate remaining seconds
+   sprintf(s,"%02d:%02d:%02d",hi,mi,si);
+} // add_seconds
 
 int decode_log_file(FILE *fd, log_struct p[])
 /*------------------------------------------------------------------
@@ -414,8 +486,15 @@ int decode_log_file(FILE *fd, log_struct p[])
             p[log_idx].std_val        = 0;
             p[log_idx].start_lstd     = 0;
             p[log_idx].start_lmtmr    = 0;
-            p[log_idx].mashing_start  = 0;
-            p[log_idx].sparging_start = 0;
+            for (i = 0; i < MAX_MS; i++)
+            {
+               p[log_idx].mashing_start[i]   = 0;
+            } // for i
+            for (i = 0; i < MAX_SP; i++)
+            {
+               p[log_idx].sparging_start[i]  = 0;
+               p[log_idx].sparging_start2[i] = 0;
+            } // for i
             p[log_idx].boil_start     = 0;
             p[log_idx].chill_start    = 0;
             p[log_idx].tmr_ms_idx     = 0;
@@ -444,7 +523,7 @@ int decode_log_file(FILE *fd, log_struct p[])
    /*---------------------------------*/
    /* 4) Fill in the mash timer info. */
    /*---------------------------------*/
-   for (i = 0; i <= log_idx; i++)
+   for (i = 0; i < log_idx; i++)
    {
       if (p[i].start_lmtmr == 0)
       {
@@ -521,7 +600,8 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int 
             } // while
             if (init == INIT_TIMERS)
             {
-               ms[i].timer = NOT_STARTED; /* init. timer to not started */
+               ms[i].timer         = NOT_STARTED; /* init. timer to not started */
+               ms[i].time_stamp[0] = '\0';        /* init. time-stamp to empty string */
             } // if
          } // if
          i++;
@@ -649,11 +729,11 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
    // State 10:  0  0  0  0  0  0  0  0   Boil                  0x00
    // State 11:  0  0  0  1  0  0  0  0   Empty Heat Exchanger  0x10
    // State 12:  0  1  0  0  1  0  0  1   Chill                 0x49
-   // State 13:  0  0  1  0  0  0  1  1   Mash PreHeat HLT      0x23
+   // State 13:  0  0  1  0  0  0  1  0   Mash PreHeat HLT      0x22
    //-------------------------------------------------------------------
    unsigned int  klepstanden[] = {0x0000, 0x0024, 0x0015, 0x0013, 0x0013,
                                   0x0013, 0x0093, 0x0017, 0x0013, 0x0083,
-                                  0x0000, 0x0010, 0x0049, 0x0023};
+                                  0x0000, 0x0010, 0x0049, 0x0022};
    unsigned int  klepstand; // Help var. = klepstanden[std->ebrew_std]
 
    switch (std->ebrew_std)
@@ -865,6 +945,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
               std->ebrew_std = S10_BOILING;
            } // if
            break;
+
       case S10_BOILING:
            *tset_hlt = 0.0; // disable heating element
            ++std->timer5;

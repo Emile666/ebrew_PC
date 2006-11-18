@@ -6,6 +6,20 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.31  2005/11/12 22:19:38  Emile
+// - PID Output (Gamma) routing added. It is now possible to send the output
+//   of the PID controller to 3 devices: 1) electrical heating element,
+//   2) Non-modulating (standard) gas-burner, 3) modulating gas-burner.
+// - PID Dialog changed, checkboxes added.
+// - New registry variables: CB_PID_OUT, DAC_A, DAC_B
+// - The conversion from gamma to a value for the DA-output is done with
+//   DAC_A and DAC_B. The DA-output is used to generate the PWM signal for
+//   the modulating gas-burner.
+// - Led visibility decreased.
+// - Bug-fix: Check_HW_Devices screen appeared twice when checking I2C HW. Fixed.
+// - Displaying of Vhlt, Vmlt and Ttriac on LED-displays changed (less resolution).
+// - Network routines removed.
+//
 // Revision 1.30  2005/10/23 12:44:39  Emile
 // Several changes because of new hardware (MAX1238 instead of PCF8591):
 // - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
@@ -401,6 +415,9 @@ __published:	// IDE-managed Components
         TMenuItem *N2;
         TLabel *PID_dbg;
         TLabel *Ttriac_lbl;
+        TStaticText *StaticText1;
+        TStaticText *StaticText2;
+        TStaticText *StaticText3;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -488,7 +505,6 @@ public:		// User declarations
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
         TDateTime       dt_time_switch;  // object holding date and time
         volume_struct   volumes;         // Struct for Volumes
-        bool            IsServer;        // true = server (not the client)
         bool            burner_on;       // true = gas burner is on
         char            *ebrew_revision; // contains CVS revision number
         __fastcall TMainForm(TComponent* Owner);

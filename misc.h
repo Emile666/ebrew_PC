@@ -6,6 +6,13 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.15  2006/02/19 13:14:35  Emile
+// - Bug-fix reading logfile(). If the latest mash timer was not started yet,
+//   it was set to a high value (which was the linenumber in the logfile).
+//   Setting the mash-timers should be oke now.
+// - Max. linenumber changed from 32767 to 65535, meaning that 91 hours in 1
+//   log-entry is possible now.
+//
 // Revision 1.14  2005/08/30 09:17:42  Emile
 // - Bug-fix reading log-file. Only entries > 1 minute can be imported.
 // - sp_idx added to log-file, instead of PID_ON.
@@ -130,6 +137,7 @@ extern "C" {
 
 #define SLEN       (255)
 #define MAX_MS      (10)
+#define MAX_SP      (10) 
 #define NOT_STARTED (-1)
 
 #define LOG_HDR_SIZE (10)
@@ -158,17 +166,19 @@ typedef struct _log_struct
    unsigned int  start_lstd;     /* The start line number of the latest ebrew_std */
    unsigned int  start_lmtmr;    /* The start line number of the start of the latest mash timer */
    int           lsp_idx;        /* Last known value of sp_idx */
-   unsigned int  mashing_start;  /* Start line of Mashing */
-   unsigned int  sparging_start; /* Start line of Sparging */
+   unsigned int  mashing_start[MAX_MS];  /* Start line of Mashing */
+   unsigned int  sparging_start[MAX_SP]; /* Start line of Sparging */
+   unsigned int  sparging_start2[MAX_SP]; /* Start line of Sparging */
    unsigned int  boil_start;     /* Start line of Boiling */
    unsigned int  chill_start;    /* Start line of Chilling */
 } log_struct;
 
 typedef struct _maisch_schedule
 {
-   double time;  /* time (min.) to remain at this temperature */
-   double temp;  /* temperature (Celsius) to hold */
-   int    timer; /* timer, init. to NOT_STARTED */
+   double time;           /* time (min.) to remain at this temperature */
+   double temp;           /* temperature (Celsius) to hold */
+   int    timer;          /* timer, init. to NOT_STARTED */
+   char   time_stamp[20]; /* time when timer was started */
 } maisch_schedule;
 
 typedef struct _sparge_struct
@@ -191,6 +201,9 @@ typedef struct _sparge_struct
    int    to_xsec;         // Timeout value for state 8
    int    to3;             // Timeout value for state 10 -> 11
    int    to4;             // Timout value for state 11 -> 10
+   /* Sparge Time-stamps */
+   char   mlt2boil[MAX_SP][40]; // MAX_SP strings for time-stamp moment of MLT -> BOIL
+   char   hlt2mlt[MAX_SP][40];  // MAX_SP strings for time-stamp moment of HLT -> MLT
 } sparge_struct;
 
 typedef struct _std_struct
@@ -321,6 +334,7 @@ typedef struct _volume_struct
 #define P01ATXT "PUMP ON (A)"
 #define P00ATXT "PUMP OFF (A)"
 
+void add_seconds(char *s, int seconds);
 int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int init);
 //double update_tset(double *tset, double temp, double offset, double offset2,

@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.49  2006/06/04 12:28:23  Emile
+// - Bug-fix: Vhlt simulated did nog get a correct value at power-up. Corrected
+// - Project Make file corrected
+// - Build with runtime packages now in .exe file
+//
 // Revision 1.48  2006/02/19 13:14:35  Emile
 // - Bug-fix reading logfile(). If the latest mash timer was not started yet,
 //   it was set to a high value (which was the linenumber in the logfile).
@@ -400,7 +405,7 @@ void __fastcall TMainForm::Restore_Settings(void)
       // Read all information from the log-file and try to
       // reconstruct the previous situation as good as possible
       //--------------------------------------------------------
-      j = decode_log_file(fd,p1); // read log file with data just before chrash
+      j = decode_log_file(fd,p1); // read log file with data just before crash
       fclose(fd);                 // close log-file
       prps = new TRestore_Program_Settings(this);
       prps->ComboBox1->Items->Add("Reset to default values (ms_idx=0, sp_idx=0, ebrew_std=0)");
@@ -433,29 +438,35 @@ void __fastcall TMainForm::Restore_Settings(void)
          // Restore Mashing parameters
          //---------------------------
          std.ms_idx       = p1[k].lms_idx;
-         for (j = 0; j < std.ms_idx; j++)
+         for (j = 0; j <= std.ms_idx; j++)
          {
-            ms[j].timer = ms[j].time; // set previous timers to time-out
+            ms[j].timer      = ms[j].time; // set previous timers to time-out
+            strcpy(ms[j].time_stamp, p1[k].btime);
+            add_seconds(ms[j].time_stamp, 5*(p1[k].mashing_start[j] - p1[k].bline));
          } // for j
-         if (p1[k].sparging_start)
-         {  // set to time-out if mashing is finished
-            ms[std.ms_idx].timer = ms[std.ms_idx].time;
-         }
-         else
-         {
-            //-------------------------------------------------------------------
+         if (!p1[k].sparging_start[0])
+         {  //-------------------------------------------------------------------
             // mash was in progress, Two options: (computed by decode_log_file())
             // 1) tmr_ms_idx = NOT_STARTED: Ref. temp. was not reached yet
             // 2) tmr_ms_idx has an actual timer value
             //-------------------------------------------------------------------
             ms[std.ms_idx].timer = p1[k].tmr_ms_idx;
-         } // else
+         } // if
 
          //----------------------------
          // Restore Sparging parameters
          //----------------------------
          std.ebrew_std = p1[k].std_val; // Current state
          std.sp_idx    = p1[k].lsp_idx; // Sparging sessions done
+         // Restore MLT -> Boil en HLT -> MLT time-stamps
+         for (j = 0; j <= std.sp_idx; j++)
+         {
+            strcpy(MainForm->sp.mlt2boil[j],p1[k].btime);
+            add_seconds(MainForm->sp.mlt2boil[j], 5*(p1[k].sparging_start[j] - p1[k].bline));
+            strcpy(MainForm->sp.hlt2mlt[j+1],p1[k].btime);
+            add_seconds(MainForm->sp.hlt2mlt[j+1], 5*(p1[k].sparging_start2[j] - p1[k].bline));
+         } // for j
+         // Restore other timing parameters
          x             = p1[k].eline + 1 - p1[k].start_lstd;
          x            *= 5;             // Log-file -> 5 sec.: STD called -> 1 sec.
          switch (std.ebrew_std) // init. timers for states that have timers
@@ -765,7 +776,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
             Restore_Settings();
          } // if i
          Reg->WriteInteger("ms_idx",std.ms_idx); // update registry setting
-         //tset_hlt = ms[std.ms_idx].temp;         // Set tset value for HLT
          Reg->CloseKey();                        // Close the Registry
       } // if
    } // try
@@ -1103,7 +1113,7 @@ void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
   ------------------------------------------------------------------*/
 {
    exit_ebrew();
-}
+} // TMainForm::MenuFileExitClick()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::exit_ebrew(void)
@@ -2020,7 +2030,7 @@ void __fastcall TMainForm::MenuViewMash_progressClick(TObject *Sender)
   ------------------------------------------------------------------*/
 {
    ViewMashProgress->Show(); // Show modeless Dialog
-}
+} // TMainForm::MenuViewMash_progressClick()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::MenuViewData_graphsClick(TObject *Sender)
@@ -2031,7 +2041,7 @@ void __fastcall TMainForm::MenuViewData_graphsClick(TObject *Sender)
   ------------------------------------------------------------------*/
 {
    ShowDataGraphs->Show(); // Show modeless Dialog
-}
+} // TMainForm::MenuViewData_graphsClick()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Init_Sparge_Settings(void)
@@ -2043,6 +2053,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
   ------------------------------------------------------------------*/
 {
   TRegistry *Reg = new TRegistry();
+  int i;
 
   // Get Sparge  & STD Settings from the Registry
   try
@@ -2074,6 +2085,11 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.to_xsec      = Reg->ReadInteger("TO_XSEC");
         sp.to3          = Reg->ReadInteger("TO3");
         sp.to4          = Reg->ReadInteger("TO4");
+        for (i = 0; i < sp.sp_batches; i++)
+        {
+           sp.mlt2boil[i][0] = '\0'; // empty time-stamp strings
+           sp.hlt2mlt[i][0]  = '\0';
+        } // for i
         Reg->CloseKey(); // Close the Registry
         delete Reg;
      } // if
