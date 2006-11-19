@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.50  2006/11/18 23:06:37  Emile
+// - View Mash/Sparging screen is improved: time-stamps are placed when a
+//   mashing or sparging phase has started.
+// - Read_log_file is improved: time-stamps are generated, so that old log-files
+//   can be read and time-stamp information can be seen in the Mash/Sparging screen.
+// - Datagraps are set to a step-size of 1 instead of 2 (1 div = 100 seconds now).
+// - Main screen updated: Heating power is now in % and correct volumes are added.
+//
 // Revision 1.49  2006/06/04 12:28:23  Emile
 // - Bug-fix: Vhlt simulated did nog get a correct value at power-up. Corrected
 // - Project Make file corrected
@@ -458,6 +466,8 @@ void __fastcall TMainForm::Restore_Settings(void)
          //----------------------------
          std.ebrew_std = p1[k].std_val; // Current state
          std.sp_idx    = p1[k].lsp_idx; // Sparging sessions done
+         sp.sp_batches = max(sp.sp_batches,std.sp_idx);
+         
          // Restore MLT -> Boil en HLT -> MLT time-stamps
          for (j = 0; j <= std.sp_idx; j++)
          {
@@ -787,7 +797,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-------------
    // Init. timers
    //-------------
-   tmr.isrstate  = 1;                 // disable heater
+   tmr.isrstate  = IDLE;              // disable heaters
    tmr.htimer    = tmr.ltimer   = 0;  // init. low timer
    tmr.time_high = tmr.time_low = 0;  // init. time bit = 1
    tmr.alive     = tmr.alive_tmr = 0; // init. alive timers
@@ -1527,16 +1537,53 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
 
    switch (tmr.isrstate)
    {
-      case 0: //---------------------------------------------------------
+      case IDLE:
+              //------------------------------------------------------------------
+              // This is the default state after power-up. Main function
+              // of this state is to select whether the electrical heater
+              // states should be entered or the modulating gas burner
+              // states.
+              //
+              // The modulating gas burner and the electrical heater share
+              // the same power outlet, a decision has to be made, which power
+              // source has priority over the other.
+              // This is defined with the following table:
+              //
+              // Heater | Mod. Gas | Power Outlet (220 V) = HEATERb bit of lsb_io
+              // -----------------------------------------------------------------
+              //   0    |    0     | None selected
+              //   0    |    1     | Used by modulating gas burner
+              //   1    |    X     | Used by electrical heater
+              //------------------------------------------------------------------
+              lsb_io &= ~HEATERb; // set heater OFF
+              if (cb_pid_out & PID_OUT_ELECTRIC)
+              {
+                 tmr.ltimer   = tmr.time_low; // init. low-timer
+                 tmr.isrstate = EL_HTR_OFF;   // goto 'disable heater' state
+              }
+              else if ((cb_pid_out & PID_OUT_GAS_MODULATE) && !time_switch)
+              {
+                 tmr.isrstate = MOD_GAS_OFF;  // goto 'disable gas burner' state
+              } // else if
+              // else remain in idle state
+              break;
+
+      case EL_HTR_ON:
+              //---------------------------------------------------------
               // State 0: Enable heating element
               // Goto 'disable heating element' if triac_too_hot     or
               //      pid output not routed to triac/electric heater or
               //      (timeout_htimer && !100%_gamma)
               //---------------------------------------------------------
-              if (triac_too_hot || !(cb_pid_out & PID_OUT_ELECTRIC))
+              if (!(cb_pid_out & PID_OUT_ELECTRIC))
               {
                  lsb_io &= ~HEATERb; // set heater OFF
-                 tmr.isrstate = 1;   // go to 'disable heater' state
+                 tmr.isrstate = IDLE;
+              }
+              else if (triac_too_hot)
+              {
+                 lsb_io &= ~HEATERb; // set heater OFF
+                 tmr.isrstate = EL_HTR_OFF;   // go to 'disable heater' state
                  tmr.ltimer   = tmr.time_low; // init. low-timer
               }
               else if (tmr.htimer == 0)
@@ -1549,7 +1596,7 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
                  else
                  {
                     lsb_io &= ~HEATERb; // set heater OFF
-                    tmr.isrstate = 1;   // go to 'disable heater' state
+                    tmr.isrstate = EL_HTR_OFF;   // go to 'disable heater' state
                     tmr.ltimer   = tmr.time_low; // init. low-timer
                  } // else
               } // if
@@ -1560,13 +1607,19 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
               } /* else */
               break;
 
-      case 1: //---------------------------------------------------------
+      case EL_HTR_OFF:
+              //---------------------------------------------------------
               // State 1: Disable heating element
               // Goto 'enable heating element' if timeout_ltimer &&
               //      pid output routed to triac/electric heater &&
               //      !0%_gamma && !triac_too_hot
               //---------------------------------------------------------
-              if (tmr.ltimer == 0)
+              if (!(cb_pid_out & PID_OUT_ELECTRIC))
+              {
+                 lsb_io &= ~HEATERb; // set heater OFF
+                 tmr.isrstate = IDLE;
+              }
+              else if (tmr.ltimer == 0)
               {  // timer has counted down
                  if (tmr.time_high == 0)
                  {
@@ -1574,10 +1627,10 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
                     tmr.ltimer = tmr.time_low; // init. timer again
                     lsb_io &= ~HEATERb; // set heater OFF
                  }
-                 else if (!triac_too_hot && (cb_pid_out & PID_OUT_ELECTRIC))
+                 else if (!triac_too_hot)
                  {
                     lsb_io |= HEATERb; // set heater ON
-                    tmr.isrstate = 0;  // go to 'enable heater' state
+                    tmr.isrstate = EL_HTR_ON;     // go to 'enable heater' state
                     tmr.htimer   = tmr.time_high; // init. high-timer
                  } // else if
                  // Remain in this state if timeout && !0% && triac_too_hot
@@ -1590,8 +1643,55 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
               } // else
               break;
 
-      default:  tmr.isrstate = 1;
-                break;
+      case MOD_GAS_OFF:
+              //---------------------------------------------------------
+              // The modulating gas burner is enabled as follows:
+              // 1) a PWM voltage is applied to the gas-valve, this is done
+              //    in the main interrupt loop
+              // 2) a 220 V voltage is applied. This is done in this STD.
+              //---------------------------------------------------------
+              if (time_switch || (cb_pid_out & PID_OUT_ELECTRIC) ||
+                                !(cb_pid_out & PID_OUT_GAS_MODULATE))
+              {
+                 lsb_io &= ~HEATERb; // set heater OFF
+                 tmr.isrstate = IDLE;
+              }
+              else if (tmr.time_high > pid_pars.burner_hyst_h)
+              {  // hysteresis
+                 lsb_io |= HEATERb; // set heater ON
+                 tmr.isrstate = MOD_GAS_ON;
+              }
+              else
+              {
+                 lsb_io &= ~HEATERb; // set heater OFF
+                 // remain in this state
+              } // else
+              break;
+
+      case MOD_GAS_ON:
+              //---------------------------------------------------------
+              // The modulating gas burner is enabled
+              //---------------------------------------------------------
+              if (time_switch || (cb_pid_out & PID_OUT_ELECTRIC) ||
+                                !(cb_pid_out & PID_OUT_GAS_MODULATE))
+              {
+                 lsb_io &= ~HEATERb; // set heater OFF
+                 tmr.isrstate = IDLE;
+              }
+              else if (tmr.time_high < pid_pars.burner_hyst_l)
+              {
+                 lsb_io &= ~HEATERb; // set heater OFF
+                 tmr.isrstate = MOD_GAS_OFF;
+              }
+              else
+              {
+                 lsb_io |= HEATERb; // set heater ON
+                 // remain in this state
+              } // else
+              break;
+
+     default: tmr.isrstate = IDLE;
+              break;
    } // case
 
    //------------------------------------------------------------------
@@ -2377,8 +2477,8 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
    Vol_MLT->Caption   = tmp_str;          // AD4 = Pressure Transducer
    Tank_MLT->Position = volumes.Vmlt;
 
-   // Heater object shows kW (max=3), gamma = 100 % => PHEATER [W]
-   Heater->Value = (gamma * PHEATER) / 100; // Update object on screen
+   // Heater object shows %
+   Heater->Value = gamma; // Update object on screen
 
    sprintf(tmp_str,"%4.1f",tset_mlt);
    Val_Tset_mlt->Caption   = tmp_str;

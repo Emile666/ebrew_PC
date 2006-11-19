@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.32  2006/11/18 23:06:37  Emile
+// - View Mash/Sparging screen is improved: time-stamps are placed when a
+//   mashing or sparging phase has started.
+// - Read_log_file is improved: time-stamps are generated, so that old log-files
+//   can be read and time-stamp information can be seen in the Mash/Sparging screen.
+// - Datagraps are set to a step-size of 1 instead of 2 (1 div = 100 seconds now).
+// - Main screen updated: Heating power is now in % and correct volumes are added.
+//
 // Revision 1.31  2005/11/12 22:19:38  Emile
 // - PID Output (Gamma) routing added. It is now possible to send the output
 //   of the PID controller to 3 devices: 1) electrical heating element,
@@ -272,7 +280,6 @@
 #define LOGFILE "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
 #define REGKEY    "Software\\ebrew"
-#define PHEATER (3000)
 
 // 1 minute = 1/(60*24) part of one day, see TDateTime for details
 #define ONE_MINUTE (6.94444E-04)
@@ -331,6 +338,12 @@
 #define PID_OUT_ELECTRIC     (0x01)
 #define PID_OUT_GAS_NON_MOD  (0x02)
 #define PID_OUT_GAS_MODULATE (0x04)
+
+#define IDLE        (0)
+#define EL_HTR_OFF  (1)
+#define EL_HTR_ON   (2)
+#define MOD_GAS_OFF (3)
+#define MOD_GAS_ON  (4)
 
 //------------------------------------------------------------------------------
 // The text I2C_STOP_ERR_TXT is printed whenever i2c_stop() was not successful
