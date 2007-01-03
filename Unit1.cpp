@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.51  2006/11/19 10:53:55  Emile
+// The power outlet (220 V) is now shared with the modulating gas burner and
+// the electrical heating element. By setting the proper bits in the PID
+// Settings Dialog Screen, one can select which function is allocated to the
+// power outlet. If the gas burner is used, the outlet is energized when the
+// pid_output exceeds the gas burner hysteresis (also in the PID settings screen).
+// For this: the generate_IO_signals STD has been updated significantly.
+//
 // Revision 1.50  2006/11/18 23:06:37  Emile
 // - View Mash/Sparging screen is improved: time-stamps are placed when a
 //   mashing or sparging phase has started.
@@ -469,12 +477,22 @@ void __fastcall TMainForm::Restore_Settings(void)
          sp.sp_batches = max(sp.sp_batches,std.sp_idx);
          
          // Restore MLT -> Boil en HLT -> MLT time-stamps
-         for (j = 0; j <= std.sp_idx; j++)
+         for (j = 0; j <= MAX_SP-1; j++)
          {
-            strcpy(MainForm->sp.mlt2boil[j],p1[k].btime);
-            add_seconds(MainForm->sp.mlt2boil[j], 5*(p1[k].sparging_start[j] - p1[k].bline));
-            strcpy(MainForm->sp.hlt2mlt[j+1],p1[k].btime);
-            add_seconds(MainForm->sp.hlt2mlt[j+1], 5*(p1[k].sparging_start2[j] - p1[k].bline));
+            x = p1[k].sparging_start[j];
+            if (x > 0)
+            {
+               strcpy(MainForm->sp.mlt2boil[j],p1[k].btime);
+               add_seconds(MainForm->sp.mlt2boil[j], 5 * (x - p1[k].bline));
+            } // if
+            else MainForm->sp.mlt2boil[j][0] = '\0';
+            x = p1[k].sparging_start2[j];
+            if (x > 0)
+            {
+               strcpy(MainForm->sp.hlt2mlt[j+1],p1[k].btime);
+               add_seconds(MainForm->sp.hlt2mlt[j+1], 5 * (x - p1[k].bline));
+            } // if
+            else MainForm->sp.hlt2mlt[j+1][0] = '\0';
          } // for j
          // Restore other timing parameters
          x             = p1[k].eline + 1 - p1[k].start_lstd;
@@ -765,6 +783,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
    } /* if */
    print_mash_scheme_to_statusbar();
    Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
+   for (i = 0; i < sp.sp_batches; i++)
+   {
+      sp.mlt2boil[i][0] = '\0'; // empty time-stamp strings
+      sp.hlt2mlt[i][0]  = '\0';
+   } // for i
 
    try
    {
@@ -2185,11 +2208,6 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.to_xsec      = Reg->ReadInteger("TO_XSEC");
         sp.to3          = Reg->ReadInteger("TO3");
         sp.to4          = Reg->ReadInteger("TO4");
-        for (i = 0; i < sp.sp_batches; i++)
-        {
-           sp.mlt2boil[i][0] = '\0'; // empty time-stamp strings
-           sp.hlt2mlt[i][0]  = '\0';
-        } // for i
         Reg->CloseKey(); // Close the Registry
         delete Reg;
      } // if

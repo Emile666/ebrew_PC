@@ -6,6 +6,14 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.16  2006/11/18 23:06:37  Emile
+  - View Mash/Sparging screen is improved: time-stamps are placed when a
+    mashing or sparging phase has started.
+  - Read_log_file is improved: time-stamps are generated, so that old log-files
+    can be read and time-stamp information can be seen in the Mash/Sparging screen.
+  - Datagraps are set to a step-size of 1 instead of 2 (1 div = 100 seconds now).
+  - Main screen updated: Heating power is now in % and correct volumes are added.
+
   Revision 1.15  2006/02/19 13:14:35  Emile
   - Bug-fix reading logfile(). If the latest mash timer was not started yet,
     it was set to a high value (which was the linenumber in the logfile).
@@ -220,9 +228,11 @@ void calc_phases_start(FILE *fd, log_struct p[])
             // Find 1st entries of the various brewing phases
             //-----------------------------------------------
             // Mashing Phase
+            // From 2 (Fill MLT) or 3 (Mash in Progress) -> 4 (Mash Timer Running) or 13 (Mash Preheat HLT)
+            // ms_idx incremented from 13 (Mash Preheat HLT) -> 4 (Mash Timer Running)
             if ((p[log_idx].mashing_start[m_entry] == 0) &&
-                (((std == S04_MASH_TIMER_RUNNING) && (std_old == S03_MASH_IN_PROGRESS)) ||
-                 ((std == S13_MASH_PREHEAT_HLT)   && (std_old == S03_MASH_IN_PROGRESS)) ||
+                (((std == S04_MASH_TIMER_RUNNING) && (std_old <= S03_MASH_IN_PROGRESS)) ||
+                 ((std == S13_MASH_PREHEAT_HLT)   && (std_old <= S03_MASH_IN_PROGRESS)) ||
                  ((std == S04_MASH_TIMER_RUNNING) && (std_old == S13_MASH_PREHEAT_HLT))))
             {
                p[log_idx].mashing_start[m_entry] = line_nr;
@@ -376,16 +386,16 @@ void print_p_struct(int log_idx, log_struct p[])
                  p[i].btime,
                  p[i].etime);
          fprintf(f1,"%d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
-                 p[i].lms_idx,        // Last known value of ms_idx
-                 p[i].tmr_ms_idx,     // Timer value of ms_idx timer
-                 p[i].std_val,        // Last known value of std_state
-                 p[i].start_lstd,     // The start line number of the latest ebrew_std
-                 p[i].start_lmtmr,    // The start line number of the latest mash timer start
-                 p[i].lsp_idx,        // Number of Sparging cycles
-                 p[i].mashing_start[0], // Start line of Mashing
-                 p[i].sparging_start, // Start line of Sparging
-                 p[i].boil_start,     // Start line of Boiling
-                 p[i].chill_start);   // Start line of Chilling
+                 p[i].lms_idx,           // Last known value of ms_idx
+                 p[i].tmr_ms_idx,        // Timer value of ms_idx timer
+                 p[i].std_val,           // Last known value of std_state
+                 p[i].start_lstd,        // The start line number of the latest ebrew_std
+                 p[i].start_lmtmr,       // The start line number of the latest mash timer start
+                 p[i].lsp_idx,           // Number of Sparging cycles
+                 p[i].mashing_start[0],  // Start line of Mashing
+                 p[i].sparging_start[0], // Start line of Sparging
+                 p[i].boil_start,        // Start line of Boiling
+                 p[i].chill_start);      // Start line of Chilling
          fprintf(f1,"------------------------------------------------------------------\n");
       } // for
       fclose(f1);
