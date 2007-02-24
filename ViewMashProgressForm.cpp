@@ -5,6 +5,14 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2006/11/18 23:06:37  Emile
+// - View Mash/Sparging screen is improved: time-stamps are placed when a
+//   mashing or sparging phase has started.
+// - Read_log_file is improved: time-stamps are generated, so that old log-files
+//   can be read and time-stamp information can be seen in the Mash/Sparging screen.
+// - Datagraps are set to a step-size of 1 instead of 2 (1 div = 100 seconds now).
+// - Main screen updated: Heating power is now in % and correct volumes are added.
+//
 // Revision 1.7  2004/05/08 14:52:52  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -104,8 +112,8 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
    if (ViewMashProgress)
    {
       ViewMashProgress->Memo1->Lines->Clear();
-      ViewMashProgress->Memo1->Lines->Add("Mash Temp Time  PreHt Timer Timer       Time-");
-      ViewMashProgress->Memo1->Lines->Add("idx  [°C] [sec] [sec] [sec] Status      Stamp");
+      ViewMashProgress->Memo1->Lines->Add("Mash Temp Time  PreHt Timer Timer        Time-");
+      ViewMashProgress->Memo1->Lines->Add("idx  [°C] [sec] [sec] [sec] Status       Stamp");
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
       //------------------------------------------------------------------
       // Sample time of ms[] update is 1 second.
@@ -126,7 +134,7 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
          {
             strcpy(p->time_stamp, TimeToStr(Time()).c_str());
          } // if
-         sprintf(s,"%2d %5.0f %5.0f %5.0f %5.0f ",i, p->temp, p->time, x,
+         sprintf(s,"%2d %5.0f %5.0f %5.0f %5.0f  ",i, p->temp, p->time, x,
                    p->timer == NOT_STARTED ? 0.0 : p->timer);
          if (p->timer == NOT_STARTED)
          {

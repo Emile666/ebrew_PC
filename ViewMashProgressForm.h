@@ -5,6 +5,14 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2006/11/18 23:06:37  Emile
+// - View Mash/Sparging screen is improved: time-stamps are placed when a
+//   mashing or sparging phase has started.
+// - Read_log_file is improved: time-stamps are generated, so that old log-files
+//   can be read and time-stamp information can be seen in the Mash/Sparging screen.
+// - Datagraps are set to a step-size of 1 instead of 2 (1 div = 100 seconds now).
+// - Main screen updated: Heating power is now in % and correct volumes are added.
+//
 // Revision 1.5  2004/05/08 14:52:52  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -56,7 +64,7 @@
 #include <Forms.hpp>
 #include "AnimTimer.h"
 
-#define BAR_LINE "-----------------------------------------------"
+#define BAR_LINE "------------------------------------------------"
 
 //---------------------------------------------------------------------------
 class TViewMashProgress : public TForm
