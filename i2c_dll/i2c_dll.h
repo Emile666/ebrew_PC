@@ -9,6 +9,17 @@
 //           the I2C Hardware.
 // ----------------------------------------------------------------------
 // $Log$
+// Revision 1.13  2005/10/23 12:45:18  Emile
+// Several changes because of new hardware (MAX1238 instead of PCF8591):
+// Changes to i2c_dll:
+// - File reorganised into 4 layers with routines for more clarity
+// - i2c_read/i2c_write: i2c_address() call added in VELLEMAN_CARD mode
+// - i2c_address: i2c_start() call added in VELLEMAN_CARD mode
+// - Routines added: get_analog_input() and max1238_read()
+// - i2c_stop() changed into i2c_stop(enum pt_action pta) so that PortTalk
+//   can be closed or remain open
+// - init_adc() removed
+//
 // Revision 1.12  2005/08/28 22:17:41  Emile
 // - DataGrapfForm: TTimer replaced again for TAnimTimer
 // - Debug-code added for MA filter of Vmlt
@@ -54,6 +65,8 @@
 // ======================================================================
 #ifndef _I2C_DLL_H
 #define _I2C_DLL_H
+
+typedef unsigned char byte;
 
 //---------------------
 // I2C2 Error Messages

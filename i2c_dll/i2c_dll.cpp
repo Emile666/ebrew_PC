@@ -54,6 +54,17 @@
 //           The DLL is built with Borland C++ Builder 4.0.
 // ----------------------------------------------------------------------------
 // $Log$
+// Revision 1.18  2005/10/23 12:45:18  Emile
+// Several changes because of new hardware (MAX1238 instead of PCF8591):
+// Changes to i2c_dll:
+// - File reorganised into 4 layers with routines for more clarity
+// - i2c_read/i2c_write: i2c_address() call added in VELLEMAN_CARD mode
+// - i2c_address: i2c_start() call added in VELLEMAN_CARD mode
+// - Routines added: get_analog_input() and max1238_read()
+// - i2c_stop() changed into i2c_stop(enum pt_action pta) so that PortTalk
+//   can be closed or remain open
+// - init_adc() removed
+//
 // Revision 1.17  2005/03/26 13:42:01  Emile
 // - Added functionality for Velleman card. i2c_init() is changed by this!!!
 //
@@ -200,8 +211,6 @@ byte fscl_values[] = {0x1F, 0x1B, 0x17, 0x13, 0x03, 0x1E, 0x1A,
 // Time-out value for wait_byte() routine, in pauze() ticks
 //---------------------------------------------------------
 #define TO_VAL (100)
-
-typedef unsigned char byte;
 
 #define STRLEN (50)
 
@@ -1440,7 +1449,7 @@ extern "C" __declspec(dllexport) int __stdcall eewrite(int addr, byte *p, byte n
    x    = (byte)(addr & 0x0ff);
    res |= i2c_write(FM24C08_BASE,&x,1); // write byte address
    res |= i2c_write(FM24C08_BASE,p,nr); // write data
-   res |= i2c_stop(PT_CLOSE);  // Gen. stop condition = start write to EEPROM
+   res |= i2c_stop(PT_OPEN);  // Gen. stop condition = start write to EEPROM
    res |= i2c_start(); // Gen. start condition again
    return res;
 } // eewrite()
