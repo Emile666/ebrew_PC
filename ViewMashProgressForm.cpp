@@ -5,6 +5,9 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2007/02/24 19:14:37  Emile
+// Additional space added in Mash Progress screen.
+//
 // Revision 1.8  2006/11/18 23:06:37  Emile
 // - View Mash/Sparging screen is improved: time-stamps are placed when a
 //   mashing or sparging phase has started.
@@ -91,6 +94,7 @@ TViewMashProgress *ViewMashProgress;
 __fastcall TViewMashProgress::TViewMashProgress(TComponent* Owner)
         : TForm(Owner)
 {
+   LongTimeFormat = "hh:mm:ss"; // global var. used by TimeToStr() function
 }
 //---------------------------------------------------------------------------
 
@@ -133,6 +137,7 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
          if ((p->timer != NOT_STARTED) && (strlen(p->time_stamp) == 0))
          {
             strcpy(p->time_stamp, TimeToStr(Time()).c_str());
+
          } // if
          sprintf(s,"%2d %5.0f %5.0f %5.0f %5.0f  ",i, p->temp, p->time, x,
                    p->timer == NOT_STARTED ? 0.0 : p->timer);

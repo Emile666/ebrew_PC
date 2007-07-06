@@ -5,6 +5,12 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.8  2005/03/26 13:53:21  Emile
+  - During State "Mash Preheat" pump is set to ON (again)
+  - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
+    variables are introduced (BURNER_HHYST and BURNER_LHYST)
+  - Various screens a little enlarged (no scrollbars visible anymore)
+
   Revision 1.7  2004/05/13 20:51:00  emile
   - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
     timing is now reset after 100 loops (5 seconds)
@@ -72,10 +78,18 @@ extern "C" {
 #define TEN_SECONDS    (200)
 #define FIVE_SECONDS   (100)
 #define ONE_SECOND      (20)
-#define T_50MSEC  (50)   // Period time of TTimer in msec.
+// Period time of TTimer in msec.
+#define T_50MSEC        (50)
+#define PI             (3.141592654)
+#define NODF            (1)
 
-#define GMA_HLIM (100.0) // PID controller upper limit [%]
-#define GMA_LLIM   (0.0) // PID controller lower limit [%]
+// PID controller upper & lower limit [%]
+#define GMA_HLIM (100.0)
+#define GMA_LLIM   (0.0)
+
+// Constants needed for system identification
+typedef double vector[6];
+typedef double matrix[6][6];
 
 typedef struct _pid_params
 {
@@ -99,6 +113,25 @@ typedef struct _pid_params
    double pd; // debug
 } pid_params; // struct pid_params
 
+//------------------------------------------------------------------
+// This struct contains the estimated values for the PID controller.
+// These are the optimum settings for the Takahashi controller and
+// are calculated from the system identification function sys_id()
+// and calc_ultimate_gain_period()
+//------------------------------------------------------------------
+typedef struct _sys_id_params
+{
+   int    N;   // order N for system identification and parameter estimation
+   double kpu; // Ultimate gain
+   double tu;  // Ultimate period
+   double kc;  // Controller gain
+   double ti;  // Time-constant for I action
+   double td;  // Time-constant for D action
+   double kr;  // Kr value for PID Takahashi controller
+   double ki;  // ki value for PID Takahashi controller
+   double kd;  // kd value for PID Takahashi controller
+} sys_id_params; // struct sys_id_params
+
 //--------------------
 // Function Prototypes
 //--------------------
@@ -110,6 +143,22 @@ void init_pid3(pid_params *p);
 void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg);
 void init_pid4(pid_params *p);
 void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg);
+void init_pid5(pid_params *p, int N);
+
+void   sys_id(double uk, double yk, int N, int nodf);
+int    calc_ultimate_gain_geriod(sys_id_params *p, double ts);
+void   calc_pid_parameters(sys_id_params *p, double ts);
+void   pid_reg5(double xk, double *yk, double tset, pid_params *p, int vrg,
+                sys_id_params *psys_id, int st);
+
+double vxv2s(vector vec1, vector vec2, int N);
+void   vxv2m(vector vec1, vector vec2, matrix *m, int N);
+void   vxm2v(vector vec1, matrix m1, vector *vecr, int N);
+void   mxv2v(matrix m1, vector vec1, vector *vecr, int N);
+void   vxs2v(vector *vec, double x, int N);
+void   vav2v(vector *vec1, vector vec2, int N);
+void   mxs2m(matrix *m, double x, int N);
+void   mam2m(matrix *m1, matrix m2, int N);
 
 #ifdef __cplusplus
 };

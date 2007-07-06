@@ -6,6 +6,11 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.17  2007/01/03 13:45:49  Emile
+  - Bugfix: when reading a log-file, the first mash timestamp was not recognised.
+  - Bugfix: Sparging timestamps were erased when a sparging parameter was updated.
+  - Bugfix: sparging_start was printed to log_structp.txt instead of sparging_start[0]
+
   Revision 1.16  2006/11/18 23:06:37  Emile
   - View Mash/Sparging screen is improved: time-stamps are placed when a
     mashing or sparging phase has started.
@@ -171,6 +176,58 @@
                phase_start = line_nr;                            \
             } /* if */
 
+double diff_seconds(char *s1, char *s2)
+/*------------------------------------------------------------------
+  Purpose  : This function calculates the number of seconds difference
+             between the two time strings
+  Variables:
+        s1 : Time-string 1 (hh:mm:ss)
+        s2 : Time-string 2 (hh:mm:ss)
+  Returns  : the number of seconds difference
+  ------------------------------------------------------------------*/
+{
+   char tmp[50];
+   char hour[10];
+   char min[10];
+   char sec[10];
+   unsigned int hi1,mi1,si1;
+   unsigned int hi2,mi2,si2;
+   char *p;
+
+   strcpy(tmp,s1); // copy string into temp. string
+   p = strtok(tmp,":");
+   if (p == NULL) return 0.0;
+   else hi1 = atoi(p);
+   p = strtok(NULL,":");
+   if (p == NULL) return 0.0;
+   else mi1 = atoi(p);
+   p = strtok(NULL,"\0");
+   if (p == NULL) return 0.0;
+   else si1 = atoi(p);
+
+   strcpy(tmp,s2); // copy string into temp. string
+   p = strtok(tmp,":");
+   if (p == NULL) return 0.0;
+   else hi2 = atoi(p);
+   p = strtok(NULL,":");
+   if (p == NULL) return 0.0;
+   else mi2 = atoi(p);
+   p = strtok(NULL,"\0");
+   if (p == NULL) return 0.0;
+   else si2 = atoi(p);
+
+   si1 += 60 * mi1 + 3600 * hi1; // convert to seconds
+   si2 += 60 * mi2 + 3600 * hi2; // convert to seconds
+   if (si1 > si2)
+   {
+      return (double)(si1 - si2);
+   }
+   else
+   {
+      return (double)(si2 - si1);
+   } // else
+} // diff_seconds
+
 void calc_phases_start(FILE *fd, log_struct p[])
 /*------------------------------------------------------------------
   Purpose  : This function finds, from the log file, the following:
@@ -271,6 +328,8 @@ void calc_phases_start(FILE *fd, log_struct p[])
             p[log_idx].lms_idx = atoi(phlp);
             phlp = strtok(NULL,COLON); /* next value is std_state */
             p[log_idx].std_val = atoi(phlp);
+            p[log_idx].time_period = diff_seconds(p[log_idx].etime,p[log_idx].btime);
+            p[log_idx].time_period /= (p[log_idx].eline - p[log_idx].bline);
             log_idx++;    /* to next log entry */
             m_entry  = 0; /* reset mash entry */
             s1_entry = 0; /* reset sparging index */
@@ -545,11 +604,24 @@ int decode_log_file(FILE *fd, log_struct p[])
       }
       else
       {
-         //--------------------------------------------------------------
-         // The latest mash timer was running.
-         // Estimate the time for the crash + rebooting at 4 * 5 seconds.
-         //--------------------------------------------------------------
-         p[i].tmr_ms_idx = 5 * (p[i].eline + 1 + 4 - p[i].start_lmtmr);
+         if (p[i].mashing_start[p[i].lms_idx] > 0)
+         {
+            //-------------------------------------------------------------
+            // lms_idx is the highest mash-index found in the log-entry
+            // If mashing_start[lms_idx] is > 0, then the timer was running
+            //                                   at the time of the crash.
+            // The latest mash timer was running.
+            // Estimate the time for the crash + rebooting at 4 * 5 seconds.
+            //--------------------------------------------------------------
+            p[i].tmr_ms_idx = (int)(p[i].time_period * (p[i].eline + 1 + 4 - p[i].start_lmtmr));
+         } // if
+         else
+         {
+            //--------------------------------------------------------------
+            // If = 0, then heating to the next temp. was in progress
+            //-------------------------------------------------------------
+            p[i].tmr_ms_idx = NOT_STARTED;
+         } // else
       } // else
    } // for
    print_p_struct(log_idx,p); // Debug: print p struct to a file

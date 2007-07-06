@@ -6,6 +6,14 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.16  2006/11/18 23:06:37  Emile
+// - View Mash/Sparging screen is improved: time-stamps are placed when a
+//   mashing or sparging phase has started.
+// - Read_log_file is improved: time-stamps are generated, so that old log-files
+//   can be read and time-stamp information can be seen in the Mash/Sparging screen.
+// - Datagraps are set to a step-size of 1 instead of 2 (1 div = 100 seconds now).
+// - Main screen updated: Heating power is now in % and correct volumes are added.
+//
 // Revision 1.15  2006/02/19 13:14:35  Emile
 // - Bug-fix reading logfile(). If the latest mash timer was not started yet,
 //   it was set to a high value (which was the linenumber in the logfile).
@@ -171,6 +179,7 @@ typedef struct _log_struct
    unsigned int  sparging_start2[MAX_SP]; /* Start line of Sparging */
    unsigned int  boil_start;     /* Start line of Boiling */
    unsigned int  chill_start;    /* Start line of Chilling */
+   double        time_period;    /* Time [sec.] between 2 lines in the log-file */
 } log_struct;
 
 typedef struct _maisch_schedule

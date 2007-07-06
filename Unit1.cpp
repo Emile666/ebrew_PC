@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.52  2007/01/03 13:45:49  Emile
+// - Bugfix: when reading a log-file, the first mash timestamp was not recognised.
+// - Bugfix: Sparging timestamps were erased when a sparging parameter was updated.
+// - Bugfix: sparging_start was printed to log_structp.txt instead of sparging_start[0]
+//
 // Revision 1.51  2006/11/19 10:53:55  Emile
 // The power outlet (220 V) is now shared with the modulating gas burner and
 // the electrical heating element. By setting the proper bits in the PID
@@ -456,9 +461,12 @@ void __fastcall TMainForm::Restore_Settings(void)
          std.ms_idx       = p1[k].lms_idx;
          for (j = 0; j <= std.ms_idx; j++)
          {
-            ms[j].timer      = ms[j].time; // set previous timers to time-out
-            strcpy(ms[j].time_stamp, p1[k].btime);
-            add_seconds(ms[j].time_stamp, 5*(p1[k].mashing_start[j] - p1[k].bline));
+            if (p1[k].mashing_start[j] > p1[k].bline)
+            {
+               ms[j].timer      = ms[j].time; // set previous timers to time-out
+               strcpy(ms[j].time_stamp, p1[k].btime);
+               add_seconds(ms[j].time_stamp, (int)(p1[k].time_period*(p1[k].mashing_start[j] - p1[k].bline)));
+            } // if
          } // for j
          if (!p1[k].sparging_start[0])
          {  //-------------------------------------------------------------------
@@ -483,14 +491,14 @@ void __fastcall TMainForm::Restore_Settings(void)
             if (x > 0)
             {
                strcpy(MainForm->sp.mlt2boil[j],p1[k].btime);
-               add_seconds(MainForm->sp.mlt2boil[j], 5 * (x - p1[k].bline));
+               add_seconds(MainForm->sp.mlt2boil[j], (int)(p1[k].time_period * (x - p1[k].bline)));
             } // if
             else MainForm->sp.mlt2boil[j][0] = '\0';
             x = p1[k].sparging_start2[j];
             if (x > 0)
             {
                strcpy(MainForm->sp.hlt2mlt[j+1],p1[k].btime);
-               add_seconds(MainForm->sp.hlt2mlt[j+1], 5 * (x - p1[k].bline));
+               add_seconds(MainForm->sp.hlt2mlt[j+1], (int)(p1[k].time_period * (x - p1[k].bline)));
             } // if
             else MainForm->sp.hlt2mlt[j+1][0] = '\0';
          } // for j
@@ -1259,7 +1267,7 @@ void __fastcall TMainForm::exit_ebrew(void)
       return;
    } // catch
    Application->Terminate(); // exit program
-} //  TMainForm::MenuFileExitClick()
+} //  TMainForm::exit_ebrew()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
@@ -1452,7 +1460,7 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                // New I2C HW Base Address or SCL prescaler was changed,
                // call i2c_stop() and init I2C Bus communication again.
                //--------------------------------------------------------
-               if (i2c_stop(PT_CLOSE) != I2C_NOERR)
+               if (i2c_stop(PT_OPEN) != I2C_NOERR)
                {  // i2c bus locked, i2c_stop() did not work
                   MessageBox(NULL,I2C_STOP_ERR_TXT,"ERROR",MB_OK);
                   exit_ebrew(); // Exit ebrew program
