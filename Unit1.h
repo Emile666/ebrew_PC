@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.33  2006/11/19 10:53:55  Emile
+// The power outlet (220 V) is now shared with the modulating gas burner and
+// the electrical heating element. By setting the proper bits in the PID
+// Settings Dialog Screen, one can select which function is allocated to the
+// power outlet. If the gas burner is used, the outlet is energized when the
+// pid_output exceeds the gas burner hysteresis (also in the PID settings screen).
+// For this: the generate_IO_signals STD has been updated significantly.
+//
 // Revision 1.32  2006/11/18 23:06:37  Emile
 // - View Mash/Sparging screen is improved: time-stamps are placed when a
 //   mashing or sparging phase has started.
@@ -345,10 +353,12 @@
 #define MOD_GAS_OFF (3)
 #define MOD_GAS_ON  (4)
 
+#define max(a, b)  (((a) > (b)) ? (a) : (b))
+
 //------------------------------------------------------------------------------
 // The text I2C_STOP_ERR_TXT is printed whenever i2c_stop() was not successful
 //------------------------------------------------------------------------------
-#define I2C_STOP_ERR_TXT "i2c_stop() not successful: Cycle power Off -> On, then press OK button"
+#define I2C_STOP_ERR_TXT "i2c_stop() was not succesful: 'Yes' to exit program, 'No' to continue"
 
 typedef struct _swfx_struct
 {
@@ -460,6 +470,7 @@ private:	// User declarations
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
         void __fastcall Restore_Settings(void);
+        int  __fastcall try_i2c_stop(void);
         void __fastcall exit_ebrew(void);
         void __fastcall Reset_I2C_Bus(int i2c_bus_id, int err);
         void __fastcall Generate_IO_Signals(void);
@@ -519,6 +530,7 @@ public:		// User declarations
         TDateTime       dt_time_switch;  // object holding date and time
         volume_struct   volumes;         // Struct for Volumes
         bool            burner_on;       // true = gas burner is on
+        bool            i2c_hw_scan_req; // true = check I2C HW devices
         char            *ebrew_revision; // contains CVS revision number
         __fastcall TMainForm(TComponent* Owner);
 };

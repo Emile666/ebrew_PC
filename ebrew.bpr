@@ -42,8 +42,8 @@ USERDEFINES =
 SYSDEFINES = NO_STRICT
 # ---------------------------------------------------------------------------
 CFLAG1 = -Ii2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Lib\tiwc4 -Od -Hc \
-  -H=$(BCB)\lib\vcl40.csm -wstv -wstu -w-par -wnod -w-inl -Ve -r- -a8 -4 -k -y -v \
-  -vi- -c -b- -Vx -tW -tWM -D$(SYSDEFINES);$(USERDEFINES)
+  -H=$(BCB)\lib\vcl40.csm -wstv -wstu -w-pch -w-par -wnod -w-inl -wdef -w-asc -Ve \
+  -r- -a8 -4 -k -y -v -vi- -c -b- -Vx -tW -tWM -D$(SYSDEFINES);$(USERDEFINES)
 PFLAGS = -Ui2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Lib\tiwc4;$(BCB)\Projects\Lib;$(DEBUGLIBPATH) \
   -Ii2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;$(BCB)\Lib\tiwc4 -N2O -N0O -$YD \
   -$W -$O- -v -JPHNE -M
@@ -65,7 +65,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=1
 Release=0
-Build=78
+Build=82
 Debug=0
 PreRelease=0
 Special=0
@@ -77,7 +77,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=de Boezem
 FileDescription=ebrew automates the HERMS home-brewery, web-site: www.vandelogt.nl
-FileVersion=1.1.0.78
+FileVersion=1.1.0.82
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=

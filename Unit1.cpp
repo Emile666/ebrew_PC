@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.53  2007/07/06 22:23:01  Emile
+// - The real time between two lines from a log-file is now used instead of a
+//   fixed 5 sec. time when reading a log-file.
+// - Leading-zero bug solved in Mash Progress screen
+// - i2c_stop() only called with PT_CLOSE in case of exit of program
+// - System Identification library functions added (but not used yet).
+//
 // Revision 1.52  2007/01/03 13:45:49  Emile
 // - Bugfix: when reading a log-file, the first mash timestamp was not recognised.
 // - Bugfix: Sparging timestamps were erased when a sparging parameter was updated.
@@ -459,7 +466,7 @@ void __fastcall TMainForm::Restore_Settings(void)
          // Restore Mashing parameters
          //---------------------------
          std.ms_idx       = p1[k].lms_idx;
-         for (j = 0; j <= std.ms_idx; j++)
+         for (j = 0; j < MAX_MS; j++)
          {
             if (p1[k].mashing_start[j] > p1[k].bline)
             {
@@ -467,6 +474,11 @@ void __fastcall TMainForm::Restore_Settings(void)
                strcpy(ms[j].time_stamp, p1[k].btime);
                add_seconds(ms[j].time_stamp, (int)(p1[k].time_period*(p1[k].mashing_start[j] - p1[k].bline)));
             } // if
+            else
+            {  // mash_time not started yet
+               ms[j].timer         = NOT_STARTED;
+               ms[j].time_stamp[0] = '\0';
+            } // else
          } // for j
          if (!p1[k].sparging_start[0])
          {  //-------------------------------------------------------------------
@@ -504,7 +516,7 @@ void __fastcall TMainForm::Restore_Settings(void)
          } // for j
          // Restore other timing parameters
          x             = p1[k].eline + 1 - p1[k].start_lstd;
-         x            *= 5;             // Log-file -> 5 sec.: STD called -> 1 sec.
+         x            *= p1[k].time_period; // Log-file -> 5 sec.: STD called -> 1 sec.
          switch (std.ebrew_std) // init. timers for states that have timers
          {
             case S05_SPARGING_REST:        if (std.sp_idx > 0)
@@ -533,6 +545,29 @@ void __fastcall TMainForm::Restore_Settings(void)
    delete Dlg; // prevent memory leaks
 } // TMainForm::Restore_Settings()
 //---------------------------------------------------------------------------
+
+int __fastcall TMainForm::try_i2c_stop(void)
+/*------------------------------------------------------------------
+  Purpose  : This function tries to issue an I2C stop command.
+             If it fails, a dialog screen opens and asks the user
+             to continue or exit the program.
+  Variables: -
+  Returns  : 1 = reset successful, 0 = reset not successful
+  ------------------------------------------------------------------*/
+{
+   int rt; // return value from MessageBox
+
+   if (i2c_stop(PT_OPEN) != I2C_NOERR) // Added 070707
+   {  // i2c bus locked, i2c_stop() did not work
+      rt = MessageBox(NULL,I2C_STOP_ERR_TXT,"ERROR: Exit Ebrew Program?",MB_YESNO | MB_ICONQUESTION);
+      if (rt == IDYES)
+      {
+         exit_ebrew(); // Exit ebrew program
+      }
+      return 0; // not successful
+   } // if
+   return 1; // reset was successful
+} // TMainForm::try_i2c_stop()
 
 void __fastcall TMainForm::Start_I2C_Communication(int known_status)
 /*------------------------------------------------------------------
@@ -640,6 +675,7 @@ void __fastcall TMainForm::Start_I2C_Communication(int known_status)
                        }
                        break; /* NO_ERR */
      } // switch
+     try_i2c_stop(); // ignore return code
    } // else
 } // TMainForm::Start_I2C_Communication()
 //---------------------------------------------------------------------------
@@ -780,22 +816,25 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //----------------------------------------------------------------------
    Start_I2C_Communication(known_hw_devices);
 
-   //-------------------------------------
+   //--------------------------------------------------------------------------
    // Read Mash Scheme for maisch.sch file
-   // Mash scheme is used in the STD
-   // Sample time of STD is 1 second
-   //-------------------------------------
-   if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,INIT_TIMERS))
+   // Mash scheme is used in the STD, sample time of STD is 1 second
+   // Init mash. timers only when doing a power-up, not after an I2C reset
+   //--------------------------------------------------------------------------
+   if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,power_up_flag ? INIT_TIMERS : NO_INIT_TIMERS))
    {
        MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
    } /* if */
    print_mash_scheme_to_statusbar();
    Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
-   for (i = 0; i < sp.sp_batches; i++)
-   {
-      sp.mlt2boil[i][0] = '\0'; // empty time-stamp strings
-      sp.hlt2mlt[i][0]  = '\0';
-   } // for i
+   if (power_up_flag)
+   {  // only reset time-stamps when doing a power-up, not after an I2C reset
+      for (i = 0; i < sp.sp_batches; i++)
+      {
+         sp.mlt2boil[i][0] = '\0'; // empty time-stamp strings
+         sp.hlt2mlt[i][0]  = '\0';
+      } // for i
+   } // if
 
    try
    {
@@ -872,11 +911,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //----------------------------------
    // We came all the way! Start Timers
    //----------------------------------
-   T50msec->Enabled                       = true; // start Interrupt Timer
-   ShowDataGraphs->GraphTimer->Enabled    = true; // Start Graph Update timer
-   ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
-   PID_RB->Enabled                        = true; // Enable PID Controller Radio-buttons
-   time_switch                            = 0;    // Time switch disabled at power-up
+   if (T50msec)          T50msec->Enabled                       = true; // start Interrupt Timer
+   if (ShowDataGraphs)   ShowDataGraphs->GraphTimer->Enabled    = true; // Start Graph Update timer
+   if (ViewMashProgress) ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
+   PID_RB->Enabled = true; // Enable PID Controller Radio-buttons
+   time_switch     = 0;    // Time switch disabled at power-up
    delete Reg; // Delete Registry object to prevent memory leak
 } // Main_Initialisation()
 //---------------------------------------------------------------------------
@@ -1169,7 +1208,7 @@ void __fastcall TMainForm::exit_ebrew(void)
    char   s[80];   // temp. string for error messages
    adda_t adc;     // struct containing 4 ADC values + DA value
 
-   T50msec->Enabled = false; // Disable Interrupt Timer
+   if (T50msec) T50msec->Enabled = false; // Disable Interrupt Timer
    if (ShowDataGraphs)
    {
       ShowDataGraphs->GraphTimer->Enabled = false; // Stop Graph Update timer
@@ -1460,15 +1499,10 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                // New I2C HW Base Address or SCL prescaler was changed,
                // call i2c_stop() and init I2C Bus communication again.
                //--------------------------------------------------------
-               if (i2c_stop(PT_OPEN) != I2C_NOERR)
-               {  // i2c bus locked, i2c_stop() did not work
-                  MessageBox(NULL,I2C_STOP_ERR_TXT,"ERROR",MB_OK);
-                  exit_ebrew(); // Exit ebrew program
-               }
-               else
+               if (try_i2c_stop() == 1) // 1 = successful
                {
                   Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
-               } // else
+               } // if
             } // if
          } // if
          Reg->CloseKey(); // Close the Registry
@@ -1528,12 +1562,7 @@ void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
                          break;
    }
    sprintf(tmp_str,"%s while accessing I2C device 0x%2x",err_txt,i2c_bus_id);
-   if (i2c_stop(PT_OPEN) != I2C_NOERR)
-   {  // i2c bus locked, i2c_stop() did not work
-      MessageBox(NULL,I2C_STOP_ERR_TXT,tmp_str,MB_OK);
-      exit_ebrew(); // Exit ebrew program
-   }
-   else
+   if (try_i2c_stop() == 1) // 1 = successful
    {
       if (cb_i2c_err_msg)
       {
@@ -2100,6 +2129,15 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
          err = WriteIOByte((byte)(std_out & 0x00FE),MSB_IO);
          if (err) Reset_I2C_Bus(DIG_IO_MSB_BASE,err);
       } // if
+   } // else if
+
+   //--------------------------------------------------------------------------
+   // TIME-SLICE: Do a complete scan of the I2C bus (within a second)
+   //--------------------------------------------------------------------------
+   else if ((tmr.pid_tmr % ONE_SECOND == 13) && (i2c_hw_scan_req))
+   {
+      Start_I2C_Communication(-1); // print all I2C devices found
+      i2c_hw_scan_req = false;
    } // else if
 
    //--------------------------------------------------------------------------
@@ -2673,22 +2711,10 @@ void __fastcall TMainForm::FormCreate(TObject *Sender)
 void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
 {
    //---------------------------------------------------------------------------
-   // Stop all I2C bus communication, then restart and print all devices found.
+   // Restart I2C bus communication and print all devices found.
+   // This is done in the main timer interrupt to avoid I2C timing problems.
    //---------------------------------------------------------------------------
-   if (i2c_stop(PT_OPEN) != I2C_NOERR)
-   {  // i2c bus locked, i2c_stop() did not work
-      Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
-      exit_ebrew(); // Exit ebrew program
-   }
-   else
-   {
-      Start_I2C_Communication(-1); // print all I2C devices found
-      if (i2c_stop(PT_OPEN) != I2C_NOERR)
-      {  // i2c bus locked, i2c_stop() did not work
-         Application->MessageBox(I2C_STOP_ERR_TXT,"ERROR",MB_OK);
-         exit_ebrew(); // Exit ebrew program
-      }
-   } // else
+   i2c_hw_scan_req = true;
 } // MenuView_I2C_HW_DevicesClick()
 //---------------------------------------------------------------------------
 
