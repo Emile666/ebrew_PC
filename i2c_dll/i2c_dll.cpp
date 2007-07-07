@@ -54,6 +54,9 @@
 //           The DLL is built with Borland C++ Builder 4.0.
 // ----------------------------------------------------------------------------
 // $Log$
+// Revision 1.19  2007/07/06 22:25:19  Emile
+// *** empty log message ***
+//
 // Revision 1.18  2005/10/23 12:45:18  Emile
 // Several changes because of new hardware (MAX1238 instead of PCF8591):
 // Changes to i2c_dll:
@@ -822,7 +825,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_init(int  address,
 
    win_nt    = control & WIN_XP; // TRUE = Windows NT, 2000, XP
 
-   if (win_nt && (OpenPortTalk() == -1))
+   if (win_nt && (OpenPortTalk() == (unsigned char)(-1)))
    {
       return I2C_PT;
    } // if
@@ -1150,7 +1153,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_stop(enum pt_action pta)
        err = wait_byte();   // wait for on-going actions
        if (err != I2C_NOERR)
        {
-          ClosePortTalk();
+          if (pta == PT_CLOSE) ClosePortTalk(); // Added 070707
           return err;
        } // if
        if ((ic_adr & RWb) == RWb) // Is slave still transmitting?
@@ -1158,7 +1161,7 @@ extern "C" __declspec(dllexport) int __stdcall i2c_stop(enum pt_action pta)
           err = terminate_read(); // If so, terminate transmission
           if (err != I2C_NOERR)
           {
-             ClosePortTalk();
+             if (pta == PT_CLOSE) ClosePortTalk(); // Added 070707
              return err;
           } // if
        } // if
@@ -1239,22 +1242,24 @@ extern "C" __declspec(dllexport) int __stdcall set_led(int number, int dp, int w
    //-----------------------
    // Write to LED Display
    //-----------------------
+   r1 = i2c_start(); // Added 070707
    switch(which_led)
    {
-      case 1 : r1  = i2c_address(LED1_BASE); //Put LED1 address on I2C bus
+      case 1 : r1 |= i2c_address(LED1_BASE); //Put LED1 address on I2C bus
                r1 |= i2c_write(LED1_BASE,buffer,bidx); // write buffer to LED
                break;
-      case 2 : r1  = i2c_address(LED2_BASE); //Put LED2 address on I2C bus
+      case 2 : r1 |= i2c_address(LED2_BASE); //Put LED2 address on I2C bus
                r1 |= i2c_write(LED2_BASE,buffer,bidx); // write buffer to LED
                break;
-      case 3 : r1  = i2c_address(LED3_BASE); //Put LED3 address on I2C bus
+      case 3 : r1 |= i2c_address(LED3_BASE); //Put LED3 address on I2C bus
                r1 |= i2c_write(LED3_BASE,buffer,bidx); // write buffer to LED
                break;
-      case 4 : r1  = i2c_address(LED4_BASE); //Put LED4 address on I2C bus
+      case 4 : r1 |= i2c_address(LED4_BASE); //Put LED4 address on I2C bus
                r1 |= i2c_write(LED4_BASE,buffer,bidx); // write buffer to LED
                break;
       default: break;
    } // switch
+   r1 |= i2c_stop(PT_OPEN); // Added 070707
    return r1; // return-value
 } // set_led()
 
@@ -1378,7 +1383,8 @@ extern "C" __declspec(dllexport) int __stdcall read_adc(adda_t *p)
    int  r1;        // Result from write()
    byte buffer[ADDA_BUF+1]; // buffer to read from AD/DA converter
 
-   r1       = i2c_address(ADDA_BASE); // Put ADC address on I2C bus
+   r1       = i2c_start(); // Added 070707
+   r1      |= i2c_address(ADDA_BASE); // Put ADC address on I2C bus
    to_ad[0] = ADDA_CONTROL_BYTE;      // Next byte should be a control byte
    to_ad[1] = p->dac;                 // Value for DA Converter
    r1   |= i2c_write(ADDA_BASE,to_ad,2); // send control byte + DAC value
@@ -1387,6 +1393,7 @@ extern "C" __declspec(dllexport) int __stdcall read_adc(adda_t *p)
    // Now we switch to read mode.
    //-----------------------------
    r1 |= i2c_read(ADDA_BASE | RWb,buffer,ADDA_BUF); // read dummy byte+AD1+AD2+AD3+AD4
+   r1 |= i2c_stop(PT_OPEN); // Added 070707
 
    p->ad1 = buffer[1]; // converted ADC1 value
    p->ad2 = buffer[2]; // converted ADC2 value
@@ -1406,16 +1413,18 @@ extern "C" __declspec(dllexport) int __stdcall WriteIOByte(byte value, byte LorH
 {
    int  res;   // return result
 
+   res = i2c_start(); // Added 070707
    if (LorH == LSB_IO)
    {
-      res = i2c_address(DIG_IO_LSB_BASE);
+      res |= i2c_address(DIG_IO_LSB_BASE);
       res |= i2c_write(DIG_IO_LSB_BASE,&value,1);
    }
    else
    {
-      res = i2c_address(DIG_IO_MSB_BASE);
+      res |= i2c_address(DIG_IO_MSB_BASE);
       res |= i2c_write(DIG_IO_MSB_BASE,&value,1);
    }
+   res |= i2c_stop(PT_OPEN); // Added 070707
    return res;
 } // WriteIOByte()
 
@@ -1445,12 +1454,12 @@ extern "C" __declspec(dllexport) int __stdcall eewrite(int addr, byte *p, byte n
    // Shift them to bit pos. 2 and 1 and add this to the address
    x    = ((addr >> 7) & 0x06);
    x   |= FM24C08_BASE;
+   res  = i2c_start();        // Added 070707
    res |= i2c_address(x);     // select proper page block in eeprom
    x    = (byte)(addr & 0x0ff);
    res |= i2c_write(FM24C08_BASE,&x,1); // write byte address
    res |= i2c_write(FM24C08_BASE,p,nr); // write data
    res |= i2c_stop(PT_OPEN);  // Gen. stop condition = start write to EEPROM
-   res |= i2c_start(); // Gen. start condition again
    return res;
 } // eewrite()
 
@@ -1482,10 +1491,12 @@ extern "C" __declspec(dllexport) int __stdcall eeread(int addr, byte *p, byte nr
    // Shift them to bit pos. 2 and 1 and add this to the address
    x    = ((addr >> 7) & 0x06);
    x   |= FM24C08_BASE;
+   res  = i2c_start();        // Added 070707
    res |= i2c_address(x);     // select proper page block in eeprom
    x    = (byte)(addr & 0x0ff);
    res |= i2c_write(FM24C08_BASE,&x,1);      // write byte address
    res |= i2c_read(FM24C08_BASE | RWb,p,nr); // read data
+   res |= i2c_stop(PT_OPEN);                 // Gen. stop condition, Added 070707
    return res;
 } // eeread()
 
@@ -1509,30 +1520,32 @@ extern "C" __declspec(dllexport) double __stdcall lm92_read(byte dvc)
    int    sign;              // sign of temperature
    double temp;              // the temp. from the LM92 as a double
 
+   res  = i2c_start();        // Added 070707
    if (dvc == 0)
    {
-      res  = i2c_address(LM92_1_BASE);
+      res  |= i2c_address(LM92_1_BASE);
       if (res == I2C_NOERR)
       {
-         res = i2c_read(LM92_1_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
+         res |= i2c_read(LM92_1_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
       }
    }
    else if (dvc == 1)
    {
-      res  = i2c_address(LM92_2_BASE);
+      res  |= i2c_address(LM92_2_BASE);
       if (res == I2C_NOERR)
       {
-         res = i2c_read(LM92_2_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
+         res |= i2c_read(LM92_2_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
       }
    } // else
    else
    {
-      res  = i2c_address(LM92_3_BASE);
+      res  |= i2c_address(LM92_3_BASE);
       if (res == I2C_NOERR)
       {
-         res = i2c_read(LM92_3_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
+         res |= i2c_read(LM92_3_BASE | RWb,buffer,2); // read 2 bytes from LM92 register 0
       }
    } // else
+   res |= i2c_stop(PT_OPEN);  // Gen. stop condition, Added 070707
 
    if (res != I2C_NOERR)
    {
@@ -1583,7 +1596,8 @@ extern "C" __declspec(dllexport) int __stdcall max1238_read(byte dvc)
    }
    else
    {
-      res  = i2c_address(MAX1238_BASE);
+      res   = i2c_start();        // Added 070707
+      res  |= i2c_address(MAX1238_BASE);
       if (res == I2C_NOERR)
       {
          //---------------------------------------------------------
@@ -1599,9 +1613,8 @@ extern "C" __declspec(dllexport) int __stdcall max1238_read(byte dvc)
          res = i2c_write(MAX1238_BASE,buffer,2);
          if (res == I2C_NOERR)
          {
-            //i2c_start();
-            //res = i2c_address(MAX1238_BASE | RWb);
-            res = i2c_read(MAX1238_BASE | RWb,buffer,2); // read 2 bytes from MAX1238
+            res  = i2c_read(MAX1238_BASE | RWb,buffer,2); // read 2 bytes from MAX1238
+            res |= i2c_stop(PT_OPEN);  // Gen. stop condition, Added 070707
             if (res == I2C_NOERR)
             {
                res = buffer[0] & 0x0F; // first 4 bits are always 1, set to 0
