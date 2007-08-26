@@ -5,6 +5,20 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2005/11/12 22:19:38  Emile
+// - PID Output (Gamma) routing added. It is now possible to send the output
+//   of the PID controller to 3 devices: 1) electrical heating element,
+//   2) Non-modulating (standard) gas-burner, 3) modulating gas-burner.
+// - PID Dialog changed, checkboxes added.
+// - New registry variables: CB_PID_OUT, DAC_A, DAC_B
+// - The conversion from gamma to a value for the DA-output is done with
+//   DAC_A and DAC_B. The DA-output is used to generate the PWM signal for
+//   the modulating gas-burner.
+// - Led visibility decreased.
+// - Bug-fix: Check_HW_Devices screen appeared twice when checking I2C HW. Fixed.
+// - Displaying of Vhlt, Vmlt and Ttriac on LED-displays changed (less resolution).
+// - Network routines removed.
+//
 // Revision 1.2  2005/10/23 12:44:38  Emile
 // Several changes because of new hardware (MAX1238 instead of PCF8591):
 // - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
@@ -54,7 +68,7 @@ __published:	// IDE-managed Components
         TLabel *Label8;
         TEdit *Vhlt_init_Edit;
         TLabel *Label3;
-        TUpDown *UpDown4;
+        TUpDown *UD_MA_VMLT;
         TEdit *NMA_edit;
         TLabel *Label1;
         TLabel *Label2;
@@ -91,8 +105,16 @@ __published:	// IDE-managed Components
         TLabel *Label20;
         TEdit *Vhlt_b;
         TLabel *Label21;
-        TUpDown *UpDown1;
+        TUpDown *UD_MA_VHLT;
         TEdit *MA_Vhlt;
+        TLabel *Label7;
+        TLabel *Label22;
+        TEdit *Thlt_Slope;
+        TEdit *Tmlt_Slope;
+        TLabel *Label23;
+        TEdit *Vhlt_Slope;
+        TLabel *Label24;
+        TEdit *Vmlt_Slope;
         void __fastcall Help_ButtonClick(TObject *Sender);
         void __fastcall Vhlt_srcChange(TObject *Sender);
         void __fastcall Vmlt_srcChange(TObject *Sender);

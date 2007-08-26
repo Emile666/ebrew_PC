@@ -6,6 +6,13 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.18  2007/07/06 22:23:01  Emile
+  - The real time between two lines from a log-file is now used instead of a
+    fixed 5 sec. time when reading a log-file.
+  - Leading-zero bug solved in Mash Progress screen
+  - i2c_stop() only called with PT_CLOSE in case of exit of program
+  - System Identification library functions added (but not used yet).
+
   Revision 1.17  2007/01/03 13:45:49  Emile
   - Bugfix: when reading a log-file, the first mash timestamp was not recognised.
   - Bugfix: Sparging timestamps were erased when a sparging parameter was updated.
@@ -1164,3 +1171,29 @@ double moving_average(ma *p, double x)
    } // if
    return p->sum;   // return value = filter output
 } // moving_average()
+
+void slope_limiter(const double lim, const double Told, double *Tnew)
+/*------------------------------------------------------------------
+  Purpose  : This function limits the increase of Tnew by lim.
+
+                              Tnew
+                               |  ------------  lim
+                               |/
+              -----------------/------------------ -> Tin - Tout
+                              /|
+              -lim ----------  |
+
+  Variables:
+       lim : The limiting value
+      Told : The previous value of the variable to limit
+      Tnew : The output value of the variable to limit
+  Returns  : none
+  ------------------------------------------------------------------*/
+{
+   double diff = *Tnew - Told; // calculate difference
+
+   if      (diff > lim)  *Tnew =  Told + lim;
+   else if (diff < -lim) *Tnew =  Told - lim;
+   // else: do nothing, Tnew is within slope limits
+} // slope_limiter()
+

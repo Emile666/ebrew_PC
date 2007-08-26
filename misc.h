@@ -6,6 +6,13 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.17  2007/07/06 22:23:02  Emile
+// - The real time between two lines from a log-file is now used instead of a
+//   fixed 5 sec. time when reading a log-file.
+// - Leading-zero bug solved in Mash Progress screen
+// - i2c_stop() only called with PT_CLOSE in case of exit of program
+// - System Identification library functions added (but not used yet).
+//
 // Revision 1.16  2006/11/18 23:06:37  Emile
 // - View Mash/Sparging screen is improved: time-stamps are placed when a
 //   mashing or sparging phase has started.
@@ -353,6 +360,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
                sparge_struct *sps, std_struct *std, int pid_on, int std_fx);
 void init_ma(ma *p, int N, double init_val);
 double moving_average(ma *p, double x);
+void   slope_limiter(const double lim, const double Told, double *Tnew);
 
 #ifdef __cplusplus
 };

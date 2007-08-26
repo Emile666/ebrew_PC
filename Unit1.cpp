@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.54  2007/07/07 14:25:59  Emile
+// - i2c bus closed directly instead of leaving open. Every I2C routine now
+//   has a i2c_start() and i2c_stop() added to it.
+// - In i2c_stop() PortTalk was closed in case of error. Now done only in case
+//   of a PT_CLOSE command.
+// - i2c_stop() now has a wrapper asking user to exit program or to continue.
+// - Mash timers were reset after an i2c reset. This is corrected
+// - Check I2C hardware now done in interrupt routine instead of asynchronous.
+//
 // Revision 1.53  2007/07/06 22:23:01  Emile
 // - The real time between two lines from a log-file is now used instead of a
 //   fixed 5 sec. time when reading a log-file.
@@ -735,6 +744,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
          pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
          pid_pars.k_lpf     = Reg->ReadFloat("K_LPF");
+         tset_hlt_slope     = Reg->ReadFloat("TSET_HLT_SLOPE");
          pid_pars.pid_model = Reg->ReadInteger("PID_Model"); // [0..3]
          pid_pars.burner_hyst_h = Reg->ReadInteger("BURNER_HHYST");
          pid_pars.burner_hyst_l = Reg->ReadInteger("BURNER_LHYST");
@@ -763,9 +773,12 @@ void __fastcall TMainForm::Main_Initialisation(void)
 
          init_ma(&str_thlt,Reg->ReadInteger("MA_THLT"),thlt); // MA filter for Thlt
          thlt_offset = Reg->ReadFloat("THLT_OFFSET");         // offset calibration
+         thlt_slope  = Reg->ReadFloat("THLT_SLOPE");          // Slope limiter for Thlt
          init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT"),tmlt); // MA filter for Tmlt
+         tmlt_slope  = Reg->ReadFloat("TMLT_SLOPE");          // Slope limiter for Tmlt
          tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");         // offset calibration
          init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT"),volumes.Vmlt); // MA filter for Vmlt
+
          //--------------------------------------------------------------------
          // The enum i2c_adc starts at NONE (0), which is also the start value
          // of the first entry of the combo-box.
@@ -774,6 +787,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          volumes.Vhlt_simulated = vhlt_src;           // needed for STD
          vhlt_a     = Reg->ReadFloat("VHLT_A");       // a-coefficient for y=a.x+b
          vhlt_b     = Reg->ReadFloat("VHLT_B");       // b-coefficient for y=a.x+b
+         vhlt_slope = Reg->ReadFloat("VHLT_SLOPE");   // Slope limiter for Vhlt
          if (vhlt_src == 0)
          {
             // Vhlt is simulated, init. MA filter for Vhlt
@@ -786,6 +800,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          vmlt_src   = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");   // source AD channel
          vmlt_a     = Reg->ReadFloat("VMLT_A");       // a-coefficient for y=a.x+b
          vmlt_b     = Reg->ReadFloat("VMLT_B");       // b-coefficient for y=a.x+b
+         vmlt_slope = Reg->ReadFloat("VMLT_SLOPE");   // Slope limiter for Vmlt
 
          ttriac_src = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC"); // source AD channel
          ttriac_a   = Reg->ReadFloat("TTRIAC_A");     // a-coefficient for y=a.x+b
@@ -945,16 +960,17 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           fscl_prescaler = 5;
           Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler); // set fscl to 11.72 kHz
           // PID Settings Dialog
-          Reg->WriteFloat("TS",TS_INIT);       // Set Default sample time
-          Reg->WriteFloat("Kc",KC_INIT);       // Controller gain
-          Reg->WriteFloat("Ti",TI_INIT);       // Ti constant
-          Reg->WriteFloat("Td",TD_INIT);       // Td constant
-          Reg->WriteFloat("K_LPF",0);          // LPF filter time-constant
-          Reg->WriteFloat("TOffset",1.0);      // HLT - MLT heat loss
-          Reg->WriteFloat("TOffset2",-0.5);    // offset for early start of mash timers
-          Reg->WriteInteger("PID_Model",0);    // Type A PID Controller
-          Reg->WriteInteger("BURNER_HHYST",35); // Gas Burner Hysteresis High Limit
-          Reg->WriteInteger("BURNER_LHYST",30); // Gas Burner Hysteresis Low Limit
+          Reg->WriteFloat("TS",TS_INIT);         // Set Default sample time
+          Reg->WriteFloat("Kc",KC_INIT);         // Controller gain
+          Reg->WriteFloat("Ti",TI_INIT);         // Ti constant
+          Reg->WriteFloat("Td",TD_INIT);         // Td constant
+          Reg->WriteFloat("K_LPF",0);            // LPF filter time-constant
+          Reg->WriteFloat("TSET_HLT_SLOPE",1.0); // Slope Limit for Tset_HLT
+          Reg->WriteFloat("TOffset",1.0);        // HLT - MLT heat loss
+          Reg->WriteFloat("TOffset2",-0.5);      // offset for early start of mash timers
+          Reg->WriteInteger("PID_Model",0);      // Type A PID Controller
+          Reg->WriteInteger("BURNER_HHYST",35);  // Gas Burner Hysteresis High Limit
+          Reg->WriteInteger("BURNER_LHYST",30);  // Gas Burner Hysteresis Low Limit
           Reg->WriteString("SERVER_NAME","PC-EMILE"); // Server to connect to
           // Send PID-Output to the various heaters / burners
           cb_pid_out = 0; // The PID-output is not connected to anything
@@ -1008,8 +1024,10 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           // Measurements
           Reg->WriteInteger("MA_THLT",5);      // Order MA filter Thlt
           Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
+          Reg->WriteFloat("THLT_SLOPE",2.0);   // Slope limit for Thlt °C/sec.
           Reg->WriteInteger("MA_TMLT",5);      // Order MA filter Tmlt
           Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
+          Reg->WriteFloat("TMLT_SLOPE",2.0);   // Slope limit for Tmlt °C/sec.
           Reg->WriteInteger("MA_VMLT",5);      // Order MA filter Vmlt
           Reg->WriteInteger("MA_VHLT",5);      // Order MA filter Vhlt
           volumes.Vhlt_start = 90;             // Starting volume of HLT
@@ -1017,9 +1035,11 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("VHLT_SRC",6);     // Vhlt = AIN1_MAX1238
           Reg->WriteFloat("VHLT_A",0.025);     // a-coefficient for y=a.x+b
           Reg->WriteFloat("VHLT_B",0.0);       // b-coefficient for y=a.x+b
+          Reg->WriteFloat("VHLT_SLOPE",1.0);   // Slope limit for Vhlt L/sec.
           Reg->WriteInteger("VMLT_SRC",7);     // Vmlt = AIN2_MAX1238
           Reg->WriteFloat("VMLT_A",0.025);     // a-coefficient for y=a.x+b
           Reg->WriteFloat("VMLT_B",0.0);       // b-coefficient for y=a.x+b
+          Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
           Reg->WriteInteger("TTRIAC_SRC",5);   // Ttriac = AIN0_MAX1238
           Reg->WriteFloat("TTRIAC_A",0.1);     // a-coefficient for y=a.x+b
           Reg->WriteFloat("TTRIAC_B",0.0);     // b-coefficient for y=a.x+b
@@ -1087,6 +1107,7 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->Ti_Edit->Text        = AnsiString(Reg->ReadFloat("Ti"));
          ptmp->Td_Edit->Text        = AnsiString(Reg->ReadFloat("Td"));
          ptmp->K_LPF_Edit->Text     = AnsiString(Reg->ReadFloat("K_LPF"));
+         ptmp->Tset_hlt_slope->Text = AnsiString(Reg->ReadFloat("TSET_HLT_SLOPE"));
          ptmp->PID_Model->ItemIndex = Reg->ReadInteger("PID_Model");
          ptmp->Burner_On->Text      = AnsiString(Reg->ReadInteger("BURNER_HHYST"));
          ptmp->Burner_Off->Text     = AnsiString(Reg->ReadInteger("BURNER_LHYST"));
@@ -1124,6 +1145,8 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteFloat("Td",pid_pars.td);
             pid_pars.k_lpf = ptmp->K_LPF_Edit->Text.ToDouble();
             Reg->WriteFloat("K_LPF",pid_pars.k_lpf);
+            tset_hlt_slope = ptmp->Tset_hlt_slope->Text.ToDouble();
+            Reg->WriteFloat("TSET_HLT_SLOPE",tset_hlt_slope);
             pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
             pid_pars.burner_hyst_h = ptmp->Burner_On->Text.ToInt();
             Reg->WriteInteger("BURNER_HHYST",pid_pars.burner_hyst_h);
@@ -1843,11 +1866,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
 {
    int        err = 0;       // error return value, needed for SET_LED macro
    TDateTime  td_now;        // holds current date and time
-   double     thlt_unf;      // unfiltered version of thlt
-   double     tmlt_unf;      // unfiltered version of tmlt
+   double     thlt_unf;      // unfiltered version of Thlt
+   double     tmlt_unf;      // unfiltered version of Tmlt
    adda_t     adc;           // struct containing 4 ADC values + DA value
    double     dac_x;         // temp. variable for calculating DA value
-
+   double     old_vhlt;      // previous value of Vhlt
+   double     old_vmlt;      // previous value of Vmlt
+   double     old_thlt;      // previous value of Thlt
+   double     old_tmlt;      // previous value of Tmlt
+   double     old_tset_hlt;  // previous value of tset_hlt
+   
    //--------------------------------------------------------------
    // This is the main control loop, executed once every 50 msec.
    // Do some time-slicing to reduce #computations in one loop.
@@ -1861,6 +1889,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //----------------------------------------------------------------
    if (tmr.pid_tmr % ONE_SECOND == 1)
    {
+       old_vhlt = volumes.Vhlt;
        if (vhlt_src != NONE) // get real value from ADC
        {
           volumes.Vhlt = get_analog_input(hw_status, vhlt_src, vhlt_a, vhlt_b, &err);
@@ -1874,10 +1903,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        {
           volumes.Vhlt = swfx.vhlt_fx;
        }
-       else
-       {
-          volumes.Vhlt = moving_average(&str_vhlt,volumes.Vhlt); // Call MA filter
-       }
+       slope_limiter(vhlt_slope,old_vhlt,&volumes.Vhlt);      // slope limiter
+       volumes.Vhlt = moving_average(&str_vhlt,volumes.Vhlt); // MA filter
    } // if time-slice
 
    //----------------------------------------------------------------
@@ -1886,6 +1913,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //----------------------------------------------------------------
    if (tmr.pid_tmr % ONE_SECOND == 2)
    {
+       old_vmlt = volumes.Vmlt;
        if (vmlt_src != NONE) // get real value from ADC
        {
           volumes.Vmlt = get_analog_input(hw_status, vmlt_src, vmlt_a, vmlt_b, &err);
@@ -1894,11 +1922,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        if (swfx.vmlt_sw)
        {
           volumes.Vmlt = swfx.vmlt_fx;
-       }
-       else
-       {
-          volumes.Vmlt = moving_average(&str_vmlt,volumes.Vmlt); // Call MA filter
-       }
+       } // if
+       slope_limiter(vmlt_slope,old_vmlt,&volumes.Vmlt);      // slope limiter
+       volumes.Vmlt = moving_average(&str_vmlt,volumes.Vmlt); // MA filter
    } // if time-slice
 
    //----------------------------------------------------------------------
@@ -1942,23 +1968,26 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //----------------------------------------------------------------
    else if (tmr.pid_tmr % ONE_SECOND == 4)
    {
+       old_thlt = thlt;  // Previous value of Thlt
        if (hw_status & LM92_1_OK)
        {
           thlt_unf = lm92_read(0); // Read HLT temp. from LM92 device
-          if (thlt_unf == LM92_ERR)
-          {
-             Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
-          } // if
-          else
-          {
-             thlt_unf += thlt_offset; // add calibration offset
-             thlt = moving_average(&str_thlt,thlt_unf); // MA-filter
-          } // else
        } // if
+       else thlt_unf = 0.0; // Reset Thlt
        if (swfx.thlt_sw)
-       {
-          thlt = (double)swfx.thlt_fx;
+       {  // Switch & Fix
+          thlt_unf = (double)swfx.thlt_fx;
        } // if
+       if (thlt_unf == LM92_ERR)
+       {  // Reset I2C bus when lm92_read() returned an error
+          if (hw_status & LM92_1_OK) Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
+       } // if
+       else
+       {  // No error, limit slope and filter temperature
+          slope_limiter(thlt_slope,old_thlt,&thlt_unf); // slope-limit
+          thlt_unf += thlt_offset;        // add calibration offset
+          thlt = moving_average(&str_thlt,thlt_unf);   // MA-filter
+       } // else
    } // else if
 
    //----------------------------------------------------------------
@@ -1967,23 +1996,26 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //----------------------------------------------------------------
    else if (tmr.pid_tmr % ONE_SECOND == 5)
    {
+       old_tmlt = tmlt;  // Previous value of Tmlt
        if (hw_status & LM92_2_OK)
        {
           tmlt_unf = lm92_read(1); // Read MLT temp. from LM92 device
-          if (tmlt_unf == LM92_ERR)
-          {
-             Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
-          } // if
-          else
-          {
-             tmlt_unf += tmlt_offset; // add calibration offset
-             tmlt = moving_average(&str_tmlt,tmlt_unf); // MA-filter
-          } // else
        } // if
+       else tmlt_unf = 0.0; // Reset Tmlt
        if (swfx.tmlt_sw)
-       {
-          tmlt = (double)swfx.tmlt_fx;
+       {  // Switch & Fix
+          tmlt_unf = (double)swfx.tmlt_fx;
        } // if
+       if (tmlt_unf == LM92_ERR)
+       {  // Reset I2C bus when lm92_read() returned an error
+          if (hw_status & LM92_2_OK) Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
+       } // if
+       else
+       {  // No error, limit slope and filter temperature
+          slope_limiter(tmlt_slope,old_tmlt,&tmlt_unf); // slope-limit
+          tmlt_unf += tmlt_offset; // add calibration offset
+          tmlt = moving_average(&str_tmlt,tmlt_unf);   // MA-filter
+       } // else
    } // else if
 
    //-----------------------------------------------------------------------
@@ -2113,13 +2145,15 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       {
          std_tmp = -1;
       }
+      old_tset_hlt = tset_hlt; // Previous value of HLT temperature reference
       update_std(&volumes, tmlt, thlt, &tset_mlt, &tset_hlt, &std_out,
                  ms, &sp, &std, PID_RB->ItemIndex, std_tmp);
-
       if (swfx.tset_hlt_sw)
       {
          tset_hlt = swfx.tset_hlt_fx; // fix tset_hlt
       } // if
+      slope_limiter(tset_hlt_slope,old_tset_hlt,&tset_hlt); // limit slope
+
       //-----------------------------------------------------------------
       // Now output all valve bits to DIG_IO_MSB_BASE (if it is present).
       // NOTE: The pump bit is output to DIG_IO_LSB_IO!
@@ -2742,15 +2776,17 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          //------------------
          ptmp->UD_MA_HLT->Position      = Reg->ReadInteger("MA_THLT");
          ptmp->Thlt_Offset->Text        = Reg->ReadFloat("THLT_OFFSET");
+         ptmp->Thlt_Slope->Text         = Reg->ReadFloat("THLT_SLOPE");
          //------------------
          // MLT Temperature
          //------------------
          ptmp->UD_MA_MLT->Position      = Reg->ReadInteger("MA_TMLT");
          ptmp->Tmlt_Offset->Text        = Reg->ReadFloat("TMLT_OFFSET");
+         ptmp->Tmlt_Slope->Text         = Reg->ReadFloat("TMLT_SLOPE");
          //------------------
          // HLT Volume
          //------------------
-         ptmp->UpDown1->Position        = Reg->ReadInteger("MA_VHLT");
+         ptmp->UD_MA_VHLT->Position     = Reg->ReadInteger("MA_VHLT");
          volumes.Vhlt_start             = Reg->ReadInteger("VHLT_START");
          vhlt_start_old                 = volumes.Vhlt_start; // save value
          ptmp->Vhlt_init_Edit->Text     = AnsiString(volumes.Vhlt_start);
@@ -2760,16 +2796,18 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          ptmp->Vhlt_a->Text             = vhlt_a;
          vhlt_b                         = Reg->ReadFloat("VHLT_B");
          ptmp->Vhlt_b->Text             = vhlt_b;
+         ptmp->Vhlt_Slope->Text         = Reg->ReadFloat("VHLT_SLOPE");
          //------------------
          // MLT Volume
          //------------------
-         ptmp->UpDown4->Position        = Reg->ReadInteger("MA_VMLT");
+         ptmp->UD_MA_VMLT->Position     = Reg->ReadInteger("MA_VMLT");
          vmlt_src                       = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");
          ptmp->Vmlt_src->ItemIndex      = vmlt_src;
          vmlt_a                         = Reg->ReadFloat("VMLT_A");
          ptmp->Vmlt_a->Text             = vmlt_a;
          vmlt_b                         = Reg->ReadFloat("VMLT_B");
          ptmp->Vmlt_b->Text             = vmlt_b;
+         ptmp->Vmlt_Slope->Text         = Reg->ReadFloat("VMLT_SLOPE");
          //-------------------
          // Boil Kettle Volume
          //-------------------
@@ -2797,6 +2835,8 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             Reg->WriteInteger("MA_THLT",ptmp->UD_MA_HLT->Position);
             thlt_offset = ptmp->Thlt_Offset->Text.ToDouble();
             Reg->WriteFloat("THLT_OFFSET",thlt_offset);
+            thlt_slope = ptmp->Thlt_Slope->Text.ToDouble();
+            Reg->WriteFloat("THLT_SLOPE",thlt_slope);
             //------------------
             // MLT Temperature
             //------------------
@@ -2804,11 +2844,13 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             Reg->WriteInteger("MA_TMLT",ptmp->UD_MA_MLT->Position);
             tmlt_offset = ptmp->Tmlt_Offset->Text.ToDouble();
             Reg->WriteFloat("TMLT_OFFSET",tmlt_offset);
+            tmlt_slope = ptmp->Tmlt_Slope->Text.ToDouble();
+            Reg->WriteFloat("TMLT_SLOPE",tmlt_slope);
             //------------------
             // HLT Volume
             //------------------
-            init_ma(&str_vhlt,ptmp->MA_HLT_Edit->Text.ToInt(),volumes.Vhlt); // order of MA filter
-            Reg->WriteInteger("MA_VHLT",ptmp->MA_HLT_Edit->Text.ToInt());
+            init_ma(&str_vhlt,ptmp->UD_MA_VHLT->Position,volumes.Vhlt); // order of MA filter
+            Reg->WriteInteger("MA_VHLT",ptmp->UD_MA_VHLT->Position);
             volumes.Vhlt_start = ptmp->Vhlt_init_Edit->Text.ToInt();
             Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
             vhlt_src = (enum i2c_adc)ptmp->Vhlt_src->ItemIndex;
@@ -2822,6 +2864,8 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             Reg->WriteFloat("VHLT_A",vhlt_a);
             vhlt_b = ptmp->Vhlt_b->Text.ToDouble();
             Reg->WriteFloat("VHLT_B",vhlt_b);
+            vhlt_slope = ptmp->Vhlt_Slope->Text.ToDouble();
+            Reg->WriteFloat("VHLT_SLOPE",vhlt_slope);
             //------------------
             // MLT Volume
             //------------------
@@ -2833,6 +2877,8 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             Reg->WriteFloat("VMLT_A",vmlt_a);
             vmlt_b = ptmp->Vmlt_b->Text.ToDouble();
             Reg->WriteFloat("VMLT_B",vmlt_b);
+            vmlt_slope = ptmp->Vmlt_Slope->Text.ToDouble();
+            Reg->WriteFloat("VMLT_SLOPE",vmlt_slope);
             //-------------------
             // Boil Kettle Volume
             //-------------------

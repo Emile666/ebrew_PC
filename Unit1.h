@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.34  2007/07/07 14:25:59  Emile
+// - i2c bus closed directly instead of leaving open. Every I2C routine now
+//   has a i2c_start() and i2c_stop() added to it.
+// - In i2c_stop() PortTalk was closed in case of error. Now done only in case
+//   of a PT_CLOSE command.
+// - i2c_stop() now has a wrapper asking user to exit program or to continue.
+// - Mash timers were reset after an i2c reset. This is corrected
+// - Check I2C hardware now done in interrupt routine instead of asynchronous.
+//
 // Revision 1.33  2006/11/19 10:53:55  Emile
 // The power outlet (220 V) is now shared with the modulating gas burner and
 // the electrical heating element. By setting the proper bits in the PID
@@ -482,19 +491,26 @@ private:	// User declarations
         int             led2;       //
         int             led3;       //
         int             led4;       //
-        int             led1_vis;   // 1..7: LED1 Visibility
-        int             led2_vis;   // 1..7: LED2 Visibility
-        int             led3_vis;   // 1..7: LED3 Visibility
-        int             led4_vis;   // 1..7: LED4 Visibility
-        int             ttriac_hlim;    // High limit for Triac Temp. Protection
-        int             ttriac_llim;    // Low  limit for Triac Temp. Protection
-        bool            triac_too_hot;  // true = Triac is overheated
-        bool            cb_i2c_err_msg; // true = give error message on successful I2C reset
-        bool            power_up_flag;  // true = power-up
+        int             led1_vis;         // 1..7: LED1 Visibility
+        int             led2_vis;         // 1..7: LED2 Visibility
+        int             led3_vis;         // 1..7: LED3 Visibility
+        int             led4_vis;         // 1..7: LED4 Visibility
+        int             ttriac_hlim;      // High limit for Triac Temp. Protection
+        int             ttriac_llim;      // Low  limit for Triac Temp. Protection
+        bool            triac_too_hot;    // true = Triac is overheated
+        bool            cb_i2c_err_msg;   // true = give error message on successful I2C reset
+        bool            power_up_flag;    // true = power-up
         int             known_hw_devices; // list of known I2C hardware devices
         int             fscl_prescaler;   // index into PCF8584 prescaler values, see i2c_dll.cpp
         double          thlt_offset;      // calibration offset to add to Thlt measurement
         double          tmlt_offset;      // calibration offset to add to Tmlt measurement
+
+        double          thlt_slope;       // Slope limiter for Thlt temperature
+        double          tmlt_slope;       // Slope limiter for Tmlt temperature
+        double          tset_hlt_slope;   // Slope limiter for Tset_hlt reference
+        double          vhlt_slope;       // Slope limiter for Vhlt volume
+        double          vmlt_slope;       // Slope limiter for Vmlt volume
+
         bool            cb_pid_dbg;       // true = Show PID Debug label
         byte            cb_pid_out;       // [ELECTRIC, GAS_NON_MOD, GAS_MODULATE]
         double          dac_a;            // a-coefficient for y=a.x+b DAC calc.

@@ -5,6 +5,20 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2005/11/12 22:19:38  Emile
+// - PID Output (Gamma) routing added. It is now possible to send the output
+//   of the PID controller to 3 devices: 1) electrical heating element,
+//   2) Non-modulating (standard) gas-burner, 3) modulating gas-burner.
+// - PID Dialog changed, checkboxes added.
+// - New registry variables: CB_PID_OUT, DAC_A, DAC_B
+// - The conversion from gamma to a value for the DA-output is done with
+//   DAC_A and DAC_B. The DA-output is used to generate the PWM signal for
+//   the modulating gas-burner.
+// - Led visibility decreased.
+// - Bug-fix: Check_HW_Devices screen appeared twice when checking I2C HW. Fixed.
+// - Displaying of Vhlt, Vmlt and Ttriac on LED-displays changed (less resolution).
+// - Network routines removed.
+//
 // Revision 1.9  2005/03/26 13:53:21  Emile
 // - During State "Mash Preheat" pump is set to ON (again)
 // - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
@@ -132,6 +146,9 @@ __published:
         TLabel *Label16;
         TEdit *DAC_A_Edit;
         TEdit *DAC_B_Edit;
+        TLabel *Label15;
+        TLabel *Label17;
+        TEdit *Tset_hlt_slope;
         void __fastcall RG2Click(TObject *Sender);
         void __fastcall Button3Click(TObject *Sender);
         void __fastcall CB_Pid_out1Click(TObject *Sender);
