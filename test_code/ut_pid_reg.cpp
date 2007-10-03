@@ -12,13 +12,15 @@
 //               File should be compiled with Borland C++ Builder 4.5!
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.1  2007/10/03 07:01:46  Emile
+// Working Unit Test files for vector / matrix library added to CVS.
+//
 // ==========================================================================
 #pragma hdrstop
 #include <condefs.h>
 #include <stdio.h>
 #include <conio.h>
-#include "../pid_reg.h"
-#include "CuTest.h"
+#include "ut_pid_reg.h"
 
 //---------------------------------------------------------------------------
 USEUNIT("..\PID_REG.C");
@@ -36,63 +38,17 @@ double e     = 1e-6;  // max. deviation for all floating-point calculations
 vector v1    = {  2.0,  3.0,  4.0 }; // default test-vector used in unit-tests
 vector v2    = { 11.0, 12.0, 13.0 }; // default test-vector used in unit-tests
 
-/*------------------------------------------------------------------
-  Purpose  : This function a vector a length N to the screen.
-             It is a help function during Unit Testing.
-    Variables:
-         v : the vector to print to the screen
-         N : The length of the vector v
-  Returns  : -
-  ------------------------------------------------------------------*/
-void print_vector(vector v, int N)
-{
-   int i;
-
-   for (i = 0; i < N; i++)
-   {
-      printf("%5.1f ",v[i]);
-   } // for i
-} // print_vector()
-//---------------------------------------------------------------------------
-
-void print_theta(int N)
-{
-   switch (N)
-   {
-      case 1:
-           printf("a1=%6.4f b1=%6.4f ",theta[0],theta[1]);
-           break;
-      case 2:
-           printf("a1=%6.4f a2=%6.4f b1=%6.4f b2=%6.4f ",
-                  theta[0],theta[1],theta[2],theta[3]);
-           break;
-      case 3:
-           printf("a1=%6.4f a2=%6.4f a3=%6.4f b1=%6.4f b2=%6.4f b3=%6.4f ",
-                  theta[0],theta[1],theta[2],theta[3],theta[4],theta[5]);
-           break;
-   } // switch
-   printf("phi=%6.4f lambda=%6.4e eta=%6.4f\n",phi,lambda,eta);
-} // print_theta()
-//---------------------------------------------------------------------------
-
-void print_matrix(matrix m, int N)
-{
-   int i,j;
-
-   for (i = 0; i < N; i++)
-   {
-      for (j = 0; j < N; j++)
-      {
-         printf("%5.1f ",m[i][j]);
-      } // for j
-      printf(";");
-   } // for i
-} // print_matrix()
-//---------------------------------------------------------------------------
-
 //---------------------------------------------------------------------------
 // Start of all Unit-Test cases
 //---------------------------------------------------------------------------
+
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function vxv2s (vector multiply
+             vector, returning a scalar).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_vxv2s(CuTest *tc)
 {
    double x;
@@ -104,9 +60,13 @@ void ut_vxv2s(CuTest *tc)
 } // ut_vxv2s()
 //---------------------------------------------------------------------------
 
-#define CHECK_MATRIX(mexp,mact,N)   for (i = 0; i < N; i++)                   \
-                                      for (j = 0; j < N; j++)                 \
-                                        CuAssertDblEquals(tc,mexp[i][j],mact[i][j],e)
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function vxv2m (vector multiply
+             vector, returning a matrix).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_vxv2m(CuTest *tc)
 {
   int i,j;
@@ -122,8 +82,13 @@ void ut_vxv2m(CuTest *tc)
 } // ut_vxv2s()
 //---------------------------------------------------------------------------
 
-#define CHECK_VECTOR(vexp,vact,N)   for (i = 0; i < N; i++)                 \
-                                    CuAssertDblEquals(tc,vexp[i],vact[i],e)
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function vxv2s (vector multiply
+             vector, returning a scalar).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_vxm2v(CuTest *tc)
 {
    int i;
@@ -142,6 +107,13 @@ void ut_vxm2v(CuTest *tc)
 } // ut_vxm2v()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function mxv2v (matrix multiply
+             vector, returning a vector).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_mxv2v(CuTest *tc)
 {
    int i;
@@ -160,6 +132,13 @@ void ut_mxv2v(CuTest *tc)
 } // ut_mxv2v()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function vxs2v (vector multiply
+             by scalar, returning a vector).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_vxs2v(CuTest *tc)
 {
    int i;
@@ -175,6 +154,13 @@ void ut_vxs2v(CuTest *tc)
 } // ut_vxs2v()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function vav2v (vector add
+             vector, returning a vector).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_vav2v(CuTest *tc)
 {
    int i;
@@ -190,6 +176,13 @@ void ut_vav2v(CuTest *tc)
 } // ut_vav2v()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function mxs2m (matrix multiply
+             by scalar, returning a matrix).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_mxs2m(CuTest *tc)
 {
    int i,j;
@@ -213,6 +206,13 @@ void ut_mxs2m(CuTest *tc)
 } // ut_mxs2m()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function mam2m (matrix add
+             matrix, returning a matrix).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_mam2m(CuTest *tc)
 {
    int i,j;
@@ -236,9 +236,17 @@ void ut_mam2m(CuTest *tc)
   mam2m(&m1,m2,1); CHECK_MATRIX(m1exp,m1,1);
   mam2m(&m1,m2,2); CHECK_MATRIX(m2exp,m1,2);
   mam2m(&m1,m2,3); CHECK_MATRIX(m3exp,m1,3);
-} // ut_max2m()
+} // ut_mam2m()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function sys_id, which is the
+             system identification function. Test is for order N=1
+             with no directional forgetting.
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_sys_id1_nodf(CuTest *tc)
 {
   int        i;
@@ -267,6 +275,14 @@ void ut_sys_id1_nodf(CuTest *tc)
 } // ut_sys_id1_nodf()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function sys_id, which is the
+             system identification function. Test is for order N=1
+             with adapted directional forgetting.
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_sys_id1_adf(CuTest *tc)
 {
   int        i;
@@ -296,6 +312,14 @@ void ut_sys_id1_adf(CuTest *tc)
 } // ut_sys_id1_adf()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function sys_id, which is the
+             system identification function. Test is for order N=2
+             with no directional forgetting.
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_sys_id2_nodf(CuTest *tc)
 {
   int        i;
@@ -333,6 +357,14 @@ void ut_sys_id2_nodf(CuTest *tc)
 } // ut_sys_id2_nodf()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function calc_ultimate_gain,
+             which is the routine to calculate the ultimate gain
+             of a feedback control system.
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_ultim_gain_period(CuTest *tc)
 {
    sys_id_params ps;
@@ -415,6 +447,14 @@ void ut_ultim_gain_period(CuTest *tc)
 } // ut_ultim_gain_period()
 //---------------------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function calc_pid_parameters(),
+             which calculates the PID parameters, based on the
+             ultimate gain.
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void ut_calc_pid_parameters(CuTest *tc)
 {
    sys_id_params ps;
@@ -433,6 +473,15 @@ void ut_calc_pid_parameters(CuTest *tc)
 } // ut_calc_pid_parameters()
 //------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function contains the integration test for the
+             self-tuning PID controller with order N = 2.
+             It checks if the same response is obtained as from the
+             Matlab / Simulink model.
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void it_pid_reg_N2(CuTest *tc)
 {
    FILE          *f1;
@@ -521,6 +570,15 @@ void it_pid_reg_N2(CuTest *tc)
 } // it_pid_reg_N2()
 //------------------------------------------------------------
 
+/*------------------------------------------------------------------
+  Purpose  : This function contains the integration test for the
+             self-tuning PID controller with order N = 3.
+             It checks if the same response is obtained as from the
+             Matlab / Simulink model.
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
 void it_pid_reg_N3(CuTest *tc)
 {
    FILE          *f1;
@@ -617,9 +675,13 @@ void it_pid_reg_N3(CuTest *tc)
 } // it_pid_reg_N3()
 //------------------------------------------------------------
 
-//------------------------------------------------------------
-// Test suite for the vector and matrix calculation functions
-//------------------------------------------------------------
+/*------------------------------------------------------------------
+  Purpose  : This function contains the test-suite for the vector and
+             matrix calculation functions.
+             It makes calls to the various test-functions.
+  Variables: -
+  Returns  : pointer to current CuSuite object
+  ------------------------------------------------------------------*/
 CuSuite *vector_matrix_suite(void)
 {
    CuSuite* suite = CuSuiteNew();
@@ -637,9 +699,13 @@ CuSuite *vector_matrix_suite(void)
 } // vector_matrix_suite()
 //------------------------------------------------------------
 
-//------------------------------------------------------------
-// Test suite for the system identification functions
-//------------------------------------------------------------
+/*------------------------------------------------------------------
+  Purpose  : This function contains the test-suite for the system-
+             identification functions.
+             It makes calls to the various test-functions.
+  Variables: -
+  Returns  : pointer to current CuSuite object
+  ------------------------------------------------------------------*/
 CuSuite *sys_id_suite(void)
 {
    CuSuite* suite = CuSuiteNew();
@@ -654,9 +720,12 @@ CuSuite *sys_id_suite(void)
 } // sys_id_suite()
 //------------------------------------------------------------
 
-//------------------------------------------------------------
-// Integration Test suite
-//------------------------------------------------------------
+/*------------------------------------------------------------------
+  Purpose  : This function contains the integration test-suite for
+             the entire self-tuning controller.
+  Variables: -
+  Returns  : pointer to current CuSuite object
+  ------------------------------------------------------------------*/
 CuSuite *integration_test_suite(void)
 {
    CuSuite* suite = CuSuiteNew();
@@ -668,9 +737,13 @@ CuSuite *integration_test_suite(void)
 } // integration_test_suite()
 //------------------------------------------------------------
 
-//------------------------------------------------------------
-// Entry point for running all the Unit & Integration Tests
-//------------------------------------------------------------
+/*------------------------------------------------------------------
+  Purpose  : This function is the entry-point for all the Unit and
+             Integration tests of the Self-Tuning controller library.
+             It makes calls to the various test-suites.
+  Variables: -
+  Returns  : -
+  ------------------------------------------------------------------*/
 void run_all_tests(void)
 {
    CuString *output = CuStringNew();
@@ -687,15 +760,20 @@ void run_all_tests(void)
 } // run_all_tests()
 //------------------------------------------------------------
 
-//------------------------------------------------------------
-// Entry point main()
-//------------------------------------------------------------
+/*------------------------------------------------------------------
+  Purpose  : Main function, entry point of unit-tests.
+  Variables:
+    argc   : Argument count, 1= no arguments, 2= one argument, etc.
+    argv[] : Array of strings containing the command-line arguments.
+             Not used in this function.
+  Returns  : 0 (indicating "all is well" to the operating-system)
+  ------------------------------------------------------------------*/
 int main(int argc, char* argv[])
 {
-  run_all_tests();
+  run_all_tests(); // run all the unit- integration tests
   printf("Press any key...");
   getch();
-  return 0;
+  return 0; // return-value
 } //main()
 //------------------------------------------------------------
 
