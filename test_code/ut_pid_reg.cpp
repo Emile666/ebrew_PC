@@ -12,6 +12,10 @@
 //               File should be compiled with Borland C++ Builder 4.5!
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2007/10/03 07:49:04  Emile
+// - Header file added, file- and function-header comments added
+// - No functional changes.
+//
 // Revision 1.1  2007/10/03 07:01:46  Emile
 // Working Unit Test files for vector / matrix library added to CVS.
 //
@@ -506,11 +510,11 @@ void it_pid_reg_N2(CuTest *tc)
    printf("   Testcase 14: Integration Test pid_reg5(), N = 2\n");
    f1 = fopen("it_pid_log_N2.txt","w");
    N       = 2;   // simulate 2nd order model
-   p.ts    = 1.0; // sample-period is 2 sec.
+   p.ts    = 2.0; // sample-period is 2 sec.
    p.kc    = 1.0; // initialize PID controller parameters (just in case)
    p.ti    = 2.0; //
    p.td    = 1.0; //
-   p.k_lpf = 0.0; // Filtering of D-term
+   p.k_lpf = 0.3; // Filtering of D-term
 
    init_pid5(&p,N);
    ps.N = N;
@@ -518,7 +522,7 @@ void it_pid_reg_N2(CuTest *tc)
    uk   = uk_1 = uk_2 = 0.0; // controller output, process input
    yk   = yk_1 = yk_2 = 0.0; // process output
    wk   = 0.0;               // set-point, reference value
-   fprintf(f1,"i ek uk yk a1 a2 b1 b2 Kr Ki Kd Ti Td Kpu Tu\n");
+   fprintf(f1,"i wk uk yk a1 a2 b1 b2 Kr Ki Kd Ti Td Kpu Tu pp pi pd\n");
 
    for (i = 0; i < 150; i++)
    {
@@ -556,8 +560,8 @@ void it_pid_reg_N2(CuTest *tc)
          a1[5] = theta[0]; a2[5] = theta[1];
          b1[5] = theta[2]; b2[5] = theta[3];
       } // if
-      fprintf(f1,"%02d %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f\n",
-              i, wk, uk, yk, theta[0], theta[1], theta[2], theta[3], ps.kr, ps.ki, ps.kd, ps.ti, ps.td, ps.kpu, ps.tu);
+      fprintf(f1,"%02d %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f\n",
+              i,wk,uk,yk,theta[0],theta[1],theta[2],theta[3],ps.kr,ps.ki,ps.kd,ps.ti,ps.td,ps.kpu,ps.tu,p.pp,p.pi,p.pd);
    } // for i
    fclose(f1);
    e = 5e-2; // deviation allowed to pass test
@@ -616,7 +620,7 @@ void it_pid_reg_N3(CuTest *tc)
    uk   = uk_1 = uk_2 = uk_3 = 0.0; // controller output, process input
    yk   = yk_1 = yk_2 = yk_3 = 0.0; // process output
    wk   = 0.0;                      // set-point, reference value
-   fprintf(f1,"i ek uk yk a1 a2 a3 b1 b2 b3 Kr Ki Kd Ti Td Kpu Tu\n");
+   fprintf(f1,"i wk uk yk a1 a2 a3 b1 b2 b3 Kr Ki Kd Ti Td Kpu Tu\n");
 
    for (i = 0; i < 150; i++)
    {
