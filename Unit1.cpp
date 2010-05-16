@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.55  2007/08/26 22:23:20  Emile
+// - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
+// - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
+//   VMLT_SLOPE and TSET_HLT_SLOPE
+// - Bug-fix setting MA order for HLT Volume: this was coupled to MA order of
+//   HLT temperature. Corrected
+// - Measurements... and PID controller settings... dialog screen updated.
+//
 // Revision 1.54  2007/07/07 14:25:59  Emile
 // - i2c bus closed directly instead of leaving open. Every I2C routine now
 //   has a i2c_start() and i2c_stop() added to it.
@@ -1984,9 +1992,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        } // if
        else
        {  // No error, limit slope and filter temperature
+          thlt_unf += thlt_offset;                      // add calibration offset
           slope_limiter(thlt_slope,old_thlt,&thlt_unf); // slope-limit
-          thlt_unf += thlt_offset;        // add calibration offset
-          thlt = moving_average(&str_thlt,thlt_unf);   // MA-filter
+          thlt = moving_average(&str_thlt,thlt_unf);    // MA-filter
        } // else
    } // else if
 
@@ -2012,9 +2020,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        } // if
        else
        {  // No error, limit slope and filter temperature
+          tmlt_unf += tmlt_offset;                      // add calibration offset
           slope_limiter(tmlt_slope,old_tmlt,&tmlt_unf); // slope-limit
-          tmlt_unf += tmlt_offset; // add calibration offset
-          tmlt = moving_average(&str_tmlt,tmlt_unf);   // MA-filter
+          tmlt = moving_average(&str_tmlt,tmlt_unf);    // MA-filter
        } // else
    } // else if
 
