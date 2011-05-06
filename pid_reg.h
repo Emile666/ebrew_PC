@@ -5,6 +5,13 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.9  2007/07/06 22:23:02  Emile
+  - The real time between two lines from a log-file is now used instead of a
+    fixed 5 sec. time when reading a log-file.
+  - Leading-zero bug solved in Mash Progress screen
+  - i2c_stop() only called with PT_CLOSE in case of exit of program
+  - System Identification library functions added (but not used yet).
+
   Revision 1.8  2005/03/26 13:53:21  Emile
   - During State "Mash Preheat" pump is set to ON (again)
   - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
@@ -135,10 +142,6 @@ typedef struct _sys_id_params
 //--------------------
 // Function Prototypes
 //--------------------
-void init_pid1(pid_params *p);
-void pid_reg1(double xk, double *yk, double tset, pid_params *p, int vrg);
-void init_pid2(pid_params *p);
-void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg);
 void init_pid3(pid_params *p);
 void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg);
 void init_pid4(pid_params *p);

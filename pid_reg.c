@@ -15,6 +15,13 @@
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
   $Log$
+  Revision 1.7  2007/07/06 22:23:02  Emile
+  - The real time between two lines from a log-file is now used instead of a
+    fixed 5 sec. time when reading a log-file.
+  - Leading-zero bug solved in Mash Progress screen
+  - i2c_stop() only called with PT_CLOSE in case of exit of program
+  - System Identification library functions added (but not used yet).
+
   Revision 1.6  2004/05/13 20:51:00  emile
   - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
     timing is now reset after 100 loops (5 seconds)
@@ -68,185 +75,6 @@ double rho;      // rho parameter
 double phi;      // directional forgetting factor
 double lambda;   // parameter lambda
 double eta;      // parameter eta (v)
-
-void init_pid1(pid_params *p)
-/*------------------------------------------------------------------
-  Purpose  : This function initialises the PID controller, based on
-             implementation method 2 (Bilinear Transformation with Taylor series)
-             Do not use this version!
-  Variables: p: pointer to struct containing all PID parameters
-                           Ts      Td
-             k0 = Kc.(1 + ---- + 2.--)
-                          2.Ti     Ts
-
-                            Ts    6.Td
-             k1 = Kc.(-1 + ---- - ----)
-                           2.Ti    Ts
-
-                  8.Kc.Td
-             k2 = --------
-                    Ts
-  Returns  : No values are returned
-  ------------------------------------------------------------------*/
-{
-   p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
-   if (p->ts_ticks > TWENTY_SECONDS)
-   {
-      p->ts_ticks = TWENTY_SECONDS;
-   }
-   if (p->ti == 0.0)
-   {
-      p->k0 = p->kc * (+1.0 + (2.0 * p->td / p->ts));
-      p->k1 = p->kc * (-1.0 - (6.0 * p->td / p->ts));
-   }
-   else
-   {
-      p->k0 = p->kc * (+1.0 + (p->ts / (2.0 * p->ti)) + (2.0 * p->td / p->ts));
-      p->k1 = p->kc * (-1.0 + (p->ts / (2.0 * p->ti)) - (6.0 * p->td / p->ts));
-   } // else
-   p->k2 = p->kc * 8.0 * p->td / p->ts;
-} // init_pid1()
-
-void pid_reg1(double xk, double *yk, double tset, pid_params *p, int vrg)
-/*------------------------------------------------------------------
-  Purpose  : This function implements the PID controller, conform
-             implementation method 2 ("Bilinear Transformation with Taylor Series").
-             Do not use this version!
-             This function should be called once every TS seconds.
-  Variables:
-        xk : The input variable x[k] (= measured temperature)
-       *yk : The output variable y[k] (= gamma value for power electronics)
-      tset : The setpoint value for the temperature
-        *p : Pointer to struct containing PID parameters
-        vrg: Release signal: 1 = Start control, 0 = disable PID controller
-  Returns  : No values are returned
-  ------------------------------------------------------------------*/
-{
-   double ek; // e[k]
-
-   ek = tset - xk;  // calculate e[k]
-   if (vrg)
-   {
-      *yk += (p->k0 * ek);   // y[k] = y[k-1] + k0 * e[k]
-      *yk += (p->k1 * ek_1); //               + k1 * e[k-1]
-      *yk += (p->k2 * ek_2); //               + k2 * e[k-2]
-   }
-   else *yk = 0.0;
-
-   ek_2  = ek_1; // e[k-2] = e[k-1]
-   ek_1  = ek;   // e[k-1] = e[k]
-
-   // limit y[k] to GMA_HLIM and GMA_LLIM
-   if (*yk > GMA_HLIM)
-   {
-      *yk = GMA_HLIM;
-   }
-   else if (*yk < GMA_LLIM)
-   {
-      *yk = GMA_LLIM;
-   } // else
-} // pid_reg1()
-
-void init_pid2(pid_params *p)
-/*------------------------------------------------------------------
-  Purpose  : This function initialises the PID controller, based on
-             the new Type A PID controller. Update of pid_reg1().
-  Variables: p: pointer to struct containing all PID parameters
-                           Ts        2.Td
-             k0 = Kc.(1 + ---- + ------------)
-                          2.Ti   Ts + 2.k_lpf
-
-                                  Ts.(alfa + 1)       4.Td
-             k1 = Kc.(alfa - 1 + -------------- - ------------)
-                                       2.Ti       Ts + 2.k_lpf
-
-                              alfa.Ts       2.Td
-             k2 = Kc.(-alfa + ------- + ------------)
-                                2.Ti    Ts + 2.k_lpf
-
-                         Ts - 2.k_lpf
-             with alfa = ------------
-                         Ts + 2.k_lpf
-
-  Returns  : No values are returned
-  ------------------------------------------------------------------*/
-{
-   double alfa = (p->ts - 2.0 * p->k_lpf) / (p->ts + 2.0 * p->k_lpf); // help variable
-
-   p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
-   if (p->ts_ticks > TWENTY_SECONDS)
-   {
-      p->ts_ticks = TWENTY_SECONDS;
-   }
-   if (p->ti == 0.0)
-   {
-      p->k0 = p->kc * (+1.0 + (2.0 * p->td / (p->ts + 2.0 * p->k_lpf)));
-      p->k1 = p->kc * (alfa - 1.0 - (4.0 * p->td / (p->ts + 2.0 * p->k_lpf)));
-      p->k2 = p->kc * (-alfa + (2.0 * p->td / (p->ts + 2.0 * p->k_lpf)));
-   }
-   else
-   {
-      p->k0 = p->kc * (+1.0 + (p->ts / (2.0 * p->ti))
-                            + (2.0 * p->td / (p->ts + 2.0 * p->k_lpf))
-                      );
-      p->k1 = p->kc * (alfa - 1.0 +
-                       (p->ts * (alfa + 1.0) / (2.0 * p->ti)) -
-                       4.0 * p->td / (p->ts + 2.0 * p->k_lpf)
-                      );
-      p->k2 = p->kc * (-alfa + (alfa * p->ts / (2.0 * p->ti))
-                                 + (2.0 * p->td / (p->ts + 2.0 * p->k_lpf))
-                      );
-   } // else
-   //--------------------------------------------------
-   // y[k] = (1- alfa)*y[k-1] + alfa*y[k-2] + ....
-   //--------------------------------------------------
-   p->lpf1 = 1.0 - alfa;
-   p->lpf2 = alfa;
-} // init_pid2()
-
-void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg)
-/*------------------------------------------------------------------
-  Purpose  : This function implements the updated PID controller.
-             It is an update of pid_reg1(), derived with Bilinear
-             Transformation. It is a Type A controller.
-             This function should be called once every TS seconds.
-  Variables:
-        xk : The input variable x[k] (= measured temperature)
-       *yk : The output variable y[k] (= gamma value for power electronics)
-      tset : The setpoint value for the temperature
-        *p : Pointer to struct containing PID parameters
-        vrg: Release signal: 1 = Start control, 0 = disable PID controller
-  Returns  : No values are returned
-  ------------------------------------------------------------------*/
-{
-   double ek; // e[k]
-
-   ek = tset - xk;  // calculate e[k]
-   if (vrg)
-   {
-      *yk  = p->lpf1 * yk_1 + p->lpf2 * yk_2; // y[k] = (1-alfa)*y[k-1] + alfa*y[k-2]
-      *yk += p->k0 * ek;                      //  ... + k0 * e[k]
-      *yk += p->k1 * ek_1;                    //  ... + k1 * e[k-1]
-      *yk += p->k2 * ek_2;                    //  ... + k2 * e[k-2]
-   }
-   else *yk = 0.0;
-
-   ek_2 = ek_1; // e[k-2] = e[k-1]
-   ek_1 = ek;   // e[k-1] = e[k]
-
-   // limit y[k] to GMA_HLIM and GMA_LLIM
-   if (*yk > GMA_HLIM)
-   {
-      *yk = GMA_HLIM;
-   }
-   else if (*yk < GMA_LLIM)
-   {
-      *yk = GMA_LLIM;
-   } // else
-
-   yk_2 = yk_1; // y[k-2] = y[k-1]
-   yk_1 = *yk;  // y[k-1] = y[k]
-} // pid_reg2()
 
 void init_pid3(pid_params *p)
 /*------------------------------------------------------------------
@@ -341,8 +169,7 @@ void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg)
 
 void init_pid4(pid_params *p)
 /*------------------------------------------------------------------
-  Purpose  : This function initialises the Allen Bradley Type C PID
-             controller.
+  Purpose  : This function initialises the Takahashi PID controller.
   Variables: p: pointer to struct containing all PID parameters
   Returns  : No values are returned
   ------------------------------------------------------------------*/
@@ -352,10 +179,10 @@ void init_pid4(pid_params *p)
 
 void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
 /*------------------------------------------------------------------
-  Purpose  : This function initialises the Allen Bradley Type C PID
-             controller, the P and D term are no longer dependent on
-             the set-point, only on PV (which is Thlt).
-             The D term is also low-pass filtered.
+  Purpose  : This function implements the Takahashi PID controller,
+             which is a type C controller: the P and D term are no
+             longer dependent on the set-point, only on PV (which is Thlt).
+             The D term is NOT low-pass filtered.
              This function should be called once every TS seconds.
   Variables:
         xk : The input variable x[k] (= measured temperature)
@@ -370,29 +197,24 @@ void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
    double lpf; //LPF output
 
    ek = tset - xk;  // calculate e[k] = SP[k] - PV[k]
-   //---------------------------------------------------------------
-   // Calculate Lowpass Filter for D-term: use x[k] instead of e[k]!
-   //---------------------------------------------------------------
-   lpf = p->lpf1 * lpf_1 + p->lpf2 * (xk + xk_1);
 
    if (vrg)
    {
       //-----------------------------------------------------------
       // Calculate PID controller:
-      // y[k] = y[k-1] - Kc*(PV[k] - PV[k-1] +
-      //                     Ts*e[k]/Ti -
-      //                     Td/Ts*(lpf[k] - 2*lpf[k-1]+lpf[k-2]))
+      // y[k] = y[k-1] + Kc*(PV[k-1] - PV[k] +
+      //                     Ts*e[k]/Ti +
+      //                     Td/Ts*(2*PV[k-1] - PV[k] - PV[k-2]))
       //-----------------------------------------------------------
-      p->pp = -p->kc * (xk - xk_1);  // y[k] = y[k-1] - Kc*(PVk - PVk-1)
-      p->pi = p->k0 * ek;            //      + Kc*Ts/Ti * e[k]
-      p->pd = -p->k1 * (lpf - 2.0 * lpf_1 + lpf_2);
+      p->pp = p->kc * (xk_1 - xk);  // y[k] = y[k-1] + Kc*(PV[k-1] - PV[k])
+      p->pi = p->k0 * ek;           //      + Kc*Ts/Ti * e[k]
+      p->pd = p->k1 * (2.0 * xk_1 - xk - xk_2);
       *yk += p->pp + p->pi + p->pd;
    }
    else { *yk = p->pp = p->pi = p->pd = 0.0; }
 
+   xk_2  = xk_1;  // PV[k-2] = PV[k-1]
    xk_1  = xk;    // PV[k-1] = PV[k]
-   lpf_2 = lpf_1; // update stores for LPF
-   lpf_1 = lpf;
 
    // limit y[k] to GMA_HLIM and GMA_LLIM
    if (*yk > GMA_HLIM)

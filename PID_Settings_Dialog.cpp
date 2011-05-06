@@ -5,6 +5,14 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2006/11/19 10:53:55  Emile
+// The power outlet (220 V) is now shared with the modulating gas burner and
+// the electrical heating element. By setting the proper bits in the PID
+// Settings Dialog Screen, one can select which function is allocated to the
+// power outlet. If the gas burner is used, the outlet is energized when the
+// pid_output exceeds the gas burner hysteresis (also in the PID settings screen).
+// For this: the generate_IO_signals STD has been updated significantly.
+//
 // Revision 1.5  2005/11/12 22:19:38  Emile
 // - PID Output (Gamma) routing added. It is now possible to send the output
 //   of the PID controller to 3 devices: 1) electrical heating element,
@@ -169,4 +177,5 @@ void __fastcall TPID_Settings::CB_Pid_out2Click(TObject *Sender)
    } // else
 } // CB_Pid_out2Click()
 //---------------------------------------------------------------------------
+
 

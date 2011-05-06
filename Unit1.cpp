@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.56  2010/05/16 18:33:00  Emile
+// - Bug-fix: offset to Thlt and Tmlt was added every second. Now corrected.
+//
 // Revision 1.55  2007/08/26 22:23:20  Emile
 // - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
 // - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
@@ -818,12 +821,12 @@ void __fastcall TMainForm::Main_Initialisation(void)
          Reg->CloseKey();      // Close the Registry
          switch (pid_pars.pid_model)
          {
-            case 0 : init_pid1(&pid_pars); break; // First   ebrew PID controller
-            case 1 : init_pid2(&pid_pars); break; // Updated ebrew PID controller
-            case 2 : init_pid3(&pid_pars); break; // Allen Bradley Type A controller
-            case 3 : init_pid4(&pid_pars); break; // Allen Bradley Type C controller
+            case 0 : break; // Not used 1
+            case 1 : break; // Not used 2
+            case 2 : init_pid3(&pid_pars); break; // Type A with D-filtering controller
+            case 3 : init_pid4(&pid_pars); break; // Takahashi Type C controller
             default: pid_pars.pid_model = 3;
-                     init_pid4(&pid_pars); break; // Allen Bradley Type C controller
+                     init_pid4(&pid_pars); break; // Takahashi Type C controller
          } // switch
          // Do NOT delete Reg yet, since we need it further on
       } // if
@@ -1162,12 +1165,12 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteInteger("BURNER_LHYST",pid_pars.burner_hyst_l);
             switch (pid_pars.pid_model)
             {
-               case 0 : init_pid1(&pid_pars); break; // First   ebrew PID controller
-               case 1 : init_pid2(&pid_pars); break; // Updated ebrew PID controller
-               case 2 : init_pid3(&pid_pars); break; // Allen Bradley Type A controller
-               case 3 : init_pid4(&pid_pars); break; // Allen Bradley Type C controller
+               case 0 : break; // Not used 1
+               case 1 : break; // Not used 2
+               case 2 : init_pid3(&pid_pars); break; // Type A with D-filtering controller
+               case 3 : init_pid4(&pid_pars); break; // Takahashi Type C controller
                default: pid_pars.pid_model = 3;
-                        init_pid4(&pid_pars); break; // Allen Bradley Type C controller
+                        init_pid4(&pid_pars); break; // Takahashi Type C controller
             } // switch
             Reg->WriteInteger("PID_Model",pid_pars.pid_model);
             cb_pid_dbg  = ptmp->CB_PID_dbg->Checked; // PID debug info
@@ -2045,15 +2048,13 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       // PID_RB->ItemIndex = 1 => PID Controller On
       switch (pid_pars.pid_model)
       {
-         case 0 : pid_reg1(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-                  break; // First ebrew PID controller
-         case 1 : pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-                  break; // Updated ebrew PID controller
+         case 0 : break; // First ebrew PID controller
+         case 1 : break; // Updated ebrew PID controller
          case 2 : pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
                   break; // Allen Bradley Type A controller
          case 3 : pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
                   break; // Allen Bradley Type C controller
-         default: pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+         default: pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
                   break;
       } // switch
       if (swfx.gamma_sw)
