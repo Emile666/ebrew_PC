@@ -1,5 +1,5 @@
 /*==================================================================
-  Function name: init_pid1(), pid_reg1(), init_pid2(), pid_reg2()
+  Function name: init_pid2(), pid_reg2()
                  init_pid3(), pid_reg3(), init_pid4(), pid_reg4()
   Author       : E. vd Logt
   File name    : $Id$
@@ -15,6 +15,11 @@
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
   $Log$
+  Revision 1.8  2011/05/06 11:09:42  Emile
+  - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
+  - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
+  - PID dialog updated to reflect changes.
+
   Revision 1.7  2007/07/06 22:23:02  Emile
   - The real time between two lines from a log-file is now used instead of a
     fixed 5 sec. time when reading a log-file.
@@ -76,165 +81,13 @@ double phi;      // directional forgetting factor
 double lambda;   // parameter lambda
 double eta;      // parameter eta (v)
 
-void init_pid3(pid_params *p)
+void init_pid2(pid_params *p, int N)
 /*------------------------------------------------------------------
-  Purpose  : This function initialises the Allen Bradley Type A PID
-             controller.
-  Variables: p: pointer to struct containing all PID parameters
+  Purpose  : This function initialises the Self-Tuning PID controller.
 
-                   Kc.Ts
-             k0 =  -----   (for I-term)
-                    Ti
-
-                       Td
-             k1 = Kc . --  (for D-term)
-                       Ts
-
-             The LPF parameters are also initialised here:
-             lpf[k] = lpf1 * lpf[k-1] + lpf2 * lpf[k-2]
-  Returns  : No values are returned
-  ------------------------------------------------------------------*/
-{
-   p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
-   if (p->ts_ticks > TWENTY_SECONDS)
-   {
-      p->ts_ticks = TWENTY_SECONDS;
-   }
-   if (p->ti == 0.0)
-   {
-      p->k0 = 0.0;
-   }
-   else
-   {
-      p->k0 = p->kc * p->ts / p->ti;
-   } // else
-   p->k1   = p->kc * p->td / p->ts;
-   p->lpf1 = (2.0 * p->k_lpf - p->ts) / (2.0 * p->k_lpf + p->ts);
-   p->lpf2 = p->ts / (2.0 * p->k_lpf + p->ts);
-} // init_pid3()
-
-void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg)
-/*------------------------------------------------------------------
-  Purpose  : This function implements the type Allen Bradley Type A PID
-             controller. All terms are dependent on the error signal e[k].
-             The D term is also low-pass filtered.
-             This function should be called once every TS seconds.
-  Variables:
-        xk : The input variable x[k] (= measured temperature)
-       *yk : The output variable y[k] (= gamma value for power electronics)
-      tset : The setpoint value for the temperature
-        *p : Pointer to struct containing PID parameters
-        vrg: Release signal: 1 = Start control, 0 = disable PID controller
-  Returns  : No values are returned
-  ------------------------------------------------------------------*/
-{
-   double ek;  // e[k]
-   double lpf; //LPF output
-
-   ek = tset - xk;  // calculate e[k] = SP[k] - PV[k]
-   //--------------------------------------
-   // Calculate Lowpass Filter for D-term
-   //--------------------------------------
-   lpf = p->lpf1 * lpf_1 + p->lpf2 * (ek + ek_1);
-
-   if (vrg)
-   {
-      //-----------------------------------------------------------
-      // Calculate PID controller:
-      // y[k] = y[k-1] + Kc*(e[k] - e[k-1] +
-      //                     Ts*e[k]/Ti +
-      //                     Td/Ts*(lpf[k] - 2*lpf[k-1]+lpf[k-2]))
-      //-----------------------------------------------------------
-      p->pp = p->kc * (ek - ek_1);  // y[k] = y[k-1] + Kc*(e[k] - e[k-1])
-      p->pi = p->k0 * ek;           //      + Kc*Ts/Ti * e[k]
-      p->pd = p->k1 * (lpf - 2.0 * lpf_1 + lpf_2);
-      *yk += p->pp + p->pi + p->pd;
-   }
-   else *yk = 0.0;
-
-   ek_1  = ek;    // e[k-1] = e[k]
-   lpf_2 = lpf_1; // update stores for LPF
-   lpf_1 = lpf;
-
-   // limit y[k] to GMA_HLIM and GMA_LLIM
-   if (*yk > GMA_HLIM)
-   {
-      *yk = GMA_HLIM;
-   }
-   else if (*yk < GMA_LLIM)
-   {
-      *yk = GMA_LLIM;
-   } // else
-} // pid_reg3()
-
-void init_pid4(pid_params *p)
-/*------------------------------------------------------------------
-  Purpose  : This function initialises the Takahashi PID controller.
-  Variables: p: pointer to struct containing all PID parameters
-  Returns  : No values are returned
-  ------------------------------------------------------------------*/
-{
-   init_pid3(p); // identical to init_pid3()
-} // init_pid4()
-
-void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
-/*------------------------------------------------------------------
-  Purpose  : This function implements the Takahashi PID controller,
-             which is a type C controller: the P and D term are no
-             longer dependent on the set-point, only on PV (which is Thlt).
-             The D term is NOT low-pass filtered.
-             This function should be called once every TS seconds.
-  Variables:
-        xk : The input variable x[k] (= measured temperature)
-       *yk : The output variable y[k] (= gamma value for power electronics)
-      tset : The setpoint value for the temperature
-        *p : Pointer to struct containing PID parameters
-        vrg: Release signal: 1 = Start control, 0 = disable PID controller
-  Returns  : No values are returned
-  ------------------------------------------------------------------*/
-{
-   double ek;  // e[k]
-   double lpf; //LPF output
-
-   ek = tset - xk;  // calculate e[k] = SP[k] - PV[k]
-
-   if (vrg)
-   {
-      //-----------------------------------------------------------
-      // Calculate PID controller:
-      // y[k] = y[k-1] + Kc*(PV[k-1] - PV[k] +
-      //                     Ts*e[k]/Ti +
-      //                     Td/Ts*(2*PV[k-1] - PV[k] - PV[k-2]))
-      //-----------------------------------------------------------
-      p->pp = p->kc * (xk_1 - xk);  // y[k] = y[k-1] + Kc*(PV[k-1] - PV[k])
-      p->pi = p->k0 * ek;           //      + Kc*Ts/Ti * e[k]
-      p->pd = p->k1 * (2.0 * xk_1 - xk - xk_2);
-      *yk += p->pp + p->pi + p->pd;
-   }
-   else { *yk = p->pp = p->pi = p->pd = 0.0; }
-
-   xk_2  = xk_1;  // PV[k-2] = PV[k-1]
-   xk_1  = xk;    // PV[k-1] = PV[k]
-
-   // limit y[k] to GMA_HLIM and GMA_LLIM
-   if (*yk > GMA_HLIM)
-   {
-      *yk = GMA_HLIM;
-   }
-   else if (*yk < GMA_LLIM)
-   {
-      *yk = GMA_LLIM;
-   } // else
-} // pid_reg4()
-
-void init_pid5(pid_params *p, int N)
-/*------------------------------------------------------------------
-  Purpose  : This function initialises the Takahashi controller,
-             which is almost the same as the Allen Bradley Type C PID
-             controller.
-             The Takahashi controller is used together with the
-             on-line system identification using the recursive least
-             squares algorithm
+             The PID controller is a type C Takahashi PID controller.
+             It is used together with on-line system identification 
+             using the recursive least squares algorithm.
   Variables: p: pointer to struct containing all PID parameters
              N: order of process [1 | 2 | 3]
   Returns  : No values are returned
@@ -267,12 +120,12 @@ void init_pid5(pid_params *p, int N)
          else C[i][j] = 0.0;
       } // for j
    } // for i
-} // init_pid5()
+} // init_pid2()
 
-void pid_reg5(double xk, double *yk, double tset, pid_params *p, int vrg,
-              sys_id_params *psys_id, int st)
+void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg,
+              sys_id_params *psi)
 /*------------------------------------------------------------------
-  Purpose  : This function implements a self-tuning PID controller.
+  Purpose  : This function implements a Self-Tuning PID controller.
              It contains the following:
              - sys_id(): calculate the a1, b1, a2, b2, ... parameters
                          for the transfer function of the process
@@ -283,7 +136,7 @@ void pid_reg5(double xk, double *yk, double tset, pid_params *p, int vrg,
              - calculate the Takahashi PID controller. Choose between
                          the on-line parameters or the default parameters
              The PID control algorithm is identical to pid_reg4(), which
-             The D term is also low-pass filtered.
+             is a Takahashi Type C with no filtering of the D-action.
              This function should be called once every TS seconds.
   Variables:
         xk : The input variable x[k] (= measured temperature)
@@ -291,33 +144,29 @@ void pid_reg5(double xk, double *yk, double tset, pid_params *p, int vrg,
       tset : The setpoint value for the temperature
         *p : Pointer to struct containing PID parameters
         vrg: Release signal: 1 = Start control, 0 = disable PID controller
-        *p : Pointer to struct containing system identification parameters
-         st: Self-Tuning: 1 = Self-Tuning, 0 = use (static) default parameters
+      *psi : Pointer to struct containing system identification parameters
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
-   sys_id(*yk, xk, psys_id->N, NODF); // calc. parameters for transfer function
-   calc_ultimate_gain_geriod(psys_id,p->ts); // calc. Kpu and Tu
-   calc_pid_parameters(psys_id,p->ts); // calc. PID parameters from Kpu and Tu
-   if (st) // Self-Tuning?
-   {
-      p->kc = psys_id->kc; // Use Kc parameter from system identification
-      p->k0 = psys_id->ki; // Use Ki parameter from system identification
-      p->k1 = psys_id->kd; // Use Kd parameter from system identification
-   }
+   sys_id(*yk, xk, psi->N, NODF);        // calc. parameters for transfer function
+   calc_ultimate_gain_period(psi,p->ts); // calc. Kpu and Tu
+   calc_pid_parameters(psi,p->ts);       // calc. PID parameters from Kpu and Tu
 
    if (vrg)
    {
-      //-----------------------------------------------------------
-      // Calculate PID controller:
-      // y[k] = y[k-1] - Kc*(PV[k] - PV[k-1] +
-      //                     Ts*e[k]/Ti -
-      //                     Td/Ts*(lpf[k] - 2*lpf[k-1]+lpf[k-2]))
-      //-----------------------------------------------------------
-      p->pp = p->kc * (xk_1 - xk);   // y[k] = y[k-1] - Kc*(PVk - PVk-1)
-      p->pi = p->k0 * (tset - xk);   //      + Kc*Ts/Ti * e[k]
-      p->pd = p->k1 * (2.0 * xk_1 - xk - xk_2);
-      *yk  += p->pp + p->pi + p->pd;
+      //--------------------------------------------------------------------------------
+      // Takahashi Type C PID controller (NO filtering of D-action):
+      //
+      //                                    Kc.Ts        Kc.Td
+      // y[k] = y[k-1] + Kc.(x[k-1]-x[k]) + -----.e[k] + -----.(2.x[k-1]-x[k]-x[k-2])
+      //                                      Ti           Ts
+      //
+      // Use internal parameters Kc, Ki, Kd calc. from calc_pid_parameters()
+      //--------------------------------------------------------------------------------
+      p->pp = psi->kc * (xk_1 - xk);              // Kc.(x[k-1]-x[k])
+      p->pi = psi->ki * (tset - xk);              // (Kc.Ts/Ti).e[k]
+      p->pd = psi->kd * (2.0 * xk_1 - xk - xk_2); // (Kc.Td/Ts).(2.x[k-1]-x[k]-x[k-2])
+      *yk  += p->pp + p->pi + p->pd;          // add y[k-1] + P, I & D actions to y[k]
    }
    else { *yk = p->pp = p->pi = p->pd = 0.0; }
 
@@ -333,7 +182,162 @@ void pid_reg5(double xk, double *yk, double tset, pid_params *p, int vrg,
    {
       *yk = GMA_LLIM;
    } // else
-} // pid_reg5()
+} // pid_reg2()
+
+void init_pid3(pid_params *p)
+/*------------------------------------------------------------------
+  Purpose  : This function initialises the Type A PID controller.
+             It also utilizes filtering of the D-action.
+  Variables: p: pointer to struct containing all PID parameters
+
+                   Kc.Ts
+             k0 =  -----   (for I-term)
+                    Ti
+
+                       Td
+             k1 = Kc . --  (for D-term)
+                       Ts
+
+             The parameters for lowpass-filtering of the D-action
+             are also initialised here:
+             lpf[k] = lpf1 * lpf[k-1] + lpf2 * lpf[k-2]
+             
+  Returns  : No values are returned
+  ------------------------------------------------------------------*/
+{
+   p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
+   if (p->ts_ticks > SIXTY_SECONDS)
+   {
+      p->ts_ticks = SIXTY_SECONDS;
+   } // if
+   if (p->ti == 0.0)
+   {
+      p->k0 = 0.0;
+   }
+   else
+   {
+      p->k0 = p->kc * p->ts / p->ti;
+   } // else
+   p->k1   = p->kc * p->td / p->ts;
+   p->lpf1 = (2.0 * p->k_lpf - p->ts) / (2.0 * p->k_lpf + p->ts);
+   p->lpf2 = p->ts / (2.0 * p->k_lpf + p->ts);
+} // init_pid3()
+
+void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg)
+/*------------------------------------------------------------------
+  Purpose  : This function implements the type A PID controller.
+             It also utilizes filtering of the D-action.
+             All terms are dependent on the error signal e[k].
+             This function should be called once every TS seconds.
+  Variables:
+        xk : The input variable x[k] (= measured temperature)
+       *yk : The output variable y[k] (= gamma value for power electronics)
+      tset : The setpoint value for the temperature
+        *p : Pointer to struct containing PID parameters
+        vrg: Release signal: 1 = Start control, 0 = disable PID controller
+  Returns  : No values are returned
+  ------------------------------------------------------------------*/
+{
+   double ek;  // e[k]
+   double lpf; //LPF output
+
+   ek = tset - xk;  // calculate e[k] = SP[k] - PV[k]
+   //--------------------------------------
+   // Calculate Lowpass Filter for D-term
+   //--------------------------------------
+   lpf = p->lpf1 * lpf_1 + p->lpf2 * (ek + ek_1);
+
+   if (vrg)
+   {
+      //-----------------------------------------------------------------------------------
+      // Type A PID controller with filtering of D-action
+      //
+      //                                    Kc.Ts        Kc.Td
+      // y[k] = y[k-1] + Kc.(e[k]-e[k-1]) + -----.e[k] + -----.(lpf[k]-2.lpf[k-1]+lpf[k-2])
+      //                                      Ti           Ts
+      //
+      // lpf[k] is the lowpass filtered version of e[k]
+      //
+      //-----------------------------------------------------------------------------------
+      p->pp = p->kc * (ek - ek_1);                 // Kc.(e[k]-e[k-1])
+      p->pi = p->k0 * ek;                          // (Kc.Ts/Ti).e[k]
+      p->pd = p->k1 * (lpf - 2.0 * lpf_1 + lpf_2); // (Kc.Td/Ts).(lpf[k]-2.lpf[k-1]+lpf[k-2])
+      *yk  += p->pp + p->pi + p->pd;               // add y[k-1] + P, I & D actions to y[k]
+   }
+   else { *yk = p->pp = p->pi = p->pd = 0.0; }
+
+   ek_1  = ek;    // e[k-1] = e[k]
+   lpf_2 = lpf_1; // update stores for LPF
+   lpf_1 = lpf;
+
+   // limit y[k] to GMA_HLIM and GMA_LLIM
+   if (*yk > GMA_HLIM)
+   {
+      *yk = GMA_HLIM;
+   }
+   else if (*yk < GMA_LLIM)
+   {
+      *yk = GMA_LLIM;
+   } // else
+} // pid_reg3()
+
+void init_pid4(pid_params *p)
+/*------------------------------------------------------------------
+  Purpose  : This function initialises the Takahashi Type C PID
+             controller.
+  Variables: p: pointer to struct containing all PID parameters
+  Returns  : No values are returned
+  ------------------------------------------------------------------*/
+{
+   init_pid3(p); // identical to init_pid3()
+} // init_pid4()
+
+void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
+/*------------------------------------------------------------------
+  Purpose  : This function implements the Takahashi Type C PID 
+             controller: the P and D term are no longer dependent
+             on the set-point, only on PV (which is Thlt).
+             The D term is NOT low-pass filtered.
+             This function should be called once every TS seconds.
+  Variables:
+        xk : The input variable x[k] (= measured temperature)
+       *yk : The output variable y[k] (= gamma value for power electronics)
+      tset : The setpoint value for the temperature
+        *p : Pointer to struct containing PID parameters
+        vrg: Release signal: 1 = Start control, 0 = disable PID controller
+  Returns  : No values are returned
+  ------------------------------------------------------------------*/
+{
+   if (vrg)
+   {
+      //--------------------------------------------------------------------------------
+      // Takahashi Type C PID controller (NO filtering of D-action):
+      //
+      //                                    Kc.Ts        Kc.Td
+      // y[k] = y[k-1] + Kc.(x[k-1]-x[k]) + -----.e[k] + -----.(2.x[k-1]-x[k]-x[k-2])
+      //                                      Ti           Ts
+      //
+      //--------------------------------------------------------------------------------
+      p->pp = p->kc * (xk_1 - xk);              // Kc.(x[k-1]-x[k])
+      p->pi = p->k0 * (tset - xk);              // (Kc.Ts/Ti).e[k]
+      p->pd = p->k1 * (2.0 * xk_1 - xk - xk_2); // (Kc.Td/Ts).(2.x[k-1]-x[k]-x[k-2])
+      *yk  += p->pp + p->pi + p->pd;            // add y[k-1] + P, I & D actions to y[k]
+   }
+   else { *yk = p->pp = p->pi = p->pd = 0.0; }
+
+   xk_2  = xk_1;  // x[k-2] = x[k-1]
+   xk_1  = xk;    // x[k-1] = x[k]
+
+   // limit y[k] to GMA_HLIM and GMA_LLIM
+   if (*yk > GMA_HLIM)
+   {
+      *yk = GMA_HLIM;
+   }
+   else if (*yk < GMA_LLIM)
+   {
+      *yk = GMA_LLIM;
+   } // else
+} // pid_reg4()
 
 void sys_id(double uk, double yk, int N, int nodf)
 /*------------------------------------------------------------------
@@ -444,7 +448,7 @@ void sys_id(double uk, double yk, int N, int nodf)
    } // else
 } // sys_id()
 
-int calc_ultimate_gain_geriod(sys_id_params *p, double ts)
+int calc_ultimate_gain_period(sys_id_params *p, double ts)
 /*------------------------------------------------------------------
   Purpose  : This function computes the ultimate gain and the
              corresponding ultimate period for a discrete model of

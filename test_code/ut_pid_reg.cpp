@@ -10,8 +10,15 @@
 //
 //               CuTest is used as Unit Test library.
 //               File should be compiled with Borland C++ Builder 4.5!
+//
+//               Page references are made to the following book:
+//               "Digital Self-tuning Controllers" by Bobál, Böhm, Fessl and
+//               Machácek, ISBN 978-1-85233-980-7
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2010/05/16 18:34:16  Emile
+// - update in test-code
+//
 // Revision 1.2  2007/10/03 07:49:04  Emile
 // - Header file added, file- and function-header comments added
 // - No functional changes.
@@ -57,6 +64,7 @@ void ut_vxv2s(CuTest *tc)
 {
    double x;
 
+   printf("Start of Unit Test Suite 1: Vector and Matrix calculations\n");
    printf("   Testcase 01: vxv2s, Vector x Vector To Scalar\n");
    x = vxv2s(v1,v2,1); CuAssertDblEquals(tc, 22.0,x,e);
    x = vxv2s(v1,v2,2); CuAssertDblEquals(tc, 58.0,x,e);
@@ -263,9 +271,10 @@ void ut_sys_id1_nodf(CuTest *tc)
   double a1exp[] = {0.1008, -0.6848,-0.8660,-0.8116,-0.7993,-0.8370,-0.8552};
   double b1exp[] = {0.1798,  0.1757, 0.1993, 0.2007, 0.1985, 0.1997, 0.2020};
 
+  printf("Start of Unit Test Suite 2: System Identification Functions\n");
   printf("   Testcase 09: sys_id, System Identification (order N = 1, NODF)\n");
   // Book page 31, b1=0.1997, a1=-0.8669
-  init_pid5(&p,1); // call init. with empty p struct and N == 1
+  init_pid2(&p,1); // call init. with empty p struct and N == 1
   d[0] = -0.0071; // -y[1], make identical to Matlab program
   d[1] = -0.6918; //  u[1], see : Digital Self-Tuning controllers, page 39
 
@@ -302,7 +311,7 @@ void ut_sys_id1_adf(CuTest *tc)
 
   printf("   Testcase 10: sys_id, System Identification (order N = 1, ADF)\n");
   // Book page 31, b1=0.1997, a1=-0.8669
-  init_pid5(&p,1); // call init. with empty p struct and N == 1
+  init_pid2(&p,1); // call init. with empty p struct and N == 1
   d[0] = -0.0071; // -y[1], make identical to Matlab program
   d[1] = -0.6918; //  u[1], see : Digital Self-Tuning controllers, page 39
 
@@ -346,7 +355,7 @@ void ut_sys_id2_nodf(CuTest *tc)
   // Values from Matlab indentdf_wrapper_N2.m
 
   printf("   Testcase 11: sys_id, System Identification (order N = 2, NODF)\n");
-  init_pid5(&p,2); // call init. with empty p struct and N == 2
+  init_pid2(&p,2); // call init. with empty p struct and N == 2
   d[0] = -y[1]; // -y[k-1], make identical to identdf_wrapper_N2.m
   d[1] = -y[0]; // -y[k-2]
   d[2] =  u[0]; //  u[k-1]
@@ -378,13 +387,13 @@ void ut_ultim_gain_period(CuTest *tc)
    ps.N   = 1;
    theta[0] = 1.3254; // a1
    theta[1] = 0.0;    // b1
-   err = calc_ultimate_gain_geriod(&ps,2.0);
+   err = calc_ultimate_gain_period(&ps,2.0);
    CuAssertIntEquals(tc,1     ,err);
    CuAssertDblEquals(tc,1.0000,ps.kpu,1e-4);
    CuAssertDblEquals(tc,4.0000,ps.tu,1e-4);
 
    theta[1] = 2.6291;    // b1
-   err = calc_ultimate_gain_geriod(&ps,2.0);
+   err = calc_ultimate_gain_period(&ps,2.0);
    CuAssertIntEquals(tc,0      ,err);
    CuAssertDblEquals(tc,-0.1238,ps.kpu,1e-4);
    CuAssertDblEquals(tc, 4.0000,ps.tu,1e-4);
@@ -394,25 +403,25 @@ void ut_ultim_gain_period(CuTest *tc)
    theta[1] =  0.5488; // a2
    theta[2] =  0.0329; // b1
    theta[3] =  0.0269; // b2
-   err = calc_ultimate_gain_geriod(&ps,2.0);
+   err = calc_ultimate_gain_period(&ps,2.0); // Ts = 2 sec.
    CuAssertIntEquals(tc,0     ,err);
-   CuAssertDblEquals(tc,16.7732,ps.kpu,1e-4);
+   CuAssertDblEquals(tc,16.7732,ps.kpu,1e-4); // see page 120
    CuAssertDblEquals(tc,11.6027,ps.tu,1e-4);
 
    theta[0] = -1.4253; // a1: this is Gb(z) from page 100 of "Digital ST controllers"
    theta[1] =  0.4966; // a2
    theta[2] = -0.1017; // b1
    theta[3] =  0.1730; // b2
-   err = calc_ultimate_gain_geriod(&ps,2.0);
+   err = calc_ultimate_gain_period(&ps,2.0); // Ts = 2 sec.
    CuAssertIntEquals(tc,0      ,err);
-   CuAssertDblEquals(tc, 2.9098,ps.kpu,1e-4);
+   CuAssertDblEquals(tc, 2.9098,ps.kpu,1e-4); // see page 120
    CuAssertDblEquals(tc,23.5184,ps.tu,1e-4);
 
    theta[0] = -3.3248; // a1: this is Gc(z) from page 100 of "Digital ST controllers"
    theta[1] =  1.6487; // a2: N=2 unstable poles
    theta[2] = -0.6624; // b1
    theta[3] =  0.0137; // b2
-   err = calc_ultimate_gain_geriod(&ps,2.0);
+   err = calc_ultimate_gain_period(&ps,2.0); // Ts = 2 sec.
    CuAssertIntEquals(tc,1     ,err);
    CuAssertDblEquals(tc,1.0000,ps.kpu,1e-4);
    CuAssertDblEquals(tc,4.0000,ps.tu,1e-4);
@@ -421,7 +430,7 @@ void ut_ultim_gain_period(CuTest *tc)
    theta[1] =  0.4966; // a2
    theta[2] =  0.1017; // b1 modified to get 2 real poles in overall transfer function
    theta[3] = -0.0536; // b2
-   err = calc_ultimate_gain_geriod(&ps,2.0);
+   err = calc_ultimate_gain_period(&ps,2.0);
    CuAssertIntEquals(tc,0      ,err);
    CuAssertDblEquals(tc,18.8146,ps.kpu,1e-4);
    CuAssertDblEquals(tc, 4.0000,ps.tu,1e-4);
@@ -433,7 +442,7 @@ void ut_ultim_gain_period(CuTest *tc)
    theta[3] =  0.0706; // b1
    theta[4] =  0.1416; // b2
    theta[5] =  0.0136; // b3
-   err = calc_ultimate_gain_geriod(&ps,1.0);
+   err = calc_ultimate_gain_period(&ps,1.0);
    CuAssertIntEquals(tc,0     ,err);
    CuAssertDblEquals(tc,2.7297,ps.kpu,1e-4);
    CuAssertDblEquals(tc,6.5544,ps.tu,1e-4);
@@ -444,7 +453,7 @@ void ut_ultim_gain_period(CuTest *tc)
    theta[3] =  0.6749; // b1  modified to make poles real in overall transfer function!
    theta[4] = -0.3037; // b2
    theta[5] = -0.0517; // b3
-   err = calc_ultimate_gain_geriod(&ps,1.0);
+   err = calc_ultimate_gain_period(&ps,1.0);
    CuAssertIntEquals(tc,0     ,err);
    CuAssertDblEquals(tc,3.0000,ps.kpu,5e-3);
    CuAssertDblEquals(tc,2.0000,ps.tu,5e-3);
@@ -468,7 +477,7 @@ void ut_calc_pid_parameters(CuTest *tc)
    ps.tu  = 23.5184;
    calc_pid_parameters(&ps,2.0);
 
-   CuAssertDblEquals(tc, 1.5974,ps.kr,1e-4);
+   CuAssertDblEquals(tc, 1.5974,ps.kr,1e-4); // see page 120
    CuAssertDblEquals(tc, 0.2969,ps.ki,1e-4);
    CuAssertDblEquals(tc, 2.5663,ps.kd,1e-4);
    CuAssertDblEquals(tc, 1.5974,ps.kc,1e-4);
@@ -507,7 +516,9 @@ void it_pid_reg_N2(CuTest *tc)
    vector        b1exp = { 0.1000,-0.1017,-0.1017,-0.1017, -0.1017, -0.1017 };
    vector        b2exp = { 0.2000, 0.2000, 0.0197, 0.0381,  0.1720,  0.1730 };
 
-   printf("   Testcase 14: Integration Test pid_reg5(), N = 2\n");
+   printf("Start of Integration Test Suite: Entire Self-Tuning Controller\n");
+   printf("   Testcase 14: Integration Test pid_reg2(), N = 2, Gb(z), page 100\n");
+   printf("                Output-file: it_pid_log_N2.txt\n");
    f1 = fopen("it_pid_log_N2.txt","w");
    N       = 2;   // simulate 2nd order model
    p.ts    = 2.0; // sample-period is 2 sec.
@@ -516,7 +527,7 @@ void it_pid_reg_N2(CuTest *tc)
    p.td    = 1.0; //
    p.k_lpf = 0.3; // Filtering of D-term
 
-   init_pid5(&p,N);
+   init_pid2(&p,N);
    ps.N = N;
    vrg  = 0;                 // disable PID controller at start-up
    uk   = uk_1 = uk_2 = 0.0; // controller output, process input
@@ -545,7 +556,7 @@ void it_pid_reg_N2(CuTest *tc)
       yk = 1.4253 * yk_1 - 0.4966 * yk_2 - 0.1017 * uk_1 + 0.1730 * uk_2;
       yk_2 = yk_1;  yk_1 = yk;
 
-      pid_reg5(yk,&uk,wk, &p,vrg,&ps,1); // pid controller with self-tuning
+      pid_reg2(yk,&uk,wk, &p,vrg,&ps); // pid controller with self-tuning
       uk_2 = uk_1;  uk_1 = uk;
 
       if ((i >= 10) && (i <= 14))
@@ -606,7 +617,8 @@ void it_pid_reg_N3(CuTest *tc)
    vector        b2exp = { 0.2000, 0.2000, 0.2385, 0.2383,  0.1941,  0.1416 };
    vector        b3exp = { 0.3000, 0.3000, 0.3000, 0.3072,  0.1223,  0.0137 };
 
-   printf("   Testcase 15: Integration Test pid_reg5(), N = 3\n");
+   printf("   Testcase 15: Integration Test pid_reg2(), N = 3, Gd(z), page 126\n");
+   printf("                Output-file: it_pid_log_N3.txt\n");
    f1 = fopen("it_pid_log_N3.txt","w");
    N       = 3;   // simulate 3rd order model, Example 4.5, page 126
    p.ts    = 1.0; // sample-period is 1 sec.
@@ -614,7 +626,7 @@ void it_pid_reg_N3(CuTest *tc)
    p.ti    = 2.0; //
    p.td    = 1.0; //
    p.k_lpf = 0.09; // Filtering of D-term
-   init_pid5(&p,N);
+   init_pid2(&p,N);
    ps.N = N;
    vrg  = 0;                        // disable PID controller at start-up
    uk   = uk_1 = uk_2 = uk_3 = 0.0; // controller output, process input
@@ -646,7 +658,7 @@ void it_pid_reg_N3(CuTest *tc)
       yk += 0.0706 * uk_1 + 0.1416 * uk_2 + 0.0136 * uk_3;
       yk_3 = yk_2;  yk_2 = yk_1; yk_1 = yk;
 
-      pid_reg5(yk,&uk,wk, &p,vrg,&ps,1); // pid controller with self-tuning
+      pid_reg2(yk,&uk,wk, &p,vrg,&ps); // pid controller with self-tuning
       uk_3 = uk_2;  uk_2 = uk_1; uk_1 = uk;
 
       if ((i >= 10) && (i <= 14))
@@ -680,6 +692,97 @@ void it_pid_reg_N3(CuTest *tc)
 //------------------------------------------------------------
 
 /*------------------------------------------------------------------
+  Purpose  : This function uses model Gb(z) to compare the response
+             of all 3 PID controllers with each other. The result is
+             written to a log-file for further processing into a graph.
+
+             We use the optimal parameters for pid_reg3() and pid_reg4(),
+             which were found earlier (Kc=1.5974, Ti=10.7592, Td=3.2130).
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
+void it_pid_regs_Gb(void)
+{
+   FILE          *f1;
+   int           N;
+   int           i;
+   int           vrg;            // 1 = release controller
+   pid_params    p2,p3,p4;
+   sys_id_params ps2;
+   double        wk;
+   double        yk2, yk2_1, yk2_2; // process output
+   double        yk3, yk3_1, yk3_2;
+   double        yk4, yk4_1, yk4_2;
+   double        uk2, uk2_1, uk2_2; // process input = PID output
+   double        uk3, uk3_1, uk3_2;
+   double        uk4, uk4_1, uk4_2;
+
+   printf("   Testcase 16: Integration Test: comparison of self-tuning controller versus\n");
+   printf("                Type A with filtering and Takahashi Type C controller\n");
+   f1 = fopen("it_pid_regs_Gb.txt","w");
+   N       = 2;   // simulate 2nd order model
+   p2.ts    = p3.ts    = p4.ts = 2.0; // sample-period is 2 sec.
+   p2.kc    = 1.0; // initialize PID controller parameters (just in case)
+   p3.kc    = p4.kc    = 1.5974;
+   p2.ti    = 2.0; //
+   p3.ti    = p4.ti    = 10.7592;
+   p2.td    = 1.0; //
+   p3.td    = p4.td    = 3.2130;
+   p2.k_lpf = p3.k_lpf = p4.k_lpf = 0.3; // Filtering of D-term
+
+   init_pid2(&p2,N); init_pid3(&p3); init_pid4(&p4);
+   ps2.N = N;
+   vrg  = 0;                   // disable PID controller at start-up
+   uk2  = uk2_1 = uk2_2 = 0.0; // controller output, process input
+   uk3  = uk3_1 = uk3_2 = 0.0;
+   uk4  = uk4_1 = uk4_2 = 0.0;
+   yk2  = yk2_1 = yk2_2 = 0.0; // process output
+   yk3  = yk3_1 = yk3_2 = 0.0;
+   yk4  = yk4_1 = yk4_2 = 0.0;
+   wk   = 0.0;                 // set-point, reference value
+   fprintf(f1,"i wk uk2 yk2 uk3 yk3 uk4 yk4\n");
+
+   for (i = 0; i < 150; i++)
+   {
+      if (i ==  5)       vrg = 1;   // release controller at i = 5
+      if (i == 10)       wk  = 1.0; // create step at i = 10
+      else if (i ==  50) wk  = 0.5; // create step at i = 50
+      else if (i == 100) wk  = 1.0; // create step at i = 100
+
+      //------------------------------------------------------------------------
+      //Now calculate the process model, which is Gb(z), with transfer function:
+      //
+      //                   -1      -2
+      //               b1*z  + b2*z
+      //       H(z) = -------------------
+      //                      -1      -2
+      //              1 + a1*z  + a2*z
+      //
+      // with b1 = -0.1017, b2 = 0.1730, a1 = -1.4253 and a2 = 0.4966
+      //------------------------------------------------------------------------
+      yk2 = 1.4253 * yk2_1 - 0.4966 * yk2_2 - 0.1017 * uk2_1 + 0.1730 * uk2_2;
+      yk2_2 = yk2_1;  yk2_1 = yk2;
+      yk3 = 1.4253 * yk3_1 - 0.4966 * yk3_2 - 0.1017 * uk3_1 + 0.1730 * uk3_2;
+      yk3_2 = yk3_1;  yk3_1 = yk3;
+      yk4 = 1.4253 * yk4_1 - 0.4966 * yk4_2 - 0.1017 * uk4_1 + 0.1730 * uk4_2;
+      yk4_2 = yk4_1;  yk4_1 = yk4;
+
+      pid_reg2(yk2,&uk2,wk, &p2,vrg,&ps2); // pid controller with self-tuning
+      uk2_2 = uk2_1;  uk2_1 = uk2;
+      pid_reg3(yk3,&uk3,wk, &p3,vrg);      // Type A controller with D-filtering
+      uk3_2 = uk3_1;  uk3_1 = uk3;
+      //pid_reg4(yk4,&uk4,wk, &p4,vrg);      // Type C Takahashi no D-filtering
+      uk4_2 = uk4_1;  uk4_1 = uk4;
+
+      fprintf(f1,"%02d %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f %5.4f\n",
+              i,wk,uk2,yk2,uk3,yk3,uk4,yk4);
+   } // for i
+   fclose(f1);
+} // it_pid_regs_Gb()
+//------------------------------------------------------------
+
+/*------------------------------------------------------------------
   Purpose  : This function contains the test-suite for the vector and
              matrix calculation functions.
              It makes calls to the various test-functions.
@@ -690,7 +793,6 @@ CuSuite *vector_matrix_suite(void)
 {
    CuSuite* suite = CuSuiteNew();
 
-   printf("Start of Unit Test Suite 1: Vector and Matrix calculations\n");
    SUITE_ADD_TEST(suite, ut_vxv2s); // vector x vector to scalar
    SUITE_ADD_TEST(suite, ut_vxv2m); // vector x vector to matrix
    SUITE_ADD_TEST(suite, ut_vxm2v); // vector x matrix to vector
@@ -714,7 +816,6 @@ CuSuite *sys_id_suite(void)
 {
    CuSuite* suite = CuSuiteNew();
 
-   printf("Start of Unit Test Suite 2: System Identification Functions\n");
    SUITE_ADD_TEST(suite, ut_sys_id1_nodf); // system identification function
    SUITE_ADD_TEST(suite, ut_sys_id1_adf);
    SUITE_ADD_TEST(suite, ut_sys_id2_nodf);
@@ -734,7 +835,6 @@ CuSuite *integration_test_suite(void)
 {
    CuSuite* suite = CuSuiteNew();
 
-   printf("Start of Integration Test Suite: Entire Self-Tuning Controller\n");
    SUITE_ADD_TEST(suite, it_pid_reg_N2); // 2nd order system, test controller
    SUITE_ADD_TEST(suite, it_pid_reg_N3); // 3rd order system, test controller
    return suite;
@@ -774,7 +874,8 @@ void run_all_tests(void)
   ------------------------------------------------------------------*/
 int main(int argc, char* argv[])
 {
-  run_all_tests(); // run all the unit- integration tests
+  run_all_tests();  // run all the unit- integration tests
+  it_pid_regs_Gb(); // additional run with all 3 pid controllers
   printf("Press any key...");
   getch();
   return 0; // return-value

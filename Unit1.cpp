@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.57  2011/05/06 11:09:42  Emile
+// - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
+// - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
+// - PID dialog updated to reflect changes.
+//
 // Revision 1.56  2010/05/16 18:33:00  Emile
 // - Bug-fix: offset to Thlt and Tmlt was added every second. Now corrected.
 //
@@ -399,6 +404,8 @@
 #include "i2c_dll.h"
 extern byte fscl_values[]; // defined in i2c_dll.cpp
 extern byte base_adc[];    // defined in i2c_dll.cpp
+
+extern vector theta; // defined in pid_reg.h
 
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
@@ -821,12 +828,14 @@ void __fastcall TMainForm::Main_Initialisation(void)
          Reg->CloseKey();      // Close the Registry
          switch (pid_pars.pid_model)
          {
-            case 0 : break; // Not used 1
-            case 1 : break; // Not used 2
-            case 2 : init_pid3(&pid_pars); break; // Type A with D-filtering controller
-            case 3 : init_pid4(&pid_pars); break; // Takahashi Type C controller
+            case 0 : sys_id_pars.N = 1;
+                     init_pid2(&pid_pars,1); break; // Self-Tuning Takahashi, N=1
+            case 1 : sys_id_pars.N = 2;
+                     init_pid2(&pid_pars,2); break; // Self-Tuning Takahashi, N=2
+            case 2 : init_pid3(&pid_pars);   break; // Type A with D-filtering controller
+            case 3 : init_pid4(&pid_pars);   break; // Takahashi Type C controller
             default: pid_pars.pid_model = 3;
-                     init_pid4(&pid_pars); break; // Takahashi Type C controller
+                     init_pid4(&pid_pars);   break; // Takahashi Type C controller
          } // switch
          // Do NOT delete Reg yet, since we need it further on
       } // if
@@ -1165,12 +1174,14 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteInteger("BURNER_LHYST",pid_pars.burner_hyst_l);
             switch (pid_pars.pid_model)
             {
-               case 0 : break; // Not used 1
-               case 1 : break; // Not used 2
-               case 2 : init_pid3(&pid_pars); break; // Type A with D-filtering controller
-               case 3 : init_pid4(&pid_pars); break; // Takahashi Type C controller
-               default: pid_pars.pid_model = 3;
-                        init_pid4(&pid_pars); break; // Takahashi Type C controller
+              case 0 : sys_id_pars.N = 1;
+                       init_pid2(&pid_pars,1); break; // Self-Tuning Takahashi, N=1
+              case 1 : sys_id_pars.N = 2;
+                       init_pid2(&pid_pars,2); break; // Self-Tuning Takahashi, N=2
+              case 2 : init_pid3(&pid_pars);   break; // Type A with D-filtering controller
+              case 3 : init_pid4(&pid_pars);   break; // Takahashi Type C controller
+              default: pid_pars.pid_model = 3;
+                       init_pid4(&pid_pars);   break; // Takahashi Type C controller
             } // switch
             Reg->WriteInteger("PID_Model",pid_pars.pid_model);
             cb_pid_dbg  = ptmp->CB_PID_dbg->Checked; // PID debug info
@@ -1870,7 +1881,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
              50 milliseconds. This can be seen as the main control
              loop of the program. It utilises time-slices to divide
              computations over time.
-             After 5 seconds (100 calls) the main control loop
+             After 60 seconds (1200 calls) the main control loop
              starts again
   Returns  : None
   ------------------------------------------------------------------*/
@@ -1891,7 +1902,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    // This is the main control loop, executed once every 50 msec.
    // Do some time-slicing to reduce #computations in one loop.
    // Every time-slice is executed once every TS seconds.
-   // tmr.pid_tmr runs from 1 to TWENTY_SECONDS
+   // tmr.pid_tmr runs from 1 to SIXTY_SECONDS
    //--------------------------------------------------------------
 
    //----------------------------------------------------------------
@@ -2048,14 +2059,16 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       // PID_RB->ItemIndex = 1 => PID Controller On
       switch (pid_pars.pid_model)
       {
-         case 0 : break; // First ebrew PID controller
-         case 1 : break; // Updated ebrew PID controller
-         case 2 : pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-                  break; // Allen Bradley Type A controller
-         case 3 : pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-                  break; // Allen Bradley Type C controller
-         default: pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+         case 0 : // FALL-THROUGH! Self-Tuning Takahashi Type C, N=1
+         case 1 : //               Self-Tuning Takahashi Type C, N=2
+                  pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex,&sys_id_pars);
                   break;
+         case 2 : pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break; // Type A with filtering of D-action
+         case 3 : pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break; // Takahashi Type C, NO filtering of D-action
+         default: pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break; // default to Type A with filtering of D-action
       } // switch
       if (swfx.gamma_sw)
       {
@@ -2186,7 +2199,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //--------------------------------------------------------------------------
    // Reset timer if necessary
    //--------------------------------------------------------------------------
-   if (++tmr.pid_tmr > TWENTY_SECONDS)
+   if (++tmr.pid_tmr > SIXTY_SECONDS)
    {
       tmr.pid_tmr = 1; // reset timer
    } // else if
@@ -2550,7 +2563,8 @@ void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
 
 void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
 {
-   char tmp_str[80];   // temp string for calculations
+   char tmp_str[120];  // temp string for calculations
+   char tmp_str2[80];  // temp string for calculations
    int  p;             // temp. variable
    int  i;             // temp. variable
 
@@ -2693,11 +2707,31 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
    //-------------------------------------------
    if (cb_pid_dbg)
    {
-      sprintf(tmp_str,"%6.2f %6.2f %6.2f %6.2f %6.2f",pid_pars.pp,
-                                                     pid_pars.pi,
-                                                     pid_pars.pd,
-                                                     pid_pars.pp+pid_pars.pi+pid_pars.pd,
-                                                     gamma);
+      if (pid_pars.pid_model < 2)
+      {  // pid_model = 0 or 1, Self-Tuning controllers
+         sprintf(tmp_str,"%6.2f %6.2f %6.2f %6.2f %6.2f (%6.2f %6.2f %6.2f)",
+                         pid_pars.pp, pid_pars.pi, pid_pars.pd,
+                         pid_pars.pp + pid_pars.pi + pid_pars.pd, gamma,
+                         sys_id_pars.kc, sys_id_pars.ti, sys_id_pars.td);
+         switch (sys_id_pars.N)
+         {
+            case 1: sprintf(tmp_str2,"(%6.4f %6.4f)",theta[0],theta[1]);
+                    break;
+            case 2: sprintf(tmp_str2,"(%6.4f %6.4f %6.4f %6.4f)",
+                                     theta[0],theta[1],theta[2],theta[3]);
+                    break;
+            case 3: sprintf(tmp_str2,"(%6.4f %6.4f %6.4f %6.4f %6.4f %6.4f)",
+                                     theta[0],theta[1],theta[2],theta[3],theta[4],theta[5]);
+                    break;
+         } // switch
+         strcat(tmp_str,tmp_str2); // add 2 strings together
+      } // if
+      else
+      {  // pid_model = 2 or 3, PID controllers with fixed parameters
+         sprintf(tmp_str,"%6.2f %6.2f %6.2f %6.2f %6.2f",
+                         pid_pars.pp, pid_pars.pi, pid_pars.pd,
+                         pid_pars.pp + pid_pars.pi + pid_pars.pd, gamma);
+      } // else
       PID_dbg->Caption = tmp_str;
    } // if
 

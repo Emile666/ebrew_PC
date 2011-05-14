@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.35  2007/08/26 22:23:20  Emile
+// - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
+// - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
+//   VMLT_SLOPE and TSET_HLT_SLOPE
+// - Bug-fix setting MA order for HLT Volume: this was coupled to MA order of
+//   HLT temperature. Corrected
+// - Measurements... and PID controller settings... dialog screen updated.
+//
 // Revision 1.34  2007/07/07 14:25:59  Emile
 // - i2c bus closed directly instead of leaving open. Every I2C routine now
 //   has a i2c_start() and i2c_stop() added to it.
@@ -535,6 +543,7 @@ public:		// User declarations
         double          tmlt;       // MLT actual temperature
         double          ttriac;     // Triac electronics actual temperature
         pid_params      pid_pars;   // struct containing PID parameters
+        sys_id_params   sys_id_pars; // struct containing system ident. parameters
         int             hw_status;  // I2C HW status, see i2c_dll.h for bit settings
         maisch_schedule ms[MAX_MS]; // struct containing maisch schedule
         sparge_struct   sp;         // Values for Sparging

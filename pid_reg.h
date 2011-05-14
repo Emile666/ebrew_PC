@@ -5,6 +5,11 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.10  2011/05/06 11:09:42  Emile
+  - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
+  - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
+  - PID dialog updated to reflect changes.
+
   Revision 1.9  2007/07/06 22:23:02  Emile
   - The real time between two lines from a log-file is now used instead of a
     fixed 5 sec. time when reading a log-file.
@@ -81,7 +86,7 @@ extern "C" {
 #endif
 
 // These defines are needed for loop timing and PID controller timing
-#define TWENTY_SECONDS (400)
+#define SIXTY_SECONDS (1200)
 #define TEN_SECONDS    (200)
 #define FIVE_SECONDS   (100)
 #define ONE_SECOND      (20)
@@ -142,17 +147,16 @@ typedef struct _sys_id_params
 //--------------------
 // Function Prototypes
 //--------------------
-void init_pid3(pid_params *p);
+void init_pid2(pid_params *p, int N); // Takahashi with Self-Tuning
+void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg, sys_id_params *psys_id);
+void init_pid3(pid_params *p);        // Type A PID with filtering of D-action
 void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg);
-void init_pid4(pid_params *p);
+void init_pid4(pid_params *p);        // Type C Takahashi PID, no filtering of D-action
 void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg);
-void init_pid5(pid_params *p, int N);
 
 void   sys_id(double uk, double yk, int N, int nodf);
-int    calc_ultimate_gain_geriod(sys_id_params *p, double ts);
+int    calc_ultimate_gain_period(sys_id_params *p, double ts);
 void   calc_pid_parameters(sys_id_params *p, double ts);
-void   pid_reg5(double xk, double *yk, double tset, pid_params *p, int vrg,
-                sys_id_params *psys_id, int st);
 
 double vxv2s(vector vec1, vector vec2, int N);
 void   vxv2m(vector vec1, vector vec2, matrix *m, int N);
