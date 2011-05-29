@@ -6,6 +6,14 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.18  2007/08/26 22:23:21  Emile
+// - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
+// - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
+//   VMLT_SLOPE and TSET_HLT_SLOPE
+// - Bug-fix setting MA order for HLT Volume: this was coupled to MA order of
+//   HLT temperature. Corrected
+// - Measurements... and PID controller settings... dialog screen updated.
+//
 // Revision 1.17  2007/07/06 22:23:02  Emile
 // - The real time between two lines from a log-file is now used instead of a
 //   fixed 5 sec. time when reading a log-file.
@@ -358,8 +366,10 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int 
 int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
                double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
                sparge_struct *sps, std_struct *std, int pid_on, int std_fx);
-void init_ma(ma *p, int N, double init_val);
+void   init_ma(ma *p, int N, double init_val);
 double moving_average(ma *p, double x);
+void   init_sample_delay(ma *p, int TD);
+double sample_delay(ma *p, double x);
 void   slope_limiter(const double lim, const double Told, double *Tnew);
 
 #ifdef __cplusplus

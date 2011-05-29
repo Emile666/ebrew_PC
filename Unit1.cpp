@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.58  2011/05/14 14:02:18  Emile
+// - Unit test set updates, test-case 16 added
+// - Self-Tuning controller N=1 and N=2 added to PID dialog screen
+// - PID debug label extended with (Kc Ti Td) and sys. id. parameters
+// - Max. sample-time extended to SIXTY_SECONDS (was 20 seconds)
+// - Help file updated with version history
+//
 // Revision 1.57  2011/05/06 11:09:42  Emile
 // - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
 // - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
@@ -761,9 +768,12 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
          pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
          pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
-         pid_pars.k_lpf     = Reg->ReadFloat("K_LPF");
-         tset_hlt_slope     = Reg->ReadFloat("TSET_HLT_SLOPE");
-         pid_pars.pid_model = Reg->ReadInteger("PID_Model"); // [0..3]
+         pid_pars.k_lpf      = Reg->ReadFloat("K_LPF");
+         tset_hlt_slope      = Reg->ReadFloat("TSET_HLT_SLOPE");
+         pid_pars.pid_model  = Reg->ReadInteger("PID_Model"); // [0..3]
+         sys_id_pars.N       = Reg->ReadInteger("STC_N");     // [1,2,3]
+         sys_id_pars.stc_td  = Reg->ReadInteger("STC_TD");    // [0..100]
+         sys_id_pars.stc_adf = Reg->ReadBool("STC_ADF");      // true = use ADF
          pid_pars.burner_hyst_h = Reg->ReadInteger("BURNER_HHYST");
          pid_pars.burner_hyst_l = Reg->ReadInteger("BURNER_LHYST");
          // Send PID-Output to the various heaters / burners
@@ -828,14 +838,16 @@ void __fastcall TMainForm::Main_Initialisation(void)
          Reg->CloseKey();      // Close the Registry
          switch (pid_pars.pid_model)
          {
-            case 0 : sys_id_pars.N = 1;
-                     init_pid2(&pid_pars,1); break; // Self-Tuning Takahashi, N=1
-            case 1 : sys_id_pars.N = 2;
-                     init_pid2(&pid_pars,2); break; // Self-Tuning Takahashi, N=2
-            case 2 : init_pid3(&pid_pars);   break; // Type A with D-filtering controller
-            case 3 : init_pid4(&pid_pars);   break; // Takahashi Type C controller
-            default: pid_pars.pid_model = 3;
-                     init_pid4(&pid_pars);   break; // Takahashi Type C controller
+            case 0 : // Self-Tuning Takahashi, N = 1 .. 3
+                     init_pid2(&pid_pars,&sys_id_pars);
+                     break;
+            case 1 : init_pid3(&pid_pars);  // Type A with D-filtering controller
+                     break;
+            case 2 : init_pid4(&pid_pars);  // Takahashi Type C controller
+                     break;
+            default: pid_pars.pid_model = 2; // Takahashi Type C controller
+                     init_pid4(&pid_pars);
+                     break;
          } // switch
          // Do NOT delete Reg yet, since we need it further on
       } // if
@@ -988,7 +1000,13 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TSET_HLT_SLOPE",1.0); // Slope Limit for Tset_HLT
           Reg->WriteFloat("TOffset",1.0);        // HLT - MLT heat loss
           Reg->WriteFloat("TOffset2",-0.5);      // offset for early start of mash timers
-          Reg->WriteInteger("PID_Model",0);      // Type A PID Controller
+          Reg->WriteInteger("PID_Model",2);      // Takahashi PID Controller
+          sys_id_pars.N = 1; // order N for system identification
+          Reg->WriteInteger("STC_N",sys_id_pars.N);   // [1,2,3]
+          sys_id_pars.stc_td  = 0; // Time-Delay estimate for system identification
+          Reg->WriteInteger("STC_TD",sys_id_pars.stc_td);
+          sys_id_pars.stc_adf = 0; // true = use Adaptive directional forgetting
+          Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
           Reg->WriteInteger("BURNER_HHYST",35);  // Gas Burner Hysteresis High Limit
           Reg->WriteInteger("BURNER_LHYST",30);  // Gas Burner Hysteresis Low Limit
           Reg->WriteString("SERVER_NAME","PC-EMILE"); // Server to connect to
@@ -1127,6 +1145,9 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->Ti_Edit->Text        = AnsiString(Reg->ReadFloat("Ti"));
          ptmp->Td_Edit->Text        = AnsiString(Reg->ReadFloat("Td"));
          ptmp->K_LPF_Edit->Text     = AnsiString(Reg->ReadFloat("K_LPF"));
+         ptmp->STC_N_Edit->Text     = AnsiString(Reg->ReadInteger("STC_N"));
+         ptmp->STC_TD_Edit->Text    = AnsiString(Reg->ReadInteger("STC_TD"));
+         ptmp->CB_adf->Checked      = Reg->ReadBool("STC_ADF");
          ptmp->Tset_hlt_slope->Text = AnsiString(Reg->ReadFloat("TSET_HLT_SLOPE"));
          ptmp->PID_Model->ItemIndex = Reg->ReadInteger("PID_Model");
          ptmp->Burner_On->Text      = AnsiString(Reg->ReadInteger("BURNER_HHYST"));
@@ -1165,6 +1186,16 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteFloat("Td",pid_pars.td);
             pid_pars.k_lpf = ptmp->K_LPF_Edit->Text.ToDouble();
             Reg->WriteFloat("K_LPF",pid_pars.k_lpf);
+            sys_id_pars.N  = ptmp->STC_N_Edit->Text.ToInt();
+            if ((sys_id_pars.N < 1) || (sys_id_pars.N > 3)) sys_id_pars.N = 1;
+            Reg->WriteInteger("STC_N",sys_id_pars.N);
+            sys_id_pars.stc_td = ptmp->STC_TD_Edit->Text.ToInt();
+            if ((sys_id_pars.stc_td < 0) || (sys_id_pars.stc_td > MAX_MA)) sys_id_pars.stc_td = 0;
+            Reg->WriteInteger("STC_TD",sys_id_pars.stc_td);
+            if (ptmp->CB_adf->Checked)
+                 sys_id_pars.stc_adf = 1; // use adaptive directional forgetting
+            else sys_id_pars.stc_adf = 0; // NO ADF
+            Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
             tset_hlt_slope = ptmp->Tset_hlt_slope->Text.ToDouble();
             Reg->WriteFloat("TSET_HLT_SLOPE",tset_hlt_slope);
             pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
@@ -1174,14 +1205,16 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
             Reg->WriteInteger("BURNER_LHYST",pid_pars.burner_hyst_l);
             switch (pid_pars.pid_model)
             {
-              case 0 : sys_id_pars.N = 1;
-                       init_pid2(&pid_pars,1); break; // Self-Tuning Takahashi, N=1
-              case 1 : sys_id_pars.N = 2;
-                       init_pid2(&pid_pars,2); break; // Self-Tuning Takahashi, N=2
-              case 2 : init_pid3(&pid_pars);   break; // Type A with D-filtering controller
-              case 3 : init_pid4(&pid_pars);   break; // Takahashi Type C controller
-              default: pid_pars.pid_model = 3;
-                       init_pid4(&pid_pars);   break; // Takahashi Type C controller
+               case 0 : // Self-Tuning Takahashi, N = 1 .. 3
+                        init_pid2(&pid_pars,&sys_id_pars);
+                        break;
+               case 1 : init_pid3(&pid_pars);   // Type A with D-filtering controller
+                        break;
+               case 2 : init_pid4(&pid_pars);   // Takahashi Type C controller
+                        break;
+               default: pid_pars.pid_model = 2; // Takahashi Type C controller
+                        init_pid4(&pid_pars);
+                        break;
             } // switch
             Reg->WriteInteger("PID_Model",pid_pars.pid_model);
             cb_pid_dbg  = ptmp->CB_PID_dbg->Checked; // PID debug info
@@ -2059,16 +2092,14 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       // PID_RB->ItemIndex = 1 => PID Controller On
       switch (pid_pars.pid_model)
       {
-         case 0 : // FALL-THROUGH! Self-Tuning Takahashi Type C, N=1
-         case 1 : //               Self-Tuning Takahashi Type C, N=2
-                  pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex,&sys_id_pars);
-                  break;
-         case 2 : pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+         case 0 : pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex,&sys_id_pars);
+                  break; // Self-Tuning Takahashi Type C
+         case 1 : pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
                   break; // Type A with filtering of D-action
-         case 3 : pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+         case 2 : pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
                   break; // Takahashi Type C, NO filtering of D-action
-         default: pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-                  break; // default to Type A with filtering of D-action
+         default: pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
+                  break; // default to Type C, NO filtering of D-action
       } // switch
       if (swfx.gamma_sw)
       {
@@ -2707,8 +2738,8 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
    //-------------------------------------------
    if (cb_pid_dbg)
    {
-      if (pid_pars.pid_model < 2)
-      {  // pid_model = 0 or 1, Self-Tuning controllers
+      if (pid_pars.pid_model == 0)
+      {  // pid_model = 0: Self-Tuning controllers
          sprintf(tmp_str,"%6.2f %6.2f %6.2f %6.2f %6.2f (%6.2f %6.2f %6.2f)",
                          pid_pars.pp, pid_pars.pi, pid_pars.pd,
                          pid_pars.pp + pid_pars.pi + pid_pars.pd, gamma,
@@ -2727,7 +2758,7 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
          strcat(tmp_str,tmp_str2); // add 2 strings together
       } // if
       else
-      {  // pid_model = 2 or 3, PID controllers with fixed parameters
+      {  // pid_model = 1 or 2, PID controllers with fixed parameters
          sprintf(tmp_str,"%6.2f %6.2f %6.2f %6.2f %6.2f",
                          pid_pars.pp, pid_pars.pi, pid_pars.pd,
                          pid_pars.pp + pid_pars.pi + pid_pars.pd, gamma);

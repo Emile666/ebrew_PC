@@ -5,6 +5,13 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.11  2011/05/14 14:02:19  Emile
+  - Unit test set updates, test-case 16 added
+  - Self-Tuning controller N=1 and N=2 added to PID dialog screen
+  - PID debug label extended with (Kc Ti Td) and sys. id. parameters
+  - Max. sample-time extended to SIXTY_SECONDS (was 20 seconds)
+  - Help file updated with version history
+
   Revision 1.10  2011/05/06 11:09:42  Emile
   - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
   - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
@@ -133,28 +140,30 @@ typedef struct _pid_params
 //------------------------------------------------------------------
 typedef struct _sys_id_params
 {
-   int    N;   // order N for system identification and parameter estimation
-   double kpu; // Ultimate gain
-   double tu;  // Ultimate period
-   double kc;  // Controller gain
-   double ti;  // Time-constant for I action
-   double td;  // Time-constant for D action
-   double kr;  // Kr value for PID Takahashi controller
-   double ki;  // ki value for PID Takahashi controller
-   double kd;  // kd value for PID Takahashi controller
+   int    N;       // order N for system identification and parameter estimation
+   int    stc_td;  // Time-Delay estimate for system identification
+   int    stc_adf; // 1 = use adaptive directional forgetting
+   double kpu;     // Ultimate gain
+   double tu;      // Ultimate period
+   double kc;      // Controller gain
+   double ti;      // Time-constant for I action
+   double td;      // Time-constant for D action
+   double kr;      // Kr value for PID Takahashi controller
+   double ki;      // ki value for PID Takahashi controller
+   double kd;      // kd value for PID Takahashi controller
 } sys_id_params; // struct sys_id_params
 
 //--------------------
 // Function Prototypes
 //--------------------
-void init_pid2(pid_params *p, int N); // Takahashi with Self-Tuning
+void init_pid2(pid_params *p, sys_id_params *psi); // Takahashi with Self-Tuning
 void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg, sys_id_params *psys_id);
 void init_pid3(pid_params *p);        // Type A PID with filtering of D-action
 void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg);
 void init_pid4(pid_params *p);        // Type C Takahashi PID, no filtering of D-action
 void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg);
 
-void   sys_id(double uk, double yk, int N, int nodf);
+void   sys_id(double uk, double yk, int N, int use_adf);
 int    calc_ultimate_gain_period(sys_id_params *p, double ts);
 void   calc_pid_parameters(sys_id_params *p, double ts);
 

@@ -6,6 +6,14 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.19  2007/08/26 22:23:20  Emile
+  - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
+  - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
+    VMLT_SLOPE and TSET_HLT_SLOPE
+  - Bug-fix setting MA order for HLT Volume: this was coupled to MA order of
+    HLT temperature. Corrected
+  - Measurements... and PID controller settings... dialog screen updated.
+
   Revision 1.18  2007/07/06 22:23:01  Emile
   - The real time between two lines from a log-file is now used instead of a
     fixed 5 sec. time when reading a log-file.
@@ -1171,6 +1179,60 @@ double moving_average(ma *p, double x)
    } // if
    return p->sum;   // return value = filter output
 } // moving_average()
+
+void init_sample_delay(ma *p, int TD)
+/*------------------------------------------------------------------
+  Purpose  : This function initialises the sample delay function.
+             This function uses the same struct as the moving_average()
+             function uses (the MA struct).
+  Variables:
+        *p : Pointer to the ma struct (specify a new struct for every
+             new filter!)
+        TD : The number of sample-time delays (should be < MAX_MA)
+  Returns  : -
+  ------------------------------------------------------------------*/
+{
+   int i; // temp. var.
+
+   if (TD < MAX_MA) p->N = TD;    // number of sample-time delays
+   else             p->N = MAX_MA;
+   p->index = 0;                  // index in cyclic array
+   for (i = 0; i < p->N; i++)
+   {
+      p->T[i] = 0.0; // init. all stores to 0
+   } // for
+} // init_sample_delay()
+
+double sample_delay(ma *p, double x)
+/*------------------------------------------------------------------
+  Purpose  : This function delays a signal N samples and outputs the
+             value x[k-N] (N is defined in init_sample_delay()):
+
+             Initialisation: p->N must have a value.
+                             p->index should be init. to 0.0.
+  Variables:
+        *p : Pointer to the ma struct (specify a new struct for every
+             new filter!)
+         x : The actual input value x[k]
+  Returns  : the delayed input value x[k-N]
+  ------------------------------------------------------------------*/
+{
+   double xn;     // get x[k-N]
+   if (p->N == 0) // no delay
+   {
+       xn = x; // return input value directly
+   }
+   else
+   {
+      xn = p->T[p->index]; // get x[k-N]
+      p->T[p->index] = x;         // store x[k] in array
+      if (++(p->index) >= p->N)   // update index in cyclic array
+      {
+         p->index = 0; // restore to 1st position
+      } // if
+   } // else
+   return xn;      // return value = x[k-N]
+} // sample_delay()
 
 void slope_limiter(const double lim, const double Told, double *Tnew)
 /*------------------------------------------------------------------

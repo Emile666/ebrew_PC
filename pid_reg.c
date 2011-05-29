@@ -15,6 +15,13 @@
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
   $Log$
+  Revision 1.9  2011/05/14 14:02:19  Emile
+  - Unit test set updates, test-case 16 added
+  - Self-Tuning controller N=1 and N=2 added to PID dialog screen
+  - PID debug label extended with (Kc Ti Td) and sys. id. parameters
+  - Max. sample-time extended to SIXTY_SECONDS (was 20 seconds)
+  - Help file updated with version history
+
   Revision 1.8  2011/05/06 11:09:42  Emile
   - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
   - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
@@ -61,6 +68,7 @@
   ==================================================================
 */
 #include "pid_reg.h"
+#include "misc.h"
 #include <math.h>
 
 static double ek_1;  // e[k-1]  = SP[k-1] - PV[k-1] = Tset_hlt[k-1] - Thlt[k-1]
@@ -80,27 +88,30 @@ double rho;      // rho parameter
 double phi;      // directional forgetting factor
 double lambda;   // parameter lambda
 double eta;      // parameter eta (v)
+ma     yk_delay; // delayed values of pid controller
 
-void init_pid2(pid_params *p, int N)
+void init_pid2(pid_params *p, sys_id_params *psi)
 /*------------------------------------------------------------------
   Purpose  : This function initialises the Self-Tuning PID controller.
 
              The PID controller is a type C Takahashi PID controller.
-             It is used together with on-line system identification 
+             It is used together with on-line system identification
              using the recursive least squares algorithm.
-  Variables: p: pointer to struct containing all PID parameters
-             N: order of process [1 | 2 | 3]
+  Variables: p   : pointer to struct containing all PID parameters
+             psi : Pointer to struct containing system identification parameters
+                   Used to find the order N and the Time-Delay TD
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
    int i,j; // loop counters
 
    init_pid3(p); // identical to init_pid3()
+   init_sample_delay(&yk_delay, psi->stc_td); // init. struct for delayed values of y[k]
    // init. parameter estimate vector
    theta[0] = 0.1; // a1 = 0.1
-   theta[1] = (N == 1) ? 0.1 : 0.2; // N == 1 => b1 = 0.1 else a2 = 0.2
-   theta[2] = (N == 2) ? 0.1 : 0.3; // N == 2 => b1 = 0.1 else a3 = 0.3
-   theta[3] = (N == 2) ? 0.2 : 0.1; // N == 2 => b2 = 0.2 else b1 = 0.1
+   theta[1] = (psi->N == 1) ? 0.1 : 0.2; // N == 1 => b1 = 0.1 else a2 = 0.2
+   theta[2] = (psi->N == 2) ? 0.1 : 0.3; // N == 2 => b1 = 0.1 else a3 = 0.3
+   theta[3] = (psi->N == 2) ? 0.2 : 0.1; // N == 2 => b2 = 0.2 else b1 = 0.1
    theta[4] = 0.2;
    theta[5] = 0.3;
 
@@ -116,7 +127,7 @@ void init_pid2(pid_params *p, int N)
       for (j = 0; j < 6; j++)
       {
          if (i == j)
-              C[i][j] = (N == 1) ?  1e+3 : (N == 1) ? 1e+6 : 1e+9;
+              C[i][j] = 1e+9;
          else C[i][j] = 0.0;
       } // for j
    } // for i
@@ -148,12 +159,15 @@ void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg,
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
-   sys_id(*yk, xk, psi->N, NODF);        // calc. parameters for transfer function
-   calc_ultimate_gain_period(psi,p->ts); // calc. Kpu and Tu
-   calc_pid_parameters(psi,p->ts);       // calc. PID parameters from Kpu and Tu
+   double yk_TD; // value of y[k-TD]
 
    if (vrg)
    {
+      yk_TD = sample_delay(&yk_delay, *yk);    // get value of y[k-TD]
+      sys_id(yk_TD, xk, psi->N, psi->stc_adf); // calc. parameters for transfer function
+      calc_ultimate_gain_period(psi, p->ts);   // calc. Kpu and Tu
+      calc_pid_parameters(psi, p->ts);         // calc. PID parameters from Kpu and Tu
+
       //--------------------------------------------------------------------------------
       // Takahashi Type C PID controller (NO filtering of D-action):
       //
@@ -339,7 +353,7 @@ void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
    } // else
 } // pid_reg4()
 
-void sys_id(double uk, double yk, int N, int nodf)
+void sys_id(double uk, double yk, int N, int use_adf)
 /*------------------------------------------------------------------
   Purpose  : This function performs system identification for a
              second or third order process.
@@ -359,7 +373,7 @@ void sys_id(double uk, double yk, int N, int nodf)
         uk : The process input (= PID output) = u[k]
         yk : The process output y[k] (= measured temperature)
          N : order of process [1 | 2 | 3]
-      nodf : 1 = no directional forgetting
+   use_adf : 1 = use adaptive directional forgetting
   Returns  : No values are returned, but the global vector theta,
              containing the parameter estimates, is updated with the
              new values.
@@ -412,7 +426,7 @@ void sys_id(double uk, double yk, int N, int nodf)
       mam2m(&C,mtmp,nn);              // Matlab: c = c-c*d*d'*c/(inv(eps)+ksi)
    } // if
 
-   if (nodf) phi = 1.0; // no directional forgetting
+   if (!use_adf) phi = 1.0; // no adaptive directional forgetting
    else
    {
       lambda = phi * (lambda + ep * ep / (1.0 + ksi)); // eq.36

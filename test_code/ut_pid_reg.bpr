@@ -14,7 +14,7 @@ BCB = $(MAKEDIR)\..
 VERSION = BCB.04.04
 # ---------------------------------------------------------------------------
 PROJECT = ut_pid_reg.exe
-OBJFILES = ut_pid_reg.obj ..\PID_REG.obj CuTest.obj
+OBJFILES = ut_pid_reg.obj ..\PID_REG.obj CuTest.obj ..\misc.obj
 RESFILES =
 RESDEPEN = $(RESFILES)
 LIBFILES =

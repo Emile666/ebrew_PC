@@ -5,6 +5,14 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2007/08/26 22:23:20  Emile
+// - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
+// - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
+//   VMLT_SLOPE and TSET_HLT_SLOPE
+// - Bug-fix setting MA order for HLT Volume: this was coupled to MA order of
+//   HLT temperature. Corrected
+// - Measurements... and PID controller settings... dialog screen updated.
+//
 // Revision 1.10  2005/11/12 22:19:38  Emile
 // - PID Output (Gamma) routing added. It is now possible to send the output
 //   of the PID controller to 3 devices: 1) electrical heating element,
@@ -149,13 +157,22 @@ __published:
         TLabel *Label15;
         TLabel *Label17;
         TEdit *Tset_hlt_slope;
+        TLabel *Label18;
+        TLabel *Label19;
+        TEdit *STC_N_Edit;
+        TLabel *Label20;
+        TLabel *Label21;
+        TEdit *STC_TD_Edit;
+        TCheckBox *CB_adf;
         void __fastcall RG2Click(TObject *Sender);
         void __fastcall Button3Click(TObject *Sender);
         void __fastcall CB_Pid_out1Click(TObject *Sender);
         void __fastcall CB_Pid_out2Click(TObject *Sender);
+        void __fastcall PID_ModelExit(TObject *Sender);
 private:
 public:
 	virtual __fastcall TPID_Settings(TComponent *Owner);
+        void    __fastcall update_pid_gui(void);
 };
 //----------------------------------------------------------------------------
 extern TPID_Settings *PID_Settings;

@@ -16,6 +16,13 @@
 //               Machácek, ISBN 978-1-85233-980-7
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2011/05/14 14:02:39  Emile
+// - Unit test set updates, test-case 16 added
+// - Self-Tuning controller N=1 and N=2 added to PID dialog screen
+// - PID debug label extended with (Kc Ti Td) and sys. id. parameters
+// - Max. sample-time extended to SIXTY_SECONDS (was 20 seconds)
+// - Help file updated with version history
+//
 // Revision 1.3  2010/05/16 18:34:16  Emile
 // - update in test-code
 //
@@ -32,10 +39,11 @@
 #include <stdio.h>
 #include <conio.h>
 #include "ut_pid_reg.h"
-
+#include "misc.h"
 //---------------------------------------------------------------------------
 USEUNIT("..\PID_REG.C");
 USEUNIT("CuTest.c");
+USEUNIT("..\misc.c");
 //---------------------------------------------------------------------------
 #pragma argsused
 
@@ -261,26 +269,29 @@ void ut_mam2m(CuTest *tc)
   ------------------------------------------------------------------*/
 void ut_sys_id1_nodf(CuTest *tc)
 {
-  int        i;
-  pid_params p;
+  int           i;
+  pid_params    p;
+  sys_id_params psi;
   p.ts = 1.0; p.kc = 1.0; p.ti = 1.0;  p.td = 1.0;
 
   double u[] = {-0.6918,  0.8580, 1.2540, -1.5937, -1.4410,  0.5711, -0.3999,  0.6900};
   double y[] = { 0.0071, -0.1252, 0.0583,  0.3070, -0.0744, -0.3420, -0.1839, -0.2539};
-  // Values from Matlab indentdf_wrapper_N1.m
-  double a1exp[] = {0.1008, -0.6848,-0.8660,-0.8116,-0.7993,-0.8370,-0.8552};
-  double b1exp[] = {0.1798,  0.1757, 0.1993, 0.2007, 0.1985, 0.1997, 0.2020};
+  // Values from Matlab indentdf_wrapper_N1.m, enable line 51 in indentdf_N1.m!
+  double a1exp[] = {0.1008, -0.8332,-0.9181,-0.8267,-0.8088,-0.8421,-0.8594};
+  double b1exp[] = {0.1799,  0.1895, 0.2001, 0.2022, 0.1991, 0.2002, 0.2023};
 
-  printf("Start of Unit Test Suite 2: System Identification Functions\n");
+  printf("\nStart of Unit Test Suite 2: System Identification Functions\n");
   printf("   Testcase 09: sys_id, System Identification (order N = 1, NODF)\n");
   // Book page 31, b1=0.1997, a1=-0.8669
-  init_pid2(&p,1); // call init. with empty p struct and N == 1
-  d[0] = -0.0071; // -y[1], make identical to Matlab program
-  d[1] = -0.6918; //  u[1], see : Digital Self-Tuning controllers, page 39
+  psi.N       = 1;    // Order N is 1
+  psi.stc_adf = 0;    // No Adaptive Directional Forgetting
+  init_pid2(&p,&psi); // call init. with empty p struct and N == 1
+  d[0] = -0.0071;     // -y[1], make identical to Matlab program
+  d[1] = -0.6918;     //  u[1], see : Digital Self-Tuning controllers, page 39
 
   for (i = 1; i < 8; i++)
   {
-     sys_id(u[i-1],y[i],1,NODF);
+     sys_id(u[i-1],y[i],psi.N,psi.stc_adf);
      CuAssertDblEquals(tc,a1exp[i-1],theta[0],1e-4); // a1[i]
      CuAssertDblEquals(tc,b1exp[i-1],theta[1],1e-4); // b1[i]
      CuAssertDblEquals(tc,1.0       ,phi     ,1e-4); // phi
@@ -298,26 +309,29 @@ void ut_sys_id1_nodf(CuTest *tc)
   ------------------------------------------------------------------*/
 void ut_sys_id1_adf(CuTest *tc)
 {
-  int        i;
-  pid_params p;
+  int           i;
+  pid_params    p;
+  sys_id_params psi;
   p.ts = 1.0; p.kc = 1.0; p.ti = 1.0;  p.td = 1.0;
 
   double u[] = {-0.6918,  0.8580, 1.2540, -1.5937, -1.4410,  0.5711, -0.3999,  0.6900};
   double y[] = { 0.0071, -0.1252, 0.0583,  0.3070, -0.0744, -0.3420, -0.1839, -0.2539};
-  // Values from Matlab indentdf_wrapper_N1.m
-  double a1exp[]  = {0.1008, -0.6848,-1.0051,-0.7766,-0.7834,-0.8705,-0.9070};
-  double b1exp[]  = {0.1798,  0.1757, 0.1938, 0.1956, 0.1966, 0.2038, 0.2098};
-  double phiexp[] = {0.0813,  0.1537, 0.1895, 0.1086, 0.2354, 0.1733, 0.2736};
+  // Values from Matlab indentdf_wrapper_N1.m, disable line 51 in identdf_N1.m
+  double a1exp[]  = {0.1008, -0.8332,-1.0514,-0.7475,-0.7851,-0.8726,-0.9114};
+  double b1exp[]  = {0.1799,  0.1895, 0.1952, 0.1905, 0.1960, 0.2035, 0.2095};
+  double phiexp[] = {0.0251,  0.0306, 0.1397, 0.0797, 0.1775, 0.1524, 0.2426};
 
   printf("   Testcase 10: sys_id, System Identification (order N = 1, ADF)\n");
   // Book page 31, b1=0.1997, a1=-0.8669
-  init_pid2(&p,1); // call init. with empty p struct and N == 1
-  d[0] = -0.0071; // -y[1], make identical to Matlab program
-  d[1] = -0.6918; //  u[1], see : Digital Self-Tuning controllers, page 39
+  psi.N       = 1;    // Order N is 1
+  psi.stc_adf = 1;    // Use Adaptive Directional Forgetting
+  init_pid2(&p,&psi); // call init. with empty p struct and N == 1
+  d[0] = -0.0071;     // -y[1], make identical to Matlab program
+  d[1] = -0.6918;     //  u[1], see : Digital Self-Tuning controllers, page 39
 
   for (i = 1; i < 8; i++)
   {
-     sys_id(u[i-1],y[i],1,!NODF);
+     sys_id(u[i-1],y[i],psi.N,psi.stc_adf);
      CuAssertDblEquals(tc,a1exp[i-1] ,theta[0],1e-4); // a1[i]
      CuAssertDblEquals(tc,b1exp[i-1] ,theta[1],1e-4); // b1[i]
      CuAssertDblEquals(tc,phiexp[i-1],phi     ,1e-4); // ext. var. phi
@@ -335,8 +349,9 @@ void ut_sys_id1_adf(CuTest *tc)
   ------------------------------------------------------------------*/
 void ut_sys_id2_nodf(CuTest *tc)
 {
-  int        i;
-  pid_params p;
+  int           i;
+  pid_params    p;
+  sys_id_params psi;
   p.ts = 1.0; p.kc = 1.0; p.ti = 1.0;  p.td = 1.0;
 
   // system identification with 2nd order process
@@ -355,16 +370,18 @@ void ut_sys_id2_nodf(CuTest *tc)
   // Values from Matlab indentdf_wrapper_N2.m
 
   printf("   Testcase 11: sys_id, System Identification (order N = 2, NODF)\n");
-  init_pid2(&p,2); // call init. with empty p struct and N == 2
+  psi.N       = 2;    // order N is 1
+  psi.stc_adf = 0;    // No Adaptive Directional Forgetting
+  init_pid2(&p,&psi); // call init. with empty p struct and N == 2
   d[0] = -y[1]; // -y[k-1], make identical to identdf_wrapper_N2.m
   d[1] = -y[0]; // -y[k-2]
   d[2] =  u[0]; //  u[k-1]
   for (i = 2; i < 23; i++)
   {
-     sys_id(u[i-1],y[i],2,NODF);
+     sys_id(u[i-1],y[i],psi.N,psi.stc_adf);
   } // for i
   CuAssertDblEquals(tc,-1.4232,theta[0],1e-4); // a1[i] value from Matlab
-  CuAssertDblEquals(tc, 0.5000,theta[1],1e-4); // a2[i] value from Matlab
+  CuAssertDblEquals(tc, 0.5001,theta[1],1e-4); // a2[i] value from Matlab
   CuAssertDblEquals(tc,-0.1026,theta[2],1e-4); // b1[i] value from Matlab
   CuAssertDblEquals(tc, 0.1734,theta[3],1e-4); // b2[i] value from Matlab
 } // ut_sys_id2_nodf()
@@ -384,7 +401,7 @@ void ut_ultim_gain_period(CuTest *tc)
    int           err;
 
    printf("   Testcase 12: calc_ultimate_gain_period()\n");
-   ps.N   = 1;
+   ps.N     = 1;
    theta[0] = 1.3254; // a1
    theta[1] = 0.0;    // b1
    err = calc_ultimate_gain_period(&ps,2.0);
@@ -498,7 +515,6 @@ void ut_calc_pid_parameters(CuTest *tc)
 void it_pid_reg_N2(CuTest *tc)
 {
    FILE          *f1;
-   int           N;
    int           i;
    int           vrg;            // 1 = release controller
    pid_params    p;
@@ -516,19 +532,20 @@ void it_pid_reg_N2(CuTest *tc)
    vector        b1exp = { 0.1000,-0.1017,-0.1017,-0.1017, -0.1017, -0.1017 };
    vector        b2exp = { 0.2000, 0.2000, 0.0197, 0.0381,  0.1720,  0.1730 };
 
-   printf("Start of Integration Test Suite: Entire Self-Tuning Controller\n");
+   printf("\nStart of Integration Test Suite: Entire Self-Tuning Controller\n");
    printf("   Testcase 14: Integration Test pid_reg2(), N = 2, Gb(z), page 100\n");
    printf("                Output-file: it_pid_log_N2.txt\n");
    f1 = fopen("it_pid_log_N2.txt","w");
-   N       = 2;   // simulate 2nd order model
    p.ts    = 2.0; // sample-period is 2 sec.
    p.kc    = 1.0; // initialize PID controller parameters (just in case)
    p.ti    = 2.0; //
    p.td    = 1.0; //
    p.k_lpf = 0.3; // Filtering of D-term
 
-   init_pid2(&p,N);
-   ps.N = N;
+   ps.N       = 2; // simulate 2nd order model
+   ps.stc_adf = 0; // No Adaptive Directional Forgetting
+   ps.stc_td  = 0; // No time-delay
+   init_pid2(&p,&ps);
    vrg  = 0;                 // disable PID controller at start-up
    uk   = uk_1 = uk_2 = 0.0; // controller output, process input
    yk   = yk_1 = yk_2 = 0.0; // process output
@@ -597,7 +614,6 @@ void it_pid_reg_N2(CuTest *tc)
 void it_pid_reg_N3(CuTest *tc)
 {
    FILE          *f1;
-   int           N;
    int           i;
    int           vrg;                  // 1 = release controller
    pid_params    p;
@@ -620,14 +636,15 @@ void it_pid_reg_N3(CuTest *tc)
    printf("   Testcase 15: Integration Test pid_reg2(), N = 3, Gd(z), page 126\n");
    printf("                Output-file: it_pid_log_N3.txt\n");
    f1 = fopen("it_pid_log_N3.txt","w");
-   N       = 3;   // simulate 3rd order model, Example 4.5, page 126
-   p.ts    = 1.0; // sample-period is 1 sec.
-   p.kc    = 1.0; // initialize PID controller parameters (just in case)
-   p.ti    = 2.0; //
-   p.td    = 1.0; //
-   p.k_lpf = 0.09; // Filtering of D-term
-   init_pid2(&p,N);
-   ps.N = N;
+   p.ts       = 1.0;  // sample-period is 1 sec.
+   p.kc       = 1.0;  // initialize PID controller parameters (just in case)
+   p.ti       = 2.0;  //
+   p.td       = 1.0;  //
+   p.k_lpf    = 0.09; // Filtering of D-term
+   ps.N       = 3;    // simulate 3rd order model, Example 4.5, page 126
+   ps.stc_adf = 0;    // No Adaptive Directional Forgetting
+   ps.stc_td  = 0;    // No time-delay
+   init_pid2(&p,&ps);
    vrg  = 0;                        // disable PID controller at start-up
    uk   = uk_1 = uk_2 = uk_3 = 0.0; // controller output, process input
    yk   = yk_1 = yk_2 = yk_3 = 0.0; // process output
@@ -688,6 +705,8 @@ void it_pid_reg_N3(CuTest *tc)
    CHECK_VECTOR(b1exp,b1,6);
    CHECK_VECTOR(b2exp,b2,6);
    CHECK_VECTOR(b3exp,b3,6);
+
+   it_pid_regs_Gb(); // additional run with all 3 pid controllers
 } // it_pid_reg_N3()
 //------------------------------------------------------------
 
@@ -705,7 +724,6 @@ void it_pid_reg_N3(CuTest *tc)
 void it_pid_regs_Gb(void)
 {
    FILE          *f1;
-   int           N;
    int           i;
    int           vrg;            // 1 = release controller
    pid_params    p2,p3,p4;
@@ -721,7 +739,6 @@ void it_pid_regs_Gb(void)
    printf("   Testcase 16: Integration Test: comparison of self-tuning controller versus\n");
    printf("                Type A with filtering and Takahashi Type C controller\n");
    f1 = fopen("it_pid_regs_Gb.txt","w");
-   N       = 2;   // simulate 2nd order model
    p2.ts    = p3.ts    = p4.ts = 2.0; // sample-period is 2 sec.
    p2.kc    = 1.0; // initialize PID controller parameters (just in case)
    p3.kc    = p4.kc    = 1.5974;
@@ -731,8 +748,10 @@ void it_pid_regs_Gb(void)
    p3.td    = p4.td    = 3.2130;
    p2.k_lpf = p3.k_lpf = p4.k_lpf = 0.3; // Filtering of D-term
 
-   init_pid2(&p2,N); init_pid3(&p3); init_pid4(&p4);
-   ps2.N = N;
+   ps2.N       = 2;   // simulate 2nd order model
+   ps2.stc_adf = 0;   // No Adaptive Directional Forgetting
+   ps2.stc_td  = 0;   // No time-delay
+   init_pid2(&p2,&ps2); init_pid3(&p3); init_pid4(&p4);
    vrg  = 0;                   // disable PID controller at start-up
    uk2  = uk2_1 = uk2_2 = 0.0; // controller output, process input
    uk3  = uk3_1 = uk3_2 = 0.0;
@@ -781,6 +800,85 @@ void it_pid_regs_Gb(void)
    fclose(f1);
 } // it_pid_regs_Gb()
 //------------------------------------------------------------
+
+void ut_ebrew_slope_limiter(CuTest *tc)
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function slope_limiter().
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
+{
+   printf("\nStart of Unit Test Suite: ebrew miscellaneous functions\n");
+   printf("   Testcase 17: ebrew Unit Test: slope_limiter()\n");
+   double lim, told, tnew;
+
+   lim = 2.3; told = 6.7; tnew = 9.2; // Case 1: positive limit
+   slope_limiter(lim, told, &tnew);
+   CuAssertDblEquals(tc, 9.0,tnew,1e-4);
+   lim = 2.3; told = 6.7; tnew = 2.9; // Case 2: negative limit
+   slope_limiter(lim, told, &tnew);
+   CuAssertDblEquals(tc, 4.4,tnew,1e-4);
+   lim = 2.3; told = 6.7; tnew = 8.9; // Case 3: in between
+   slope_limiter(lim, told, &tnew);
+   CuAssertDblEquals(tc, 8.9,tnew,1e-4);
+} // ut_ebrew_slope_limiter()
+
+void ut_ebrew_moving_average(CuTest *tc)
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function moving_average().
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
+{
+   printf("   Testcase 18: ebrew Unit Test: moving_average()\n");
+   ma p;      // struct needed for moving_average filter
+   double x;  // return value from moving_average filter
+
+   init_ma(&p, 3, 0.0); // Order is 3, init_val = 0.0
+   x = moving_average(&p, 2.1); CuAssertDblEquals(tc, 0.7,x,1e-4);
+   x = moving_average(&p, 3.3); CuAssertDblEquals(tc, 1.8,x,1e-4);
+   x = moving_average(&p, 5.1); CuAssertDblEquals(tc, 3.5,x,1e-4);
+   x = moving_average(&p, 4.5); CuAssertDblEquals(tc, 4.3,x,1e-4);
+   x = moving_average(&p, 4.2); CuAssertDblEquals(tc, 4.6,x,1e-4);
+   x = moving_average(&p,-2.4); CuAssertDblEquals(tc, 2.1,x,1e-4);
+   x = moving_average(&p, 1.8); CuAssertDblEquals(tc, 1.2,x,1e-4);
+} // ut_ebrew_moving_average()
+
+void ut_ebrew_sample_delay(CuTest *tc)
+/*------------------------------------------------------------------
+  Purpose  : This function tests the function sample_delay().
+    Variables:
+        tc : pointer to the current test-suite
+  Returns  : -
+  ------------------------------------------------------------------*/
+{
+   printf("   Testcase 19: ebrew Unit Test: sample_delay()\n");
+   ma p;      // struct needed for sample_delay, same as for moving_average()
+   double x;  // return value from moving_average filter
+
+   init_sample_delay(&p, 1); // sample-time delay is set to 1
+   x = sample_delay(&p, 1.1); CuAssertDblEquals(tc, 0.0,x,1e-4);
+   x = sample_delay(&p, 2.2); CuAssertDblEquals(tc, 1.1,x,1e-4);
+   x = sample_delay(&p, 3.3); CuAssertDblEquals(tc, 2.2,x,1e-4);
+
+   init_sample_delay(&p, 0); // sample-time delay is set to 0
+   x = sample_delay(&p, 1.1); CuAssertDblEquals(tc, 1.1,x,1e-4);
+   x = sample_delay(&p, 2.2); CuAssertDblEquals(tc, 2.2,x,1e-4);
+   x = sample_delay(&p, 3.3); CuAssertDblEquals(tc, 3.3,x,1e-4);
+
+   init_sample_delay(&p, 4); // sample-time delay is set to 4
+   x = sample_delay(&p, 1.1); CuAssertDblEquals(tc, 0.0,x,1e-4);
+   x = sample_delay(&p,-2.2); CuAssertDblEquals(tc, 0.0,x,1e-4);
+   x = sample_delay(&p, 3.3); CuAssertDblEquals(tc, 0.0,x,1e-4);
+   x = sample_delay(&p,-4.4); CuAssertDblEquals(tc, 0.0,x,1e-4);
+   x = sample_delay(&p, 5.5); CuAssertDblEquals(tc, 1.1,x,1e-4);
+   x = sample_delay(&p,-6.6); CuAssertDblEquals(tc,-2.2,x,1e-4);
+   x = sample_delay(&p, 7.7); CuAssertDblEquals(tc, 3.3,x,1e-4);
+   x = sample_delay(&p,-8.8); CuAssertDblEquals(tc,-4.4,x,1e-4);
+   x = sample_delay(&p, 9.9); CuAssertDblEquals(tc, 5.5,x,1e-4);
+} // ut_ebrew_sample_delay()
 
 /*------------------------------------------------------------------
   Purpose  : This function contains the test-suite for the vector and
@@ -842,6 +940,23 @@ CuSuite *integration_test_suite(void)
 //------------------------------------------------------------
 
 /*------------------------------------------------------------------
+  Purpose  : This function contains unit-tests for various functions
+             found in the ebrew program
+  Variables: -
+  Returns  : pointer to current CuSuite object
+  ------------------------------------------------------------------*/
+CuSuite *ebrew_test_suite(void)
+{
+   CuSuite* suite = CuSuiteNew();
+
+   SUITE_ADD_TEST(suite, ut_ebrew_slope_limiter);
+   SUITE_ADD_TEST(suite, ut_ebrew_moving_average);
+   SUITE_ADD_TEST(suite, ut_ebrew_sample_delay);
+   return suite;
+} // ebrew_test_suite()
+//------------------------------------------------------------
+
+/*------------------------------------------------------------------
   Purpose  : This function is the entry-point for all the Unit and
              Integration tests of the Self-Tuning controller library.
              It makes calls to the various test-suites.
@@ -856,6 +971,7 @@ void run_all_tests(void)
    CuSuiteAddSuite(suite, vector_matrix_suite());
    CuSuiteAddSuite(suite, sys_id_suite());
    CuSuiteAddSuite(suite, integration_test_suite());
+   CuSuiteAddSuite(suite, ebrew_test_suite());
 
    CuSuiteRun(suite);
    CuSuiteSummary(suite, output);
@@ -875,7 +991,6 @@ void run_all_tests(void)
 int main(int argc, char* argv[])
 {
   run_all_tests();  // run all the unit- integration tests
-  it_pid_regs_Gb(); // additional run with all 3 pid controllers
   printf("Press any key...");
   getch();
   return 0; // return-value

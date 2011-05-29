@@ -5,6 +5,11 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2011/05/06 11:09:42  Emile
+// - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
+// - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
+// - PID dialog updated to reflect changes.
+//
 // Revision 1.6  2006/11/19 10:53:55  Emile
 // The power outlet (220 V) is now shared with the modulating gas burner and
 // the electrical heating element. By setting the proper bits in the PID
@@ -62,7 +67,8 @@ TPID_Settings *PID_Settings;
 __fastcall TPID_Settings::TPID_Settings(TComponent *Owner)
 	: TForm(Owner)
 {
-}
+   update_pid_gui();
+} // TPID_Settings()
 //----------------------------------------------------------------------------
 
 void __fastcall TPID_Settings::RG2Click(TObject *Sender)
@@ -178,4 +184,49 @@ void __fastcall TPID_Settings::CB_Pid_out2Click(TObject *Sender)
 } // CB_Pid_out2Click()
 //---------------------------------------------------------------------------
 
+void __fastcall TPID_Settings::update_pid_gui(void)
+{
+   switch (PID_Model->ItemIndex)
+   {
+      case 0: // Self Tuning Controller STC
+        // Disable Kc, Ti, Td, lpfC. Enable stc_N, stc_TD, stc_adf
+        Label1->Enabled = false; Kc_Edit->Enabled    = false; Label6->Enabled = false; // Kc
+        Label2->Enabled = false; Ti_Edit->Enabled    = false; Label7->Enabled = false; // Ti
+        Label3->Enabled = false; Td_Edit->Enabled    = false; Label8->Enabled = false; // Td
+        Label4->Enabled = false; K_LPF_Edit->Enabled = false; Label9->Enabled = false; // Clpf
+
+        Label18->Enabled = true; STC_N_Edit->Enabled  = true; Label19->Enabled = true; // stc_N
+        Label20->Enabled = true; STC_TD_Edit->Enabled = true; Label21->Enabled = true; // stc_TD
+        CB_adf->Enabled = true; // STC_ADF
+        break;
+      case 1: // Type A PID with D-filtering
+        // Enable Kc, Ti, Td, lpfC. Disable stc_N, stc_TD, stc_adf
+        Label1->Enabled  = true; Kc_Edit->Enabled    = true; Label6->Enabled  = true; // Kc
+        Label2->Enabled  = true; Ti_Edit->Enabled    = true; Label7->Enabled  = true; // Ti
+        Label3->Enabled  = true; Td_Edit->Enabled    = true; Label8->Enabled  = true; // Td
+        Label4->Enabled  = true; K_LPF_Edit->Enabled = true; Label9->Enabled  = true; // Clpf
+
+        Label18->Enabled = false; STC_N_Edit->Enabled  = false; Label19->Enabled = false; // stc_N
+        Label20->Enabled = false; STC_TD_Edit->Enabled = false; Label21->Enabled = false; // stc_TD
+        CB_adf->Enabled  = false; // STC_ADF
+        break;
+      case 2: // Takahashi ype C PID, NO D-filtering
+        // Enable Kc, Ti, Td. Disable lpfC, stc_N, stc_TD, stc_adf
+        Label1->Enabled  = true; Kc_Edit->Enabled = true; Label6->Enabled  = true; // Kc
+        Label2->Enabled  = true; Ti_Edit->Enabled = true; Label7->Enabled  = true; // Ti
+        Label3->Enabled  = true; Td_Edit->Enabled = true; Label8->Enabled  = true; // Td
+
+        Label4->Enabled  = false; K_LPF_Edit->Enabled  = false; Label9->Enabled  = false; // Clpf
+        Label18->Enabled = false; STC_N_Edit->Enabled  = false; Label19->Enabled = false; // stc_N
+        Label20->Enabled = false; STC_TD_Edit->Enabled = false; Label21->Enabled = false; // stc_TD
+        CB_adf->Enabled  = false; // STC_ADF
+        break;
+   } // switch
+} // update_pid_gui()
+
+void __fastcall TPID_Settings::PID_ModelExit(TObject *Sender)
+{
+   update_pid_gui();
+} // PID_ModelExit()
+//---------------------------------------------------------------------------
 

@@ -14,6 +14,9 @@
 //               File should be compiled with Borland C++ Builder 4.5!
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.1  2007/10/03 07:53:31  Emile
+// - Header file added to CVS.
+//
 // ==========================================================================
 #include "../pid_reg.h"
 #include "CuTest.h"
@@ -54,13 +57,17 @@ void    ut_sys_id1_adf(CuTest *tc);
 void    ut_sys_id2_nodf(CuTest *tc);
 void    ut_ultim_gain_period(CuTest *tc);
 void    ut_calc_pid_parameters(CuTest *tc);
+void    ut_ebrew_slope_limiter(CuTest *tc);
+void    ut_ebrew_sample_delay(CuTest *tc);
 
 void    it_pid_reg_N2(CuTest *tc);  // Integration Test functions
 void    it_pid_reg_N3(CuTest *tc);
+void    it_pid_regs_Gb(void);
 
 CuSuite *vector_matrix_suite(void); // Test suite functions
 CuSuite *sys_id_suite(void);
 CuSuite *integration_test_suite(void);
+CuSuite *ebrew_test_suite(void);
 
 void    run_all_tests(void);        // Entry-point for all tests
 
