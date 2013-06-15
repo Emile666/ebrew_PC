@@ -4,6 +4,13 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2005/08/28 22:17:30  Emile
+// - DataGrapfForm: TTimer replaced again for TAnimTimer
+// - Debug-code added for MA filter of Vmlt
+// - 'H' key now toggles heater between 0% and 100%
+// - Text Temp. Sensor 1 & 2 replaced by Temp. Sensor HLT & MLT
+// - Printing of vmlt_unf (padc.ad4) removed again from log-file
+//
 // Revision 1.5  2004/04/25 14:02:17  emile
 // - Added a 'type C' PID controller, function pid_reg3(). Possible to select
 //   this from the PID settings dialog screen. Left the old one in for
@@ -55,7 +62,7 @@ __published:	// IDE-managed Components
         TPerformanceGraph *Tad2_Graph;
         TButton *Button1;
         TButton *Help_Button;
-        TAnimTimer *GraphTimer;
+        TTimer *GraphTimer;
         void __fastcall Button1Click(TObject *Sender);
         void __fastcall GraphTimerTimer(TObject *Sender);
         void __fastcall Help_ButtonClick(TObject *Sender);
