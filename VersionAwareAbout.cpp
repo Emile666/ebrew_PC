@@ -4,6 +4,11 @@
 // Purpose     : Provides the code for the About... Screen.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.1  2004/03/26 10:22:55  emile
+// - Several files added to CVS repository, where not included yet
+// - Help file extended with many help items. First real help file version.
+// - TAnimTimer replaced by standard TTimer in TDataGraph form
+//
 // ==========================================================================
 
 //---------------------------------------------------------------------------
@@ -14,7 +19,6 @@
 #include "Unit1.h"
 #pragma hdrstop
 
-extern char *i2c_dll_revision; // defined in i2c_dll.cpp
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 #pragma resource "*.dfm"
@@ -76,14 +80,9 @@ void __fastcall TVersionAwareAbout::FormCreate(TObject *Sender)
         // Extract the revision number from the ebrew cvs revision string
         strncpy(tmp_str, &(MainForm->ebrew_revision[11]),4);
         tmp_str[4] = '\0';
-        // Extract the revision number from the i2c_dll cvs revision string
-        strncpy(tmp_str2, &i2c_dll_revision[11],4);
-        tmp_str2[4] = '\0';
 
         reVersionInfo->Lines->Add("Version: " + AnsiString(buf) + " (CVS Rev. "
-                                              + AnsiString(tmp_str)
-                                              + "), i2c_dll Rev. "
-                                              + AnsiString(tmp_str2));
+                                              + AnsiString(tmp_str) + ")");
      }
 
     tmp =BaseString +"\\CompanyName";
@@ -93,7 +92,7 @@ void __fastcall TVersionAwareAbout::FormCreate(TObject *Sender)
      if(buf[0] !='\0')
         reVersionInfo->Lines->Add("Brewery  : "+AnsiString(buf));
      reVersionInfo->Lines->Add("Web-site : www.vandelogt.nl");
-     reVersionInfo->Lines->Add("(c) 2003-2004: Ir. Emile van de Logt");
+     reVersionInfo->Lines->Add("(c) 2003-2014: ir. drs. Emile van de Logt");
      free(VerInfo);
   }
 
@@ -104,7 +103,7 @@ void __fastcall TVersionAwareAbout::FormCreate(TObject *Sender)
      VersionAwareAbout->Caption ="About";
      reVersionInfo->Clear();
      reVersionInfo->Lines->Add("No version information available.");
-  }  
+  }
 }
 //---------------------------------------------------------------------------
 

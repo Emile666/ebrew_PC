@@ -4,6 +4,15 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2004/04/19 21:55:49  emile
+// - Added calibration offsets and MA-filters for Thlt and Tmlt:
+//   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
+//   - New Measurement Dialog screen
+//   - Several parameters moved from HW Settings Dialog Screen
+// - Added new Registry variable MA_VMLT: MA filter order of Vmlt is now
+//   also stored in Registry
+// - Help-file is updated
+//
 // Revision 1.5  2004/03/10 10:10:39  emile
 // - Reduced complexity of several routines:
 //   - T50msecTimer split, new routine Generate_IO_Signals added
@@ -30,18 +39,14 @@
 //---------------------------------------------------------------------------
 #include <vcl.h>
 #pragma hdrstop
-USERES("ebrew.res");
 USEFORM("Unit1.cpp", MainForm);
 USEFORM("PID_Settings_Dialog.cpp", PID_Settings);
 USEFORM("FixParamsDialog.cpp", Fix_Params);
 USEFORM("I2CSettingsDialog.cpp", I2C_Settings);
-USEUNIT("MISC.C");
-USEUNIT("PID_REG.C");
 USEFORM("EditMashScheme.cpp", EditMashSchemeDlg);
 USEFORM("ViewMashProgressForm.cpp", ViewMashProgress);
 USEFORM("DataGraphForm.cpp", ShowDataGraphs);
 USEFORM("Sparge_Settings.cpp", SpargeSettings);
-USEUNIT("i2c_dll\i2c_dll.cpp");
 USEFORM("RestoreSettings.cpp", Restore_Program_Settings);
 USEFORM("VersionAwareAbout.cpp", VersionAwareAbout);
 USEFORM("MeasurementsDialog.cpp", Measurements);

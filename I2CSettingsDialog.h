@@ -5,6 +5,16 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2004/05/05 15:44:15  emile
+// - Main Screen picture update
+// - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
+// - STD update: calculation of volumes should be correct now
+// - Parameter added for early start of mash timer. Registry var. TOffset2
+// - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
+// - Some screens updated with hints (also of labels)
+// - Bug-fix: unnecessary delay after change in gamma. Is corrected now
+// - Help via menu now also works
+//
 // Revision 1.8  2004/04/19 21:55:49  emile
 // - Added calibration offsets and MA-filters for Thlt and Tmlt:
 //   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
@@ -82,25 +92,9 @@ __published:	// IDE-managed Components
         TButton *Button1;
         TButton *Button2;
         TButton *Help_Button;
-        TRadioGroup *RG1;
-        TRadioGroup *RG2;
-        TEdit *HW_Base_Edit;
-        TLabel *HW_base_lbl;
-        TLabel *hex_lbl;
-        TEdit *Vis1_Edit;
+        TLabel *COM_Port_Nr_lbl;
+        TEdit *COM_Port_Edit;
         TUpDown *UpDown1;
-        TLabel *Vis1_Lbl;
-        TUpDown *UpDown2;
-        TEdit *Vis2_Edit;
-        TLabel *Label1;
-        TLabel *Label4;
-        TLabel *Label5;
-        TRadioGroup *RG3;
-        TRadioGroup *RG4;
-        TEdit *Vis3_Edit;
-        TUpDown *UpDown5;
-        TUpDown *UpDown6;
-        TEdit *Vis4_Edit;
         TEdit *Thlim_edit;
         TLabel *Label6;
         TEdit *Tllim_edit;
@@ -113,6 +107,9 @@ __published:	// IDE-managed Components
         TLabel *Label11;
         TLabel *Label2;
         TLabel *Label3;
+        TLabel *COM_Port_Settings_lbl;
+        TEdit *COM_Port_Settings_Edit;
+        TCheckBox *cb_debug_com_port;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

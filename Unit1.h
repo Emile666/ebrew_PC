@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.36  2011/05/14 14:02:19  Emile
+// - Unit test set updates, test-case 16 added
+// - Self-Tuning controller N=1 and N=2 added to PID dialog screen
+// - PID debug label extended with (Kc Ti Td) and sys. id. parameters
+// - Max. sample-time extended to SIXTY_SECONDS (was 20 seconds)
+// - Help file updated with version history
+//
 // Revision 1.35  2007/08/26 22:23:20  Emile
 // - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
 // - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
@@ -312,37 +319,6 @@
 // Macro, used in TMainForm::Main_Initialisation()
 #define PR_HW_STAT(x)   hw_status & x ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT)
 
-//---------------------------------------------------------------
-// For the LED Displays: 0=Thlt  , 1=Tmlt, 2=Tset_hlt, 3=Tset_mlt
-//                       4=Ttriac, 5=Vmlt, 6=Vhlt    , 7=gamma
-// Macro, used in TMainForm::T50msec2Timer()
-//---------------------------------------------------------------
-#define SET_LED(LEDX_OK,w_disp,ledx,ledx_vis,ledx_base)                        \
- if (hw_status & (LEDX_OK))                                                    \
- {                                                                             \
-   switch (ledx)                                                               \
-   {                                                                           \
-     case 0: err  = set_led((int)(100.0 * thlt),2,(w_disp),(ledx_vis));        \
-             break;                                                            \
-     case 1: err  = set_led((int)(100.0 * tmlt),2,(w_disp),(ledx_vis));        \
-             break;                                                            \
-     case 2: err  = set_led((int)(100.0 * tset_hlt),2,(w_disp),(ledx_vis));    \
-             break;                                                            \
-     case 3: err  = set_led((int)(100.0 * tset_mlt),2,(w_disp),(ledx_vis));    \
-             break;                                                            \
-     case 4: err  = set_led((int)(10.0 * ttriac),3,(w_disp),(ledx_vis));       \
-             break;                                                            \
-     case 5: err  = set_led((int)(10.0 * volumes.Vmlt),3,(w_disp),(ledx_vis)); \
-             break;                                                            \
-     case 6: err  = set_led((int)(10.0 * volumes.Vhlt),3,(w_disp),(ledx_vis)); \
-             break;                                                            \
-     case 7: err  = set_led((int)(10.0 * gamma),3,(w_disp),(ledx_vis));        \
-             break;                                                            \
-    default: break;                                                            \
-   }                                                                           \
-   if (err) Reset_I2C_Bus(ledx_base,err);                                      \
- }
-
 //------------------------------
 // Defines for StatusBar object
 //------------------------------
@@ -371,6 +347,11 @@
 #define MOD_GAS_ON  (4)
 
 #define max(a, b)  (((a) > (b)) ? (a) : (b))
+
+// BUFFER SIZE FOR COM PORT READ
+#define MAX_BUF_WRITE (40)
+#define MAX_BUF_READ (256)
+#define COM_PORT_DEBUG_FNAME "com_port_dbg.txt"
 
 //------------------------------------------------------------------------------
 // The text I2C_STOP_ERR_TXT is printed whenever i2c_stop() was not successful
@@ -482,32 +463,29 @@ __published:	// IDE-managed Components
         void __fastcall FormKeyPress(TObject *Sender, char &Key);
 private:	// User declarations
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
-        void __fastcall Start_I2C_Communication(int known_status);
         void __fastcall print_mash_scheme_to_statusbar(void);
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
+        void __fastcall Start_COM_Port_Communication(int known_status);
+        void __fastcall COM_port_open(void);           // Init. COM Port
+        void __fastcall COM_port_close(void);          // Close COM Port
+        void __fastcall COM_port_write(const char *s); // Write COM Port
+        void __fastcall COM_port_read(char *s);        // Read  COM Port
         void __fastcall Restore_Settings(void);
-        int  __fastcall try_i2c_stop(void);
         void __fastcall exit_ebrew(void);
-        void __fastcall Reset_I2C_Bus(int i2c_bus_id, int err);
         void __fastcall Generate_IO_Signals(void);
 
         timer_vars      tmr;        // struct with timer variables
         ma              str_thlt;   // Struct for MA5 filter for HLT temperature
         ma              str_tmlt;   // Struct for MA5 filter for MLT temperature
-        int             led1;       // Which variable to display?
-        int             led2;       //
-        int             led3;       //
-        int             led4;       //
-        int             led1_vis;         // 1..7: LED1 Visibility
-        int             led2_vis;         // 1..7: LED2 Visibility
-        int             led3_vis;         // 1..7: LED3 Visibility
-        int             led4_vis;         // 1..7: LED4 Visibility
         int             ttriac_hlim;      // High limit for Triac Temp. Protection
         int             ttriac_llim;      // Low  limit for Triac Temp. Protection
         bool            triac_too_hot;    // true = Triac is overheated
         bool            cb_i2c_err_msg;   // true = give error message on successful I2C reset
+        bool            cb_debug_com_port; // true = file-logging for COM port communication
         bool            power_up_flag;    // true = power-up
+        int             usb_com_port_nr;  // Number of virtual USB COM port
+        char            com_port_settings[20]; // Virtual COM Port Settings
         int             known_hw_devices; // list of known I2C hardware devices
         int             fscl_prescaler;   // index into PCF8584 prescaler values, see i2c_dll.cpp
         double          thlt_offset;      // calibration offset to add to Thlt measurement
@@ -552,11 +530,12 @@ public:		// User declarations
                                     // Bit 0 = Pump, Bit 1..7 = V1..V7
                                     // Bit 8..15: 0 = Auto, 1 = Manual Override
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
-        TDateTime       dt_time_switch;  // object holding date and time
-        volume_struct   volumes;         // Struct for Volumes
-        bool            burner_on;       // true = gas burner is on
-        bool            i2c_hw_scan_req; // true = check I2C HW devices
-        char            *ebrew_revision; // contains CVS revision number
+        TDateTime       dt_time_switch;   // object holding date and time
+        volume_struct   volumes;          // Struct for Volumes
+        //bool            burner_on;        // true = gas burner is on
+        bool            com_port_is_open; // true = COM-port is open for Read/Write
+        bool            i2c_hw_scan_req;  // true = check I2C HW devices
+        char            *ebrew_revision;  // contains CVS revision number
         __fastcall TMainForm(TComponent* Owner);
 };
 //---------------------------------------------------------------------------

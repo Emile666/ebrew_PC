@@ -6,6 +6,17 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.59  2011/05/29 20:56:26  Emile
+// - New Registry variables added: STC_N, STC_TD and STC_ADF
+// - PID Settings Dialog screen extended with new parameters for self-tuning
+//   controller: possibility to set the system order N, an estimate for the
+//   time-delay and a boolean whether or not to use adaptive dir. forgetting.
+// - PID Settings Dialog screen: parameters enabled/disabled when a
+//   specific PID controller is chosen.
+// - New functions time_delay() and init_time_delay() added
+// - Changes made in init_pid2() function header.
+// - Unit-test cases updated and extended with tests for new functions.
+//
 // Revision 1.58  2011/05/14 14:02:18  Emile
 // - Unit test set updates, test-case 16 added
 // - Self-Tuning controller N=1 and N=2 added to PID dialog screen
@@ -408,10 +419,6 @@
 #include "VersionAwareAbout.h"
 #include <Dialogs.hpp>
 
-#include "i2c_dll.h"
-extern byte fscl_values[]; // defined in i2c_dll.cpp
-extern byte base_adc[];    // defined in i2c_dll.cpp
-
 extern vector theta; // defined in pid_reg.h
 
 //---------------------------------------------------------------------------
@@ -425,6 +432,243 @@ extern vector theta; // defined in pid_reg.h
 #pragma resource "*.dfm"
 
 TMainForm *MainForm;
+
+// GLOBAL VARIABLES for COM Port Communication
+HANDLE hComm = NULL;
+COMMTIMEOUTS ctmoNew = {0}, ctmoOld;
+FILE *fdbg_com; // COM-port debug file-descriptor
+
+//----------------------------------------------------------------------------
+void __fastcall TMainForm::COM_port_open(void)
+{
+   DCB  dcbCommPort;
+   char s[50];
+
+    // OPEN THE COM PORT.
+    sprintf(s,"COM%d",usb_com_port_nr); // USB COM Port Number
+    hComm = CreateFile(s,GENERIC_READ | GENERIC_WRITE,0,0,OPEN_EXISTING,0,0);
+
+    // IF THE PORT CANNOT BE OPENED, BAIL OUT.
+    if(hComm == INVALID_HANDLE_VALUE)
+    {
+       strcat(s," could not be opened. Please check COM Port Settings.");
+       MessageBox(NULL,s,"ERROR Opening Virtual USB COM Port",MB_OK);
+       com_port_is_open = false;
+    } // if
+  else
+  {  // Set the Communication Timeouts
+     GetCommTimeouts(hComm,&ctmoOld);
+     ctmoNew.ReadTotalTimeoutConstant = 100;
+     ctmoNew.ReadTotalTimeoutMultiplier = 0;
+     ctmoNew.WriteTotalTimeoutMultiplier = 0;
+     ctmoNew.WriteTotalTimeoutConstant = 0;
+     SetCommTimeouts(hComm, &ctmoNew);
+
+     // Set Baud-rate, Parity, wordsize and stop-bits.
+     // There are other ways of doing these setting, but this is the easiest way.
+     // If you want to add code for other baud-rates, remember that the argument
+     // for BuildCommDCB must be a pointer to a string. Also note that
+     // BuildCommDCB() defaults to NO Handshaking.
+     dcbCommPort.DCBlength = sizeof(DCB);
+     GetCommState(hComm, &dcbCommPort);
+     // BuildCommDCB("115200,N,8,1", &dcbCommPort);
+     BuildCommDCB(com_port_settings, &dcbCommPort);
+     SetCommState(hComm, &dcbCommPort);
+     if ((fdbg_com = fopen(COM_PORT_DEBUG_FNAME,"a")) == NULL)
+     {  // Open COM-port debugging file
+        MessageBox(NULL,"Could not open COM-port debug log-file","Error during Initialisation",MB_OK);
+     } /* if */
+     else fprintf(fdbg_com,"File opened\n");
+     com_port_is_open = true;
+  } // if
+} // COM_port_open()
+
+//----------------------------------------------------------------------------
+void __fastcall TMainForm::COM_port_close(void)
+{
+   PurgeComm(hComm, PURGE_RXABORT);
+   SetCommTimeouts(hComm, &ctmoOld);
+   CloseHandle(hComm); // close Virtual USB COM-port
+   fprintf(fdbg_com,"File closed\n");
+   fclose(fdbg_com);   // close COM-port debugging file
+   com_port_is_open = false; // set flag to 'not open'
+} // COM_port_close()
+
+//----------------------------------------------------------------------------
+void __fastcall TMainForm::COM_port_write(const char *s)
+{
+   char send_buffer[MAX_BUF_WRITE]; // contains string to send to RS232 port
+   int  bytes_to_send = 0;          // Number of bytes to send
+   int  i, bytes_sent = 0;          // Number of bytes sent to COM port
+
+   strcpy(send_buffer,s);    // copy command to send into send_buffer
+   bytes_to_send = strlen(send_buffer);
+   bytes_sent    = 0;
+   while (bytes_sent < bytes_to_send)
+   {
+      TransmitCommChar(hComm, send_buffer[bytes_sent++]);
+   } // while()
+   if (cb_debug_com_port)
+   {
+        for (i = 0; i < bytes_to_send; i++)
+        {
+           if (send_buffer[i] == '\n') send_buffer[i] = '_';
+        }
+        fprintf(fdbg_com,"w[%s]\n",send_buffer);
+   } // if
+} // COM_port_write()
+
+//----------------------------------------------------------------------------
+void __fastcall TMainForm::COM_port_read(char *s)
+{
+   DWORD dwBytesRead;
+
+   ReadFile(hComm, s, MAX_BUF_READ-1, &dwBytesRead, NULL);
+   if(dwBytesRead)
+   {
+      s[dwBytesRead] = 0; // Null-Terminate the string
+   } // if
+   if (cb_debug_com_port)
+   {
+        fprintf(fdbg_com,"r[%s]\n",s);
+   } // if
+} // COM_port_read()
+
+__fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
+/*------------------------------------------------------------------
+  Purpose  : This is the main constructor for the program.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   char s[50];
+   ebrew_revision   = "$Revision$";
+   ShowDataGraphs   = new TShowDataGraphs(this);   // create modeless Dialog
+   ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
+   TRegistry *Reg   = new TRegistry();
+   power_up_flag    = true;  // indicate that program power-up is active
+   com_port_is_open = false; // indicate that COM-port is closed at power-up
+
+   try
+    {
+       if (!Reg->KeyExists(REGKEY))
+       {
+          // No entry in Registry, create all keys
+          Reg->CreateKey(REGKEY); // Create key if it does not exist yet
+          Reg->OpenKey(REGKEY,FALSE);
+          Reg->WriteInteger("USB_COM_PORT",3);   // Virtual USB COM port number
+          Reg->WriteString("COM_PORT_SETTINGS","19200,N,8,1"); // COM port settings
+          Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
+          fscl_prescaler = 5;
+          Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler); // set fscl to 11.72 kHz
+          // PID Settings Dialog
+          Reg->WriteFloat("TS",TS_INIT);         // Set Default sample time
+          Reg->WriteFloat("Kc",KC_INIT);         // Controller gain
+          Reg->WriteFloat("Ti",TI_INIT);         // Ti constant
+          Reg->WriteFloat("Td",TD_INIT);         // Td constant
+          Reg->WriteFloat("K_LPF",0);            // LPF filter time-constant
+          Reg->WriteFloat("TSET_HLT_SLOPE",1.0); // Slope Limit for Tset_HLT
+          Reg->WriteFloat("TOffset",1.0);        // HLT - MLT heat loss
+          Reg->WriteFloat("TOffset2",-0.5);      // offset for early start of mash timers
+          Reg->WriteInteger("PID_Model",2);      // Takahashi PID Controller
+          sys_id_pars.N = 1; // order N for system identification
+          Reg->WriteInteger("STC_N",sys_id_pars.N);   // [1,2,3]
+          sys_id_pars.stc_td  = 0; // Time-Delay estimate for system identification
+          Reg->WriteInteger("STC_TD",sys_id_pars.stc_td);
+          sys_id_pars.stc_adf = 0; // true = use Adaptive directional forgetting
+          Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
+          Reg->WriteInteger("BURNER_HHYST",35);  // Gas Burner Hysteresis High Limit
+          Reg->WriteInteger("BURNER_LHYST",30);  // Gas Burner Hysteresis Low Limit
+          // Send PID-Output to the various heaters / burners
+          cb_pid_out = 0; // The PID-output is not connected to anything
+          Reg->WriteInteger("CB_PID_OUT",cb_pid_out);
+          dac_a = -2.04; dac_b = 232.05;  // 5% -> just on, 95% -> full on
+          Reg->WriteFloat("DAC_A",dac_a); // default value for DAC calculations
+          Reg->WriteFloat("DAC_B",dac_b);
+
+          ttriac_hlim = 70; // Upper limit for triac temp.
+          Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
+          ttriac_llim = 60; // Lower limit for triac temp.
+          Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
+          cb_i2c_err_msg          = true;
+          Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
+          cb_debug_com_port       = false;
+          Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
+
+          known_hw_devices = DIG_IO_LSB_OK | MAX1238_OK | LM92_1_OK | LM92_2_OK;
+
+          // Init values for mash scheme variables
+          Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
+          // Init values for Sparge Settings
+          Reg->WriteInteger("SP_BATCHES",5);    // #Sparge Batches
+          Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
+          Reg->WriteInteger("MASH_VOL",30);     // Total Mash Volume (L)
+          Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
+          Reg->WriteInteger("BOIL_TIME",120);    // Total Boil Time (min.)
+          // Init values for STD
+          Reg->WriteInteger("PREHEAT_TIME",0);// PREHEAT_TIME [sec]
+          Reg->WriteFloat("VMLT_EMPTY", 3.0); // Vmlt_EMPTY [L]
+          Reg->WriteInteger("TO_XSEC",1);     // TIMEOUT_xSEC [sec]
+          Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
+          Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
+          // Measurements
+          Reg->WriteInteger("MA_THLT",5);      // Order MA filter Thlt
+          Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
+          Reg->WriteFloat("THLT_SLOPE",2.0);   // Slope limit for Thlt °C/sec.
+          Reg->WriteInteger("MA_TMLT",5);      // Order MA filter Tmlt
+          Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
+          Reg->WriteFloat("TMLT_SLOPE",2.0);   // Slope limit for Tmlt °C/sec.
+          Reg->WriteInteger("MA_VMLT",5);      // Order MA filter Vmlt
+          Reg->WriteInteger("MA_VHLT",5);      // Order MA filter Vhlt
+          volumes.Vhlt_start = 90;             // Starting volume of HLT
+          Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
+          Reg->WriteInteger("VHLT_SRC",6);     // Vhlt = AIN1_MAX1238
+          Reg->WriteFloat("VHLT_A",0.025);     // a-coefficient for y=a.x+b
+          Reg->WriteFloat("VHLT_B",0.0);       // b-coefficient for y=a.x+b
+          Reg->WriteFloat("VHLT_SLOPE",1.0);   // Slope limit for Vhlt L/sec.
+          Reg->WriteInteger("VMLT_SRC",7);     // Vmlt = AIN2_MAX1238
+          Reg->WriteFloat("VMLT_A",0.025);     // a-coefficient for y=a.x+b
+          Reg->WriteFloat("VMLT_B",0.0);       // b-coefficient for y=a.x+b
+          Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
+          Reg->WriteInteger("TTRIAC_SRC",5);   // Ttriac = AIN0_MAX1238
+          Reg->WriteFloat("TTRIAC_A",0.1);     // a-coefficient for y=a.x+b
+          Reg->WriteFloat("TTRIAC_B",0.0);     // b-coefficient for y=a.x+b
+          volumes.Vboil_simulated = true;
+          Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
+          cb_pid_dbg       = false; // no PID debug to screen
+          PID_dbg->Visible = false;
+       } // if
+       Reg->CloseKey();
+       delete Reg;
+    } // try
+    catch (ERegistryException &E)
+    {
+       ShowMessage(E.Message);
+       delete Reg;
+       return;
+    } // catch
+    //-------------------------------------
+    // Set rev. number in Tstatusbar panel
+    //-------------------------------------
+    strcpy(s,"ebrew revision ");
+    strncat(s,&ebrew_revision[11],4); // extract the CVS revision number
+    s[19] = '\0';
+    StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(s);
+
+    Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
+    //----------------------------------------
+    // Init. volumes. Should be done only once
+    //----------------------------------------
+    volumes.Vhlt_simulated = vhlt_src; // needed for STD
+    if (vhlt_src == 0)
+    {  // Vhlt is not measured but calculated from Vmlt
+       volumes.Vhlt  = volumes.Vhlt_start;
+    }
+    if (volumes.Vboil_simulated)
+    {  // Vboil is not measured but calculated from Vmlt
+       volumes.Vboil  = VBOIL_START;
+    }
+    power_up_flag = false; // power-up is finished
+} // TMainForm::TMainForm()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Restore_Settings(void)
@@ -580,34 +824,11 @@ void __fastcall TMainForm::Restore_Settings(void)
 } // TMainForm::Restore_Settings()
 //---------------------------------------------------------------------------
 
-int __fastcall TMainForm::try_i2c_stop(void)
+void __fastcall TMainForm::Start_COM_Port_Communication(int known_status)
 /*------------------------------------------------------------------
-  Purpose  : This function tries to issue an I2C stop command.
-             If it fails, a dialog screen opens and asks the user
-             to continue or exit the program.
-  Variables: -
-  Returns  : 1 = reset successful, 0 = reset not successful
-  ------------------------------------------------------------------*/
-{
-   int rt; // return value from MessageBox
-
-   if (i2c_stop(PT_OPEN) != I2C_NOERR) // Added 070707
-   {  // i2c bus locked, i2c_stop() did not work
-      rt = MessageBox(NULL,I2C_STOP_ERR_TXT,"ERROR: Exit Ebrew Program?",MB_YESNO | MB_ICONQUESTION);
-      if (rt == IDYES)
-      {
-         exit_ebrew(); // Exit ebrew program
-      }
-      return 0; // not successful
-   } // if
-   return 1; // reset was successful
-} // TMainForm::try_i2c_stop()
-
-void __fastcall TMainForm::Start_I2C_Communication(int known_status)
-/*------------------------------------------------------------------
-  Purpose  : This function starts I2C communication, reports any
-             errors found and perform a check on which I2C hardware
-             devices are present.
+  Purpose  : This function starts the Virtual COM-port communication,
+             (via USB), reports any errors found and performs a check
+             on which hardware devices are present.
   Variables: known_status: if the hardware status does not match this
                            variable, a messagebox with the actual
                            hardware status is printed on the screen.
@@ -615,104 +836,9 @@ void __fastcall TMainForm::Start_I2C_Communication(int known_status)
              The global variable 'hw_status' is given a value
   ------------------------------------------------------------------*/
 {
-   TRegistry *Reg = new TRegistry();
-   char s[80];          // temp. string
-   char s1[20];         // temp. string
-   char st[1024];       // string for MessageBox
-   int  x1;             // Hardware base address from Registry
+   COM_port_open(); // Open USB Virtual COM port
 
-   //--------------------------------------------
-   // Get variables for i2c_init() from Registry
-   //--------------------------------------------
-   try
-   {
-      if (Reg->KeyExists(REGKEY))
-      {
-         Reg->OpenKey(REGKEY,FALSE);
-         x1 = Reg->ReadInteger("I2C_Base");    // Read HW IO address as an int.
-         fscl_prescaler = Reg->ReadInteger("FSCL_PRESCALER");
-         if ((fscl_prescaler < 0) || (fscl_prescaler > 12))
-         {
-            fscl_prescaler = 5; // set fscl to 11.72 kHz
-            Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
-         } // if
-      } // if
-   } // try
-   catch (ERegistryException &E)
-   {
-      ShowMessage(E.Message);
-   } // catch
-   Reg->CloseKey(); // Close the Registry
-   delete Reg;      // Delete Registry object to prevent memory leak
-
-   hw_status = i2c_init(x1, LPT_CARD|WIN_XP, fscl_values[fscl_prescaler]);
-   if (hw_status != I2C_NOERR)
-   {
-     sprintf(s,"Error in i2c_init(0x%x)",x1);
-     MessageBox(NULL,I2C_ARGS_MSG,s,MB_OK);
-   } // if
-   else
-   {
-     hw_status = i2c_start(); // Start I2C Communication
-     switch (hw_status)
-     {
-        case I2C_BB  : MessageBox(NULL,I2C_BB_MSG,"Error in i2c_start()",MB_OK);
-                       hw_status = 0; // set to 'No Devices present'
-                       break;
-        case I2C_BERR: MessageBox(NULL,I2C_BERR_MSG,"Error in i2c_start()",MB_OK);
-                       hw_status = 0; // set to 'No Devices present'
-                       break;
-        default      : //-------------------------------------------------
-                       // No error, check the individual Hardware Devices.
-                       //-------------------------------------------------
-                       check_i2c_hw(&hw_status); // check all hardware
-                       // Print information using a MessageBox
-                       PR_HW_STAT(LCD_OK);       // LCD Display
-                       sprintf(st,LCD_TXT,s1);
-                       PR_HW_STAT(DIG_IO_LSB_OK); // IO Port LSB
-                       sprintf(s,DIG_IO_LSB_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(DIG_IO_MSB_OK); // IO Port MSB
-                       sprintf(s,DIG_IO_MSB_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(MAX1238_OK);    // MAX1238 ADC 12-bit 12-ch.
-                       sprintf(s,MAX1238_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(LED1_OK);       // LED1
-                       sprintf(s,LED1_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(LED2_OK);       // LED2
-                       sprintf(s,LED2_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(LED3_OK);       // LED3
-                       sprintf(s,LED3_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(LED4_OK);       // LED4
-                       sprintf(s,LED4_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(ADDA_OK);       // PCF8591 AD-DA Converter
-                       sprintf(s,ADDA_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(LM92_1_OK);     // LM92 Temp. Sensor
-                       sprintf(s,LM92_1_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(LM92_2_OK);     // LM92 Temp. Sensor
-                       sprintf(s,LM92_2_TXT,s1);
-                       strcat(st,s);
-                       PR_HW_STAT(FM24C08_OK);    // FM24C08 EEPROM
-                       sprintf(s,FM24C08_TXT,s1);
-                       strcat(st,s);
-
-                       if (hw_status != known_status)
-                       {  // Print only if HW device configuration has changed
-                          MessageBox(NULL,st,"Results of I2C Hardware Check",MB_OK);
-                       }
-                       break; /* NO_ERR */
-     } // switch
-     try_i2c_stop(); // ignore return code
-   } // else
-} // TMainForm::Start_I2C_Communication()
-//---------------------------------------------------------------------------
+} // Start_COM_Port_Communication()
 
 void __fastcall TMainForm::print_mash_scheme_to_statusbar(void)
 /*------------------------------------------------------------------
@@ -751,9 +877,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
   ------------------------------------------------------------------*/
 {
    TRegistry *Reg = new TRegistry();
-   FILE *fd;            // Log File Descriptor
-   int  i;              // temp. variable
-   char s[40];          // Temp. string
+   FILE *fd;   // Log File Descriptor
+   int  i;     // temp. variable
+   char s[40]; // Temp. string
 
    //----------------------------------------
    // Initialise all variables from Registry
@@ -781,23 +907,16 @@ void __fastcall TMainForm::Main_Initialisation(void)
          dac_a = Reg->ReadFloat("DAC_A"); // a-coefficient for y=a.x+b DAC calc.
          dac_b = Reg->ReadFloat("DAC_B"); // b-coefficient for y=a.x+b DAC calc.
 
-         led1 = Reg->ReadInteger("LED1"); // Read led1 from registry
-         led2 = Reg->ReadInteger("LED2"); // Read led2 from registry
-         led3 = Reg->ReadInteger("LED3"); // Read led3 from registry
-         led4 = Reg->ReadInteger("LED4"); // Read led4 from registry
-
-         led1_vis = Reg->ReadInteger("LED1_VIS"); // Read led1 Visibility
-         led2_vis = Reg->ReadInteger("LED2_VIS"); // Read led2 Visibility
-         led3_vis = Reg->ReadInteger("LED3_VIS"); // Read led3 Visibility
-         led4_vis = Reg->ReadInteger("LED4_VIS"); // Read led4 Visibility
-
          ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
          tm_triac->SetPoint->Value = ttriac_hlim;       // update object on screen
          ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
 
          volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
          volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
-         cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG"); // display message
+         cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
+         cb_debug_com_port       = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
+         usb_com_port_nr         = Reg->ReadInteger("USB_COM_PORT");   // Virtual USB COM port number
+         strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
 
          init_ma(&str_thlt,Reg->ReadInteger("MA_THLT"),thlt); // MA filter for Thlt
          thlt_offset = Reg->ReadFloat("THLT_OFFSET");         // offset calibration
@@ -858,10 +977,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
    } // catch
 
    //----------------------------------------------------------------------
-   // Start I2C Communication and print list of I2C devices found if it
-   // does not match known devices.
+   // Start Communication with ebrew Hardware and print a list of all
+   // devices found if it does not match known devices.
    //----------------------------------------------------------------------
-   Start_I2C_Communication(known_hw_devices);
+   Start_COM_Port_Communication(known_hw_devices); // Open COM port with Registry Settings
 
    //--------------------------------------------------------------------------
    // Read Mash Scheme for maisch.sch file
@@ -965,159 +1084,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    time_switch     = 0;    // Time switch disabled at power-up
    delete Reg; // Delete Registry object to prevent memory leak
 } // Main_Initialisation()
-//---------------------------------------------------------------------------
-
-__fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
-/*------------------------------------------------------------------
-  Purpose  : This is the main constructor for the program.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   char s[50];
-   ebrew_revision   = "$Revision$";
-   ShowDataGraphs   = new TShowDataGraphs(this);   // create modeless Dialog
-   ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
-   TRegistry *Reg   = new TRegistry();
-   power_up_flag    = true; // indicate that program power-up is active
-
-   try
-    {
-       if (!Reg->KeyExists(REGKEY))
-       {
-          // No entry in Registry, create all keys
-          Reg->CreateKey(REGKEY); // Create key if it does not exist yet
-          Reg->OpenKey(REGKEY,FALSE);
-          Reg->WriteInteger("I2C_Base",0x378);   // I2C HW Base Address
-          Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
-          fscl_prescaler = 5;
-          Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler); // set fscl to 11.72 kHz
-          // PID Settings Dialog
-          Reg->WriteFloat("TS",TS_INIT);         // Set Default sample time
-          Reg->WriteFloat("Kc",KC_INIT);         // Controller gain
-          Reg->WriteFloat("Ti",TI_INIT);         // Ti constant
-          Reg->WriteFloat("Td",TD_INIT);         // Td constant
-          Reg->WriteFloat("K_LPF",0);            // LPF filter time-constant
-          Reg->WriteFloat("TSET_HLT_SLOPE",1.0); // Slope Limit for Tset_HLT
-          Reg->WriteFloat("TOffset",1.0);        // HLT - MLT heat loss
-          Reg->WriteFloat("TOffset2",-0.5);      // offset for early start of mash timers
-          Reg->WriteInteger("PID_Model",2);      // Takahashi PID Controller
-          sys_id_pars.N = 1; // order N for system identification
-          Reg->WriteInteger("STC_N",sys_id_pars.N);   // [1,2,3]
-          sys_id_pars.stc_td  = 0; // Time-Delay estimate for system identification
-          Reg->WriteInteger("STC_TD",sys_id_pars.stc_td);
-          sys_id_pars.stc_adf = 0; // true = use Adaptive directional forgetting
-          Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
-          Reg->WriteInteger("BURNER_HHYST",35);  // Gas Burner Hysteresis High Limit
-          Reg->WriteInteger("BURNER_LHYST",30);  // Gas Burner Hysteresis Low Limit
-          Reg->WriteString("SERVER_NAME","PC-EMILE"); // Server to connect to
-          // Send PID-Output to the various heaters / burners
-          cb_pid_out = 0; // The PID-output is not connected to anything
-          Reg->WriteInteger("CB_PID_OUT",cb_pid_out);
-          dac_a = -2.04; dac_b = 232.05;  // 5% -> just on, 95% -> full on
-          Reg->WriteFloat("DAC_A",dac_a); // default value for DAC calculations
-          Reg->WriteFloat("DAC_B",dac_b);
-
-          //---------------------------------------------------------------
-          // For the LED Displays: 0=Thlt  , 1=Tmlt, 2=Tset_hlt, 3=Tset_mlt
-          //                       4=Ttriac, 5=Vmlt, 6=Vhlt    , 7=gamma
-          // Macro, used in TMainForm::T50msec2Timer()
-          //---------------------------------------------------------------
-          led1 = 0; Reg->WriteInteger("LED1",led1);   // Thlt
-          led2 = 1; Reg->WriteInteger("LED2",led2);   // Tmlt
-          led3 = 5; Reg->WriteInteger("LED3",led3);   // Tset_hlt
-          led4 = 6; Reg->WriteInteger("LED4",led4);   // Tset_mlt
-
-          led1_vis = 1; // 3 mA visibility
-          Reg->WriteInteger("LED1_VIS",led1_vis); // LED1 Visibility
-          led2_vis = 1; // 3 mA visibility
-          Reg->WriteInteger("LED2_VIS",led2_vis); // LED2 Visibility
-          led3_vis = 2; // 6 mA visibility
-          Reg->WriteInteger("LED3_VIS",led3_vis); // LED3 Visibility
-          led4_vis = 2; // 6 mA visibility
-          Reg->WriteInteger("LED4_VIS",led4_vis); // LED4 Visibility
-
-          ttriac_hlim = 70; // Upper limit for triac temp.
-          Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
-          ttriac_llim = 60; // Lower limit for triac temp.
-          Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
-          cb_i2c_err_msg          = true;
-          Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
-          known_hw_devices = DIG_IO_LSB_OK | LED1_OK    | LED2_OK   | LED3_OK |
-                             LED4_OK       | MAX1238_OK | LM92_1_OK | LM92_2_OK;
-
-          // Init values for mash scheme variables
-          Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
-          // Init values for Sparge Settings
-          Reg->WriteInteger("SP_BATCHES",5);    // #Sparge Batches
-          Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
-          Reg->WriteInteger("MASH_VOL",30);     // Total Mash Volume (L)
-          Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
-          Reg->WriteInteger("BOIL_TIME",120);    // Total Boil Time (min.)
-          // Init values for STD
-          Reg->WriteInteger("PREHEAT_TIME",0);// PREHEAT_TIME [sec]
-          Reg->WriteFloat("VMLT_EMPTY", 3.0); // Vmlt_EMPTY [L]
-          Reg->WriteInteger("TO_XSEC",1);     // TIMEOUT_xSEC [sec]
-          Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
-          Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
-          // Measurements
-          Reg->WriteInteger("MA_THLT",5);      // Order MA filter Thlt
-          Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
-          Reg->WriteFloat("THLT_SLOPE",2.0);   // Slope limit for Thlt °C/sec.
-          Reg->WriteInteger("MA_TMLT",5);      // Order MA filter Tmlt
-          Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
-          Reg->WriteFloat("TMLT_SLOPE",2.0);   // Slope limit for Tmlt °C/sec.
-          Reg->WriteInteger("MA_VMLT",5);      // Order MA filter Vmlt
-          Reg->WriteInteger("MA_VHLT",5);      // Order MA filter Vhlt
-          volumes.Vhlt_start = 90;             // Starting volume of HLT
-          Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
-          Reg->WriteInteger("VHLT_SRC",6);     // Vhlt = AIN1_MAX1238
-          Reg->WriteFloat("VHLT_A",0.025);     // a-coefficient for y=a.x+b
-          Reg->WriteFloat("VHLT_B",0.0);       // b-coefficient for y=a.x+b
-          Reg->WriteFloat("VHLT_SLOPE",1.0);   // Slope limit for Vhlt L/sec.
-          Reg->WriteInteger("VMLT_SRC",7);     // Vmlt = AIN2_MAX1238
-          Reg->WriteFloat("VMLT_A",0.025);     // a-coefficient for y=a.x+b
-          Reg->WriteFloat("VMLT_B",0.0);       // b-coefficient for y=a.x+b
-          Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
-          Reg->WriteInteger("TTRIAC_SRC",5);   // Ttriac = AIN0_MAX1238
-          Reg->WriteFloat("TTRIAC_A",0.1);     // a-coefficient for y=a.x+b
-          Reg->WriteFloat("TTRIAC_B",0.0);     // b-coefficient for y=a.x+b
-          volumes.Vboil_simulated = true;
-          Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
-          cb_pid_dbg       = false; // no PID debug to screen
-          PID_dbg->Visible = false;
-       } // if
-       Reg->CloseKey();
-       delete Reg;
-    } // try
-    catch (ERegistryException &E)
-    {
-       ShowMessage(E.Message);
-       delete Reg;
-       return;
-    } // catch
-    //-------------------------------------
-    // Set rev. number in Tstatusbar panel
-    //-------------------------------------
-    strcpy(s,"ebrew revision ");
-    strncat(s,&ebrew_revision[11],4); // extract the CVS revision number
-    s[19] = '\0';
-    StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(s);
-
-    Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
-    //----------------------------------------
-    // Init. volumes. Should be done only once
-    //----------------------------------------
-    volumes.Vhlt_simulated = vhlt_src; // needed for STD
-    if (vhlt_src == 0)
-    {  // Vhlt is not measured but calculated from Vmlt
-       volumes.Vhlt  = volumes.Vhlt_start;
-    }
-    if (volumes.Vboil_simulated)
-    {  // Vboil is not measured but calculated from Vmlt
-       volumes.Vboil  = VBOIL_START;
-    }
-    power_up_flag = false; // power-up is finished
-} // TMainForm::TMainForm()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
@@ -1263,6 +1229,117 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
 } // TMainForm::MenuOptionsPIDSettingsClick()
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
+/*------------------------------------------------------------------
+  Purpose  : This is the function which is called whenever the user
+             presses 'Options | Hardware Settings'.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   int x1;  // temp. variable representing new USB COM Port number
+   char *endp; // temp. pointer for strtol() function
+   char s[80]; // temp. array
+   int  init_needed = false; // temp. flag, TRUE = Main_Initialisation to be called
+
+   TRegistry     *Reg = new TRegistry();
+   TI2C_Settings *ptmp;
+   AnsiString    S;
+
+   ptmp = new TI2C_Settings(this);
+
+   // Get I2C Bus Settings from the Registry
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+
+         usb_com_port_nr = Reg->ReadInteger("USB_COM_PORT"); // Read virtual COM port nr.
+         ptmp->UpDown1->Position = usb_com_port_nr;
+
+         S = Reg->ReadString("COM_PORT_SETTINGS");
+         ptmp->COM_Port_Settings_Edit->Text = S;
+
+         known_hw_devices            = Reg->ReadInteger("KNOWN_HW_DEVICES");
+         ptmp->Hw_devices_Edit->Text = IntToHex(known_hw_devices,3);
+
+         fscl_prescaler              = Reg->ReadInteger("FSCL_PRESCALER");
+         ptmp->fscl_combo->ItemIndex = fscl_prescaler;
+
+         ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM");
+         ptmp->Thlim_edit->Text  = AnsiString(ttriac_hlim);
+         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM");
+         ptmp->Tllim_edit->Text  = AnsiString(ttriac_llim);
+         cb_i2c_err_msg = Reg->ReadBool("CB_I2C_ERR_MSG");
+         ptmp->cb_i2c_err_msg->Checked = cb_i2c_err_msg;
+         cb_debug_com_port = Reg->ReadBool("CB_DEBUG_COM_PORT");
+         ptmp->cb_debug_com_port->Checked = cb_debug_com_port;
+
+         if (ptmp->ShowModal() == 0x1) // mrOK
+         {
+            x1 = ptmp->COM_Port_Edit->Text.ToInt();  // Retrieve COM Port Nr.
+            if (x1 != usb_com_port_nr)
+            {
+               init_needed     = true;
+               usb_com_port_nr = x1;
+               Reg->WriteInteger("USB_COM_PORT",x1); // Save new COM port nr.
+            } // if
+
+            strcpy(com_port_settings, ptmp->COM_Port_Settings_Edit->Text.c_str());
+            if (strcmp(com_port_settings,S.c_str())) // COM Port Settings
+            {
+               init_needed = true;
+               Reg->WriteString("COM_PORT_SETTINGS",AnsiString(com_port_settings));
+            } // if
+
+            strcpy(s,ptmp->Hw_devices_Edit->Text.c_str()); // retrieve hex value
+            known_hw_devices = (int)(strtol(s,&endp,16));  // convert to integer
+            Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
+
+            if (fscl_prescaler != ptmp->fscl_combo->ItemIndex)
+            {
+               fscl_prescaler = ptmp->fscl_combo->ItemIndex;
+               Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
+            } // if
+
+            ttriac_hlim = ptmp->Thlim_edit->Text.ToInt();
+            Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
+            tm_triac->SetPoint->Value = ttriac_hlim;
+            ttriac_llim = ptmp->Tllim_edit->Text.ToInt();
+            Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
+
+            cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
+            Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
+
+            cb_debug_com_port = ptmp->cb_debug_com_port->Checked;
+            Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
+
+            if (init_needed)
+            {  //--------------------------------------------------------
+               // COM-port settings were changed. Close COM-port if
+               // still open and re-open with new settings.
+               //--------------------------------------------------------
+               if (com_port_is_open)
+               {
+                  COM_port_close();
+               } // if
+               COM_port_open(); // Open COM-port with new settings
+            } // if
+         } // if
+         Reg->CloseKey(); // Close the Registry
+      } // if
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+   // Clean up
+   delete Reg;
+   delete ptmp;
+   ptmp = 0; // NULL the pointer
+} // TMainForm::MenuOptionsI2CSettingsClick()
+//---------------------------------------------------------------------------
+
 void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
 /*------------------------------------------------------------------
   Purpose  : This is the function which is called whenever the user
@@ -1282,9 +1359,6 @@ void __fastcall TMainForm::exit_ebrew(void)
   ------------------------------------------------------------------*/
 {
    TRegistry *Reg = new TRegistry();
-   int    err = 0; // error return code from I2C routines
-   char   s[80];   // temp. string for error messages
-   adda_t adc;     // struct containing 4 ADC values + DA value
 
    if (T50msec) T50msec->Enabled = false; // Disable Interrupt Timer
    if (ShowDataGraphs)
@@ -1306,65 +1380,10 @@ void __fastcall TMainForm::exit_ebrew(void)
       delete ViewMashProgress;  // close modeless dialog
       ViewMashProgress = 0;     // null the pointer
    }
-   if (hw_status & ADDA_OK)
-   {
-      //-------------------------------------------------------------
-      // Reset DA-Converter to 0 to prevent gas-burner from burning.
-      //-------------------------------------------------------------
-      adc.dac = 0;
-      err     = read_adc(&adc); // Send value to DA-Converter
-      sprintf(s,"Error %d while closing PCF8591 ADC-DAC",err);
-      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
-   } // if
-   if (hw_status & DIG_IO_LSB_OK)
-   {
-      //-------------------------------------------------------------
-      // Disable Heater, Pump and Alive LED (active-low)
-      // Disable Gas Burner (active-high). See misc.h for declaration
-      //-------------------------------------------------------------
-      err = WriteIOByte(HEATERb | ALIVEb | PUMPb, LSB_IO);
-      sprintf(s,"Error %d while closing LSB_IO",err);
-      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
-   } // if
-
-   if ((hw_status & LED1_OK) && !err)     // clear LED1 display
-   {
-      err = set_led(-1,0,1,led1_vis);
-      sprintf(s,"Error %d while closing LED1 Display",err);
-      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
-   } // if
-   if ((hw_status & LED2_OK) && !err)     // clear LED2 display
-   {
-      err = set_led(-1,0,2,led2_vis);
-      sprintf(s,"Error %d while closing LED2 Display",err);
-      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
-   } // if
-   if ((hw_status & LED3_OK) && !err)     // clear LED3 display
-   {
-      err = set_led(-1,0,3,led3_vis);
-      sprintf(s,"Error %d while closing LED3 Display",err);
-      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
-   } // if
-   if ((hw_status & LED4_OK) && !err)     // clear LED4 display
-   {
-      err = set_led(-1,0,4,led4_vis);
-      sprintf(s,"Error %d while closing LED4 Display",err);
-      if (err) MessageBox(NULL,s,"ERROR",MB_OK);
-   } // if
-
-   if ((hw_status & LCD_OK) && !err)     // clear LCD display
-   {
-      //err = WriteInstrLCD(0x01); // clear display
-      //err = WriteInstrLCD(0x08); // Display OFF, Blink OFF, Cursor Off
-   } // if
-   if ((hw_status > 0) && !err)
-   {
-      err = i2c_stop(PT_CLOSE); // Stop I2C Communication, close PortTalk
-      if (err)
-      {
-         sprintf(s,"Error %d while closing I2C Bus",err);
-         MessageBox(NULL,s,"ERROR",MB_OK);
-      } // if
+   if (com_port_is_open)
+   {    // Disable Gas-Burner PWM, Heater, Burner and all LEDs
+        COM_port_write("l0\nw0\np0\nh0\n");
+        COM_port_close();
    } // if
 
    try
@@ -1459,144 +1478,6 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
 } //  TMainForm::FixParameters1Click()
 //---------------------------------------------------------------------------
 
-void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
-/*------------------------------------------------------------------
-  Purpose  : This is the function which is called whenever the user
-             presses 'Options | Hardware Settings'.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   int x1;  // temp. variable representing old I2C HW Base Address
-   int x2;  // temp. variable representing new I2C HW Base Address
-   char *endp; // temp. pointer for strtol() function
-   char s[80]; // temp. array
-   int  init_needed = false; // temp. flag, TRUE = Main_Initialisation to be called
-
-   TRegistry *Reg = new TRegistry();
-   TI2C_Settings *ptmp;
-
-   ptmp = new TI2C_Settings(this);
-
-   // Get I2C Bus Settings from the Registry
-   try
-   {
-      if (Reg->KeyExists(REGKEY))
-      {
-         Reg->OpenKey(REGKEY,FALSE);
-
-         x1 = Reg->ReadInteger("I2C_Base");  // Read HW IO address as an int.
-         ptmp->HW_Base_Edit->Text = IntToHex(x1,3);
-
-         known_hw_devices            = Reg->ReadInteger("KNOWN_HW_DEVICES");
-         ptmp->Hw_devices_Edit->Text = IntToHex(known_hw_devices,3);
-
-         fscl_prescaler              = Reg->ReadInteger("FSCL_PRESCALER");
-         ptmp->fscl_combo->ItemIndex = fscl_prescaler;
-
-         led1 = Reg->ReadInteger("LED1");     // Read LED1 from registry
-         ptmp->RG1->ItemIndex = led1;         // Set radio-button
-         led2 = Reg->ReadInteger("LED2");     // Read LED2 from registry
-         ptmp->RG2->ItemIndex = led2;         // Set Radio-button
-         led3 = Reg->ReadInteger("LED3");     // Read LED3 from registry
-         ptmp->RG3->ItemIndex = led3;         // Set radio-button
-         led4 = Reg->ReadInteger("LED4");     // Read LED4 from registry
-         ptmp->RG4->ItemIndex = led4;         // Set radio-button
-
-         led1_vis = Reg->ReadInteger("LED1_VIS"); // Read LED1 Visibility
-         ptmp->UpDown1->Position = led1_vis;
-         led2_vis = Reg->ReadInteger("LED2_VIS"); // Read LED2 Visibility
-         ptmp->UpDown2->Position = led2_vis;
-         led3_vis = Reg->ReadInteger("LED3_VIS"); // Read LED3 Visibility
-         ptmp->UpDown5->Position = led3_vis;
-         led4_vis = Reg->ReadInteger("LED4_VIS"); // Read LED4 Visibility
-         ptmp->UpDown6->Position = led4_vis;
-
-         ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM");
-         ptmp->Thlim_edit->Text  = AnsiString(ttriac_hlim);
-         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM");
-         ptmp->Tllim_edit->Text  = AnsiString(ttriac_llim);
-         cb_i2c_err_msg = Reg->ReadBool("CB_I2C_ERR_MSG");
-         ptmp->cb_i2c_err_msg->Checked = cb_i2c_err_msg;
-
-         if (ptmp->ShowModal() == 0x1) // mrOK
-         {
-            strcpy(s,ptmp->HW_Base_Edit->Text.c_str());    // retrieve hex value
-            x2 = (int)(strtol(s,&endp,16));                // convert to integer
-            if (x2 != x1)
-            {
-               init_needed = true;
-               Reg->WriteInteger("I2C_Base",x2); // save new I2C address
-            } // if
-
-            strcpy(s,ptmp->Hw_devices_Edit->Text.c_str()); // retrieve hex value
-            known_hw_devices = (int)(strtol(s,&endp,16));  // convert to integer
-            Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
-
-            if (fscl_prescaler != ptmp->fscl_combo->ItemIndex)
-            {
-               init_needed    = true;
-               fscl_prescaler = ptmp->fscl_combo->ItemIndex;
-               Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
-            } // if
-
-            //---------------------------------------------------------------
-            // For the LED Displays: 0=Thlt  , 1=Tmlt, 2=Tset_hlt, 3=Tset_mlt
-            //                       4=Ttriac, 5=Vmlt, 6=Vhlt    , 7=gamma
-            // Macro, used in TMainForm::T50msec2Timer()
-            //---------------------------------------------------------------
-            led1 = ptmp->RG1->ItemIndex;
-            Reg->WriteInteger("LED1",led1);
-            led2 = ptmp->RG2->ItemIndex;
-            Reg->WriteInteger("LED2",led2);
-            led3 = ptmp->RG3->ItemIndex;
-            Reg->WriteInteger("LED3",led3);
-            led4 = ptmp->RG4->ItemIndex;
-            Reg->WriteInteger("LED4",led4);
-
-            led1_vis = ptmp->Vis1_Edit->Text.ToInt();
-            Reg->WriteInteger("LED1_VIS",led1_vis);
-            led2_vis = ptmp->Vis2_Edit->Text.ToInt();
-            Reg->WriteInteger("LED2_VIS",led2_vis);
-            led3_vis = ptmp->Vis3_Edit->Text.ToInt();
-            Reg->WriteInteger("LED3_VIS",led3_vis);
-            led4_vis = ptmp->Vis4_Edit->Text.ToInt();
-            Reg->WriteInteger("LED4_VIS",led4_vis);
-
-            ttriac_hlim = ptmp->Thlim_edit->Text.ToInt();
-            Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
-            tm_triac->SetPoint->Value = ttriac_hlim;
-            ttriac_llim = ptmp->Tllim_edit->Text.ToInt();
-            Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
-
-            cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
-            Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
-
-            if (init_needed)
-            {
-               //--------------------------------------------------------
-               // New I2C HW Base Address or SCL prescaler was changed,
-               // call i2c_stop() and init I2C Bus communication again.
-               //--------------------------------------------------------
-               if (try_i2c_stop() == 1) // 1 = successful
-               {
-                  Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
-               } // if
-            } // if
-         } // if
-         Reg->CloseKey(); // Close the Registry
-      } // if
-   } // try
-   catch (ERegistryException &E)
-   {
-      ShowMessage(E.Message);
-   } // catch
-   // Clean up
-   delete Reg;
-   delete ptmp;
-   ptmp = 0; // NULL the pointer
-} // TMainForm::MenuOptionsI2CSettingsClick()
-//---------------------------------------------------------------------------
-
 void __fastcall TMainForm::MenuHelpAboutClick(TObject *Sender)
 /*------------------------------------------------------------------
   Purpose  : This is the function which is called whenever the user
@@ -1608,47 +1489,6 @@ void __fastcall TMainForm::MenuHelpAboutClick(TObject *Sender)
    VersionAwareAbout->ShowModal();
    delete VersionAwareAbout;
 } // TMainForm::About1Click()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::Reset_I2C_Bus(int i2c_bus_id, int err)
-/*------------------------------------------------------------------
-  Purpose  : This routine reset the I2C bus in case of an error.
-             The user needs to turn the power off and then on again
-             (of the electronics, NOT the PC!), only when i2c_stop()
-             was not successful.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   char tmp_str[80];    // temp string for calculations
-   char err_txt[40];    // temp string for error message
-
-   switch (err)
-   {
-      case I2C_BERR:     strcpy(err_txt,I2C_BERR_MSG);
-                         break;
-      case I2C_BB:       strcpy(err_txt,I2C_BB_MSG);
-                         break;
-      case I2C_TIMEOUT:  strcpy(err_txt,I2C_TO_MSG);
-                         break;
-      case I2C_ARGS:     strcpy(err_txt,I2C_ARGS_MSG);
-                         break;
-      case I2C_PT:       strcpy(err_txt,I2C_PT_MSG);
-                         break;
-      case I2C_LM92_ERR: strcpy(err_txt,I2C_LM92_MSG);
-                         break;
-      default:           sprintf(err_txt,"Unknown Error (%d)",err);
-                         break;
-   }
-   sprintf(tmp_str,"%s while accessing I2C device 0x%2x",err_txt,i2c_bus_id);
-   if (try_i2c_stop() == 1) // 1 = successful
-   {
-      if (cb_i2c_err_msg)
-      {
-         MessageBox(NULL,"i2c_stop() successful: Press OK button to continue reset process",tmp_str,MB_OK);
-      } // if
-      Main_Initialisation(); // continue with init. process
-   } // else
-} // TMainForm::Reset_I2C_bus()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Generate_IO_Signals(void)
@@ -1665,13 +1505,16 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
              2) It calculates the Alive bit (blinking LED)
              3) It calculates the Pump bit (control pump on/off)
              4) It calculates the 'Gas Burner On' bit
-             5) It sends all signals to the PCF8574 I2C IO device
+             5) It sends all signals to the ebrew Hardware
   Variables: The timer variables in tmr (Unit1.h) are used and updated.
   Returns  : None
   ------------------------------------------------------------------*/
 {
-   int lsb_io = 0x00; // init. byte to write to DIG_IO_LSB_BASE
-   int err    = 0;    // I2C error return value
+   // lsb_io: see misc.h for bit definitions
+   int        lsb_io      = 0x00;  // init. byte to write to ebrew hardware
+   static int old_lsb_io  = 0x00;  // previous value of leds variable
+   char       s[20]       = {0};   // Temporary String
+   char       scom[50]    = {0};   // String to send to ebrew hardware
 
    switch (tmr.isrstate)
    {
@@ -1683,7 +1526,7 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
               // states.
               //
               // The modulating gas burner and the electrical heater share
-              // the same power outlet, a decision has to be made, which power
+              // the same power outlet. A decision has to be made, which power
               // source has priority over the other.
               // This is defined with the following table:
               //
@@ -1786,7 +1629,7 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
               // The modulating gas burner is enabled as follows:
               // 1) a PWM voltage is applied to the gas-valve, this is done
               //    in the main interrupt loop
-              // 2) a 220 V voltage is applied. This is done in this STD.
+              // 2) a 230 V voltage is applied. This is done in this STD.
               //---------------------------------------------------------
               if (time_switch || (cb_pid_out & PID_OUT_ELECTRIC) ||
                                 !(cb_pid_out & PID_OUT_GAS_MODULATE))
@@ -1832,6 +1675,29 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
               break;
    } // case
 
+   //-----------------------------------------------------------------
+   // Send Non-Modulating Gas-Burner On/Off signal to ebrew hardware.
+   // Activate this only when the PID-output is routed to a non-
+   // modulating gas-burner. Disable burner if deselected.
+   // Safety: disable gas burner when time_switch is true
+   //-----------------------------------------------------------------
+   if (time_switch || !(cb_pid_out & PID_OUT_GAS_NON_MOD))
+   {
+      lsb_io &= ~BURNERb; // Disable Non-Modulating gas-burner
+   }
+   else
+   {   // time-switch is disabled and non-modulating gas-burner is selected
+       if (tmr.time_high > pid_pars.burner_hyst_h)
+       {
+          lsb_io |= BURNERb;  // Fire it up!
+       }
+       else if (tmr.time_high < pid_pars.burner_hyst_l)
+       {
+          lsb_io &= ~BURNERb; // Disable Non-Modulating gas-burner
+       } // else if
+       // else: do nothing (hysteresis)
+   } // else
+
    //------------------------------------------------------------------
    // Calculate alive toggle bit to see if this routine is still alive
    //------------------------------------------------------------------
@@ -1840,70 +1706,35 @@ void __fastcall TMainForm::Generate_IO_Signals(void)
      tmr.alive_tmr = 0;          // reset timer
      tmr.alive     = !tmr.alive; // invert alive (bit 1 of IO port)
    } // if
-   if (tmr.alive)
-   {
-      lsb_io &= ~ALIVEb; // Enable alive LED
-   }
-   else
-   {
-      lsb_io |= ALIVEb;  // Disable alive LED
-   } // else
+   if (tmr.alive) lsb_io |= ALIVEb;  // Enable alive LED
+   else           lsb_io &= ~ALIVEb; // Disable alive LED
 
    //--------------------------------------------
-   // Send Pump On/Off signal to DIG_IO_LSB_BASE.
+   // Send Pump On/Off signal to ebrew hardware.
    //--------------------------------------------
-   if (std_out & P0b)
-   {
-      lsb_io |= PUMPb;
-   }
-   else
-   {
-      lsb_io &= ~PUMPb;
-   } // else
+   if (std_out & P0b) lsb_io |= PUMPb;
+   else               lsb_io &= ~PUMPb;
 
-   //-----------------------------------------------------------------
-   // Send Non-Modulating Gas-Burner On/Off signal to DIG_IO_LSB_BASE.
-   // Activate this only when the PID-output is routed to a non-
-   // modulating gas-burner. Disable burner if deselected.
-   // Safety: disable gas burner when time_switch is true
-   //-----------------------------------------------------------------
-   if (time_switch || !(cb_pid_out & PID_OUT_GAS_NON_MOD))
+   if (lsb_io != old_lsb_io)
    {
-      burner_on = false;
-   }
-   else
-   {   // time-switch is disabled and non-modulating gas-burner is selected
-       if (tmr.time_high > pid_pars.burner_hyst_h)
-       {
-          burner_on = true;
-       }
-       else if (tmr.time_high < pid_pars.burner_hyst_l)
-       {
-          burner_on = false;
-       } // else if
-       // else: do nothing (hysteresis)
-   } // else
-
-   if (burner_on)
-   {
-      lsb_io |= BURNERb; // Fire it up!
-   }
-   else
-   {
-      lsb_io &= ~BURNERb; // Disable gas-burner
-   } // else
-
-   //-------------------------------------------------
-   // Output lsb_io to IO port every 50 msec.
-   // (see misc.h for bit definitions)
-   // Bits for the Heater and the PUMP are inverted,
-   // because they are active low.
-   //-------------------------------------------------
-   if (hw_status & DIG_IO_LSB_OK)
-   {
-      lsb_io ^= PUMPb | HEATERb; // Invert PUMP and Heater bits
-      err = WriteIOByte(lsb_io,LSB_IO); // Write inverted value to IO port
-      if (err) Reset_I2C_Bus(DIG_IO_LSB_BASE,err);
+      s[0]    = 0; // init. temp. string
+      scom[0] = 0; // init. string to send
+      if ((lsb_io ^ old_lsb_io) & PUMPb)
+      { // The PUMP signal changed
+        sprintf(scom,"P%1d\n",(lsb_io & PUMPb) ? 1 : 0);
+      } // if
+      if ((lsb_io ^ old_lsb_io) & BURNERb)
+      { // The Non-Modulating Gas-Burner signal changed
+        sprintf(s,"N%1d\n",(lsb_io & BURNERb) ? 1 : 0);
+        strcat(scom,s);
+      } // if
+      if ((lsb_io ^ old_lsb_io) & (ALIVEb | HEATERb | PUMPb))
+      { // At least one of the LEDs has changed
+        sprintf(s,"L%1d\n",lsb_io & (ALIVEb | HEATERb | PUMPb));
+        strcat(scom,s);
+      } // if
+      COM_port_write(scom); // Send command to ebrew hardware
+      old_lsb_io = lsb_io;  // update previous value
    } // if
 } // Generate_IO_Signals()
 //---------------------------------------------------------------------------
@@ -1919,7 +1750,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
   Returns  : None
   ------------------------------------------------------------------*/
 {
-   int        err = 0;       // error return value, needed for SET_LED macro
+   //int        err = 0;       // error return value, needed for SET_LED macro
    TDateTime  td_now;        // holds current date and time
    double     thlt_unf;      // unfiltered version of Thlt
    double     tmlt_unf;      // unfiltered version of Tmlt
@@ -1947,8 +1778,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        old_vhlt = volumes.Vhlt;
        if (vhlt_src != NONE) // get real value from ADC
        {
-          volumes.Vhlt = get_analog_input(hw_status, vhlt_src, vhlt_a, vhlt_b, &err);
-          if (err) Reset_I2C_Bus(base_adc[vhlt_src],err);
+          //volumes.Vhlt = get_analog_input(hw_status, vhlt_src, vhlt_a, vhlt_b, &err);
+          //if (err) Reset_I2C_Bus(base_adc[vhlt_src],err);
        } // if
        //--------------------------------------------------------------------
        // else: in case Vhlt is simulated and not read from an ADC, the value
@@ -1971,8 +1802,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        old_vmlt = volumes.Vmlt;
        if (vmlt_src != NONE) // get real value from ADC
        {
-          volumes.Vmlt = get_analog_input(hw_status, vmlt_src, vmlt_a, vmlt_b, &err);
-          if (err) Reset_I2C_Bus(base_adc[vmlt_src],err);
+          //volumes.Vmlt = get_analog_input(hw_status, vmlt_src, vmlt_a, vmlt_b, &err);
+          //if (err) Reset_I2C_Bus(base_adc[vmlt_src],err);
        } // if
        if (swfx.vmlt_sw)
        {
@@ -1990,8 +1821,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    {
        if (ttriac_src != NONE) // get real value from ADC
        {
-          ttriac = get_analog_input(hw_status, ttriac_src, ttriac_a, ttriac_b, &err);
-          if (err) Reset_I2C_Bus(base_adc[ttriac_src],err);
+          //ttriac = get_analog_input(hw_status, ttriac_src, ttriac_a, ttriac_b, &err);
+          //if (err) Reset_I2C_Bus(base_adc[ttriac_src],err);
        } // if
        if (swfx.ttriac_sw)
        {
@@ -2026,7 +1857,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        old_thlt = thlt;  // Previous value of Thlt
        if (hw_status & LM92_1_OK)
        {
-          thlt_unf = lm92_read(0); // Read HLT temp. from LM92 device
+          //thlt_unf = lm92_read(0); // Read HLT temp. from LM92 device
        } // if
        else thlt_unf = 0.0; // Reset Thlt
        if (swfx.thlt_sw)
@@ -2035,7 +1866,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        } // if
        if (thlt_unf == LM92_ERR)
        {  // Reset I2C bus when lm92_read() returned an error
-          if (hw_status & LM92_1_OK) Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
+          //if (hw_status & LM92_1_OK) Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
        } // if
        else
        {  // No error, limit slope and filter temperature
@@ -2054,7 +1885,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        old_tmlt = tmlt;  // Previous value of Tmlt
        if (hw_status & LM92_2_OK)
        {
-          tmlt_unf = lm92_read(1); // Read MLT temp. from LM92 device
+          //tmlt_unf = lm92_read(1); // Read MLT temp. from LM92 device
        } // if
        else tmlt_unf = 0.0; // Reset Tmlt
        if (swfx.tmlt_sw)
@@ -2063,7 +1894,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
        } // if
        if (tmlt_unf == LM92_ERR)
        {  // Reset I2C bus when lm92_read() returned an error
-          if (hw_status & LM92_2_OK) Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
+          //if (hw_status & LM92_2_OK) Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
        } // if
        else
        {  // No error, limit slope and filter temperature
@@ -2144,43 +1975,9 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
           {
              adc.dac = (byte)dac_x;
           } // else
-          err = read_adc(&adc);                  // Send value to DA-Converter
-          if (err) Reset_I2C_Bus(ADDA_BASE,err); // Reset if necessary
+          //err = read_adc(&adc);                  // Send value to DA-Converter
+          //if (err) Reset_I2C_Bus(ADDA_BASE,err); // Reset if necessary
        } // if
-   } // else if
-
-   //-----------------------------------------------------------------------
-   // TIME-SLICE: Output values to I2C LED Display every second
-   //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 8)
-   {
-      // Now update the LEDs with the proper values by calling macro SET_LED
-      //      HW_BIT, which display, which var., Visibility, LEDx_BASE
-      SET_LED(LED1_OK,1,led1,led1_vis,LED1_BASE);
-   } // else if
-
-   //-----------------------------------------------------------------------
-   // TIME-SLICE: Output values to I2C LED Display every second
-   //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 9)
-   {
-      SET_LED(LED2_OK,2,led2,led2_vis,LED2_BASE);
-   } // else if
-
-   //-----------------------------------------------------------------------
-   // TIME-SLICE: Output values to I2C LED Display every second
-   //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 10)
-   {
-      SET_LED(LED3_OK,3,led3,led3_vis,LED3_BASE);
-   } // else if
-
-   //-----------------------------------------------------------------------
-   // TIME-SLICE: Output values to I2C LED Display every second
-   //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 11)
-   {
-      SET_LED(LED4_OK,4,led4,led4_vis,LED4_BASE);
    } // else if
 
    //--------------------------------------------------------------------------
@@ -2213,8 +2010,8 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
       //-----------------------------------------------------------------
       if (hw_status & DIG_IO_MSB_OK)
       {
-         err = WriteIOByte((byte)(std_out & 0x00FE),MSB_IO);
-         if (err) Reset_I2C_Bus(DIG_IO_MSB_BASE,err);
+         //err = WriteIOByte((byte)(std_out & 0x00FE),MSB_IO);
+         //if (err) Reset_I2C_Bus(DIG_IO_MSB_BASE,err);
       } // if
    } // else if
 
@@ -2223,7 +2020,7 @@ void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
    //--------------------------------------------------------------------------
    else if ((tmr.pid_tmr % ONE_SECOND == 13) && (i2c_hw_scan_req))
    {
-      Start_I2C_Communication(-1); // print all I2C devices found
+      //Start_I2C_Communication(-1); // print all I2C devices found
       i2c_hw_scan_req = false;
    } // else if
 

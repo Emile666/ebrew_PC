@@ -5,10 +5,9 @@
     <VERSION value="BCB.06.00"/>
     <PROJECT value="ebrew.exe"/>
     <OBJFILES value="O\ebrew.obj O\Unit1.obj O\PID_Settings_Dialog.obj O\FixParamsDialog.obj 
-      O\I2CSettingsDialog.obj O\MISC.obj O\PID_REG.obj O\EditMashScheme.obj 
+      O\I2CSettingsDialog.obj O\misc.obj O\PID_REG.obj O\EditMashScheme.obj 
       O\ViewMashProgressForm.obj O\DataGraphForm.obj O\Sparge_Settings.obj 
-      O\i2c_dll.obj O\RestoreSettings.obj O\VersionAwareAbout.obj 
-      O\MeasurementsDialog.obj"/>
+      O\RestoreSettings.obj O\VersionAwareAbout.obj O\MeasurementsDialog.obj"/>
     <RESFILES value="ebrew.res"/>
     <IDLFILES value=""/>
     <IDLGENFILES value=""/>
@@ -23,7 +22,7 @@
     <PACKAGES value="rtl.bpi vcl.bpi vclx.bpi vcljpg.bpi bcbsmp.bpi qrpt.bpi dbrtl.bpi 
       vcldb.bpi bdertl.bpi ibsmp.bpi vcldbx.bpi teeui.bpi teedb.bpi tee.bpi 
       nmfast.bpi dclocx.bpi"/>
-    <PATHCPP value=".;i2c_dll"/>
+    <PATHCPP value=".;"/>
     <PATHPAS value=".;"/>
     <PATHRC value=".;"/>
     <PATHASM value=".;"/>
@@ -63,13 +62,12 @@
       <FILE FILENAME="PID_Settings_Dialog.cpp" FORMNAME="PID_Settings" UNITNAME="PID_Settings_Dialog" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="FixParamsDialog.cpp" FORMNAME="Fix_Params" UNITNAME="FixParamsDialog" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="I2CSettingsDialog.cpp" FORMNAME="I2C_Settings" UNITNAME="I2CSettingsDialog" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
-      <FILE FILENAME="MISC.C" FORMNAME="" UNITNAME="MISC" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
+      <FILE FILENAME="misc.c" FORMNAME="" UNITNAME="MISC" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="PID_REG.C" FORMNAME="" UNITNAME="PID_REG" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="EditMashScheme.cpp" FORMNAME="EditMashSchemeDlg" UNITNAME="EditMashScheme" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="ViewMashProgressForm.cpp" FORMNAME="ViewMashProgress" UNITNAME="ViewMashProgressForm" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="DataGraphForm.cpp" FORMNAME="ShowDataGraphs" UNITNAME="DataGraphForm" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="Sparge_Settings.cpp" FORMNAME="SpargeSettings" UNITNAME="Sparge_Settings" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
-      <FILE FILENAME="i2c_dll\i2c_dll.cpp" FORMNAME="" UNITNAME="i2c_dll" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="RestoreSettings.cpp" FORMNAME="Restore_Program_Settings" UNITNAME="RestoreSettings" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="VersionAwareAbout.cpp" FORMNAME="VersionAwareAbout" UNITNAME="VersionAwareAbout" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="MeasurementsDialog.cpp" FORMNAME="Measurements" UNITNAME="MeasurementsDialog" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>

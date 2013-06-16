@@ -6,6 +6,17 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.19  2011/05/29 20:56:26  Emile
+// - New Registry variables added: STC_N, STC_TD and STC_ADF
+// - PID Settings Dialog screen extended with new parameters for self-tuning
+//   controller: possibility to set the system order N, an estimate for the
+//   time-delay and a boolean whether or not to use adaptive dir. forgetting.
+// - PID Settings Dialog screen: parameters enabled/disabled when a
+//   specific PID controller is chosen.
+// - New functions time_delay() and init_time_delay() added
+// - Changes made in init_pid2() function header.
+// - Unit-test cases updated and extended with tests for new functions.
+//
 // Revision 1.18  2007/08/26 22:23:21  Emile
 // - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
 // - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
@@ -169,11 +180,13 @@ extern "C" {
 
 #define ALIVE_TICKS (10) // timer for 0.5 sec. LED
 
-// Bit assignments of IO port (LSB_IO)
-//------------------------------------
-#define HEATERb (0x01)
-#define ALIVEb  (0x02)
-#define PUMPb   (0x04)
+// Bit assignments of IO port for ebrew hardware. The order of PUMPb,
+// HEATERb and ALIVEb bits is the same as in the ebrew hardware
+// to make coding easier.
+//-------------------------------------------------------------------
+#define PUMPb   (0x01)
+#define HEATERb (0x02)
+#define ALIVEb  (0x04)
 #define BURNERb (0x08)
 
 typedef struct _log_struct
