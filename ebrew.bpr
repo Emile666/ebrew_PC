@@ -6,16 +6,16 @@
     <PROJECT value="ebrew.exe"/>
     <OBJFILES value="O\ebrew.obj O\Unit1.obj O\PID_Settings_Dialog.obj O\FixParamsDialog.obj 
       O\I2CSettingsDialog.obj O\misc.obj O\PID_REG.obj O\EditMashScheme.obj 
-      O\ViewMashProgressForm.obj O\DataGraphForm.obj O\Sparge_Settings.obj 
-      O\RestoreSettings.obj O\VersionAwareAbout.obj O\MeasurementsDialog.obj"/>
+      O\ViewMashProgressForm.obj O\Sparge_Settings.obj O\RestoreSettings.obj 
+      O\VersionAwareAbout.obj O\MeasurementsDialog.obj O\scheduler.obj O\tasks.obj"/>
     <RESFILES value="ebrew.res"/>
     <IDLFILES value=""/>
     <IDLGENFILES value=""/>
     <DEFFILE value=""/>
     <RESDEPEN value="$(RESFILES) Unit1.dfm PID_Settings_Dialog.dfm FixParamsDialog.dfm 
       I2CSettingsDialog.dfm EditMashScheme.dfm ViewMashProgressForm.dfm 
-      DataGraphForm.dfm Sparge_Settings.dfm RestoreSettings.dfm 
-      VersionAwareAbout.dfm MeasurementsDialog.dfm"/>
+      Sparge_Settings.dfm RestoreSettings.dfm VersionAwareAbout.dfm 
+      MeasurementsDialog.dfm"/>
     <LIBFILES value=""/>
     <LIBRARIES value="Vcwb6.lib AnimTimer.lib"/>
     <SPARELIBS value="rtl.lib vcl.lib vcljpg.lib AnimTimer.lib bcbsmp.lib vclx.lib Vcwb6.lib"/>
@@ -66,11 +66,12 @@
       <FILE FILENAME="PID_REG.C" FORMNAME="" UNITNAME="PID_REG" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="EditMashScheme.cpp" FORMNAME="EditMashSchemeDlg" UNITNAME="EditMashScheme" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="ViewMashProgressForm.cpp" FORMNAME="ViewMashProgress" UNITNAME="ViewMashProgressForm" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
-      <FILE FILENAME="DataGraphForm.cpp" FORMNAME="ShowDataGraphs" UNITNAME="DataGraphForm" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="Sparge_Settings.cpp" FORMNAME="SpargeSettings" UNITNAME="Sparge_Settings" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="RestoreSettings.cpp" FORMNAME="Restore_Program_Settings" UNITNAME="RestoreSettings" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="VersionAwareAbout.cpp" FORMNAME="VersionAwareAbout" UNITNAME="VersionAwareAbout" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="MeasurementsDialog.cpp" FORMNAME="Measurements" UNITNAME="MeasurementsDialog" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
+      <FILE FILENAME="scheduler.c" FORMNAME="" UNITNAME="scheduler" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
+      <FILE FILENAME="tasks.c" FORMNAME="" UNITNAME="tasks" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
   </FILELIST>
   <BUILDTOOLS>
   </BUILDTOOLS>

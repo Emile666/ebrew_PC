@@ -4,6 +4,15 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2013/06/16 14:39:19  Emile
+// Intermediate version for new Ebrew 2.0 USB hardware:
+// - Hardware settings Dialog: COM Port + Settings added + LEDx removed
+// - PortTalk + i2c_dll + Start_i2c_communication + Reset_I2C_Bus removed
+// - New routines for COM-Port added
+// - Generate_IO_Signals() now uses COM_port_write to address all hardware
+// - This version works with new hardware: PUMP on/off + LEDs are working
+// - HEATER led and PWM output do not work yet + TODO: add scheduler.
+//
 // Revision 1.6  2004/04/19 21:55:49  emile
 // - Added calibration offsets and MA-filters for Thlt and Tmlt:
 //   - New Registry variables MA_THLT, MA_TMLT, THLT_OFFSET and TMLT_OFFSET.
@@ -45,7 +54,6 @@ USEFORM("FixParamsDialog.cpp", Fix_Params);
 USEFORM("I2CSettingsDialog.cpp", I2C_Settings);
 USEFORM("EditMashScheme.cpp", EditMashSchemeDlg);
 USEFORM("ViewMashProgressForm.cpp", ViewMashProgress);
-USEFORM("DataGraphForm.cpp", ShowDataGraphs);
 USEFORM("Sparge_Settings.cpp", SpargeSettings);
 USEFORM("RestoreSettings.cpp", Restore_Program_Settings);
 USEFORM("VersionAwareAbout.cpp", VersionAwareAbout);
@@ -64,7 +72,6 @@ WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
                  Application->CreateForm(__classid(TI2C_Settings), &I2C_Settings);
                  Application->CreateForm(__classid(TEditMashSchemeDlg), &EditMashSchemeDlg);
                  Application->CreateForm(__classid(TViewMashProgress), &ViewMashProgress);
-                 Application->CreateForm(__classid(TShowDataGraphs), &ShowDataGraphs);
                  Application->CreateForm(__classid(TSpargeSettings), &SpargeSettings);
                  Application->CreateForm(__classid(TRestore_Program_Settings), &Restore_Program_Settings);
                  Application->CreateForm(__classid(TVersionAwareAbout), &VersionAwareAbout);

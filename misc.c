@@ -6,6 +6,17 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.20  2011/05/29 20:56:26  Emile
+  - New Registry variables added: STC_N, STC_TD and STC_ADF
+  - PID Settings Dialog screen extended with new parameters for self-tuning
+    controller: possibility to set the system order N, an estimate for the
+    time-delay and a boolean whether or not to use adaptive dir. forgetting.
+  - PID Settings Dialog screen: parameters enabled/disabled when a
+    specific PID controller is chosen.
+  - New functions time_delay() and init_time_delay() added
+  - Changes made in init_pid2() function header.
+  - Unit-test cases updated and extended with tests for new functions.
+
   Revision 1.19  2007/08/26 22:23:20  Emile
   - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
   - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
@@ -708,72 +719,6 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int 
    } // else
    return ret;
 } // read_input_file
-
-double update_tset(double *tset, double temp, double offset, double offset2,
-                   maisch_schedule ms[], int *ms_idx, int ms_total)
-/*------------------------------------------------------------------
-  Purpose  : This function checks if tset should be increased, based
-             on the maisch schedule defined in ms[]. When the temp.
-             is increasing towards the new set-point a double offset is
-             added to tset to speed things up. When the set-point has
-             been reached a single offset is added to compensate for
-             heat losses between the HLT and the MLT.
-
-            Timer    Temp > ms[].temp  Action                    Offset to tset
-         ----------------------------------------------------------------------
-     1)  Not Started      FALSE        None, temp. is increasing   2 * offset
-     2)  Not Started      TRUE         Start Timer                 offset
-     3)    Running          X          Timer++                     offset
-     4)    Time-out         X          Get next temp. set-point    2 * offset
-  Variables:
-     *tset : The reference temperature for the PID controller
-      temp : The actual temperature of the HLT or MLT
-    offset : Temperature offset to add to tset (1X or 2X)
-   offset2 : Temperature offset for early start of mash timers
-      time : the actual time in TS ticks
-      ms[] : Array containing the maisch schedule
-    ms_idx : index in the array [0 .. ms_total-1]
-  ms_total : max. index in the array
-  Returns  : MLT reference temp. (= value from mash scheme)
-  ------------------------------------------------------------------*/
-{
-   if (*ms_idx < ms_total)
-   {
-      *tset = ms[*ms_idx].temp + offset; // get ref. temp. from mash scheme
-      if ((ms[*ms_idx].timer == NOT_STARTED) &&
-          (temp >= ms[*ms_idx].temp + offset2))
-      {
-         /* 2) timer has not started yet and ref. temp. has been achieved */
-         ms[*ms_idx].timer = 0; /* start timer */
-      } // if
-      else if (ms[*ms_idx].timer >= ms[*ms_idx].time)
-      {
-         /* 4) timer exceeds the hold time = time-out */
-         if (*ms_idx < ms_total - 1)
-         {
-            /* NOT at last temperature setting, so get new value */
-            (*ms_idx)++; /* get next maisch temperature and time */
-            *tset  = ms[*ms_idx].temp; /* set new reference temperature */
-            *tset += offset; /* add double offset */
-         } // if
-         /*-----------------------------------------------------------*/
-         /* Do nothing when all temp. & time pairs have been realised */
-         /* Keep *tset at the last value, do NOT increase *ms_idx     */
-         /*-----------------------------------------------------------*/
-      } // else if
-      else if (ms[*ms_idx].timer != NOT_STARTED)
-      {
-         /* 3) Timer is running, increment timer */
-         ms[*ms_idx].timer++;
-      } // else if
-      else
-      {
-         /* 1) Timer is running, do nothing */
-         *tset += offset; /* add double offset */
-      } // else
-   } /* if */
-   return ms[*ms_idx].temp; /* return ref. temp. for MLT */
-} /* update_tset() */
 
 int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
                double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],

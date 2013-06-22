@@ -6,6 +6,15 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.20  2013/06/16 14:39:19  Emile
+// Intermediate version for new Ebrew 2.0 USB hardware:
+// - Hardware settings Dialog: COM Port + Settings added + LEDx removed
+// - PortTalk + i2c_dll + Start_i2c_communication + Reset_I2C_Bus removed
+// - New routines for COM-Port added
+// - Generate_IO_Signals() now uses COM_port_write to address all hardware
+// - This version works with new hardware: PUMP on/off + LEDs are working
+// - HEATER led and PWM output do not work yet + TODO: add scheduler.
+//
 // Revision 1.19  2011/05/29 20:56:26  Emile
 // - New Registry variables added: STC_N, STC_TD and STC_ADF
 // - PID Settings Dialog screen extended with new parameters for self-tuning
@@ -374,8 +383,6 @@ typedef struct _volume_struct
 void add_seconds(char *s, int seconds);
 int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int init);
-//double update_tset(double *tset, double temp, double offset, double offset2,
-//                   maisch_schedule ms[], int *ms_idx, int ms_total);
 int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
                double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
                sparge_struct *sps, std_struct *std, int pid_on, int std_fx);
@@ -388,4 +395,4 @@ void   slope_limiter(const double lim, const double Told, double *Tnew);
 #ifdef __cplusplus
 };
 #endif
-#endif
+#endif /* MISC_H */

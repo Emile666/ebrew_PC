@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.37  2013/06/16 14:39:19  Emile
+// Intermediate version for new Ebrew 2.0 USB hardware:
+// - Hardware settings Dialog: COM Port + Settings added + LEDx removed
+// - PortTalk + i2c_dll + Start_i2c_communication + Reset_I2C_Bus removed
+// - New routines for COM-Port added
+// - Generate_IO_Signals() now uses COM_port_write to address all hardware
+// - This version works with new hardware: PUMP on/off + LEDs are working
+// - HEATER led and PWM output do not work yet + TODO: add scheduler.
+//
 // Revision 1.36  2011/05/14 14:02:19  Emile
 // - Unit test set updates, test-case 16 added
 // - Self-Tuning controller N=1 and N=2 added to PID dialog screen
@@ -349,8 +358,8 @@
 #define max(a, b)  (((a) > (b)) ? (a) : (b))
 
 // BUFFER SIZE FOR COM PORT READ
-#define MAX_BUF_WRITE (40)
-#define MAX_BUF_READ (256)
+#define MAX_BUF_WRITE (255)
+#define MAX_BUF_READ (255)
 #define COM_PORT_DEBUG_FNAME "com_port_dbg.txt"
 
 //------------------------------------------------------------------------------
@@ -393,7 +402,6 @@ __published:	// IDE-managed Components
         TMenuItem *Contents1;
         TMenuItem *MenuOptionsPIDSettings;
         TMenuItem *MenuView_I2C_HW_Devices;
-        TMenuItem *MenuViewData_graphs;
         TMenuItem *MenuEditMashScheme;
         TMenuItem *File2;
         TMenuItem *MenuFileExit;
@@ -444,10 +452,9 @@ __published:	// IDE-managed Components
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
         void __fastcall MenuOptionsI2CSettingsClick(TObject *Sender);
         void __fastcall MenuHelpAboutClick(TObject *Sender);
-        void __fastcall T50msec2Timer(TObject *Sender);
+        void __fastcall T50msecTimer(TObject *Sender);
         void __fastcall MenuEditMashSchemeClick(TObject *Sender);
         void __fastcall MenuViewMash_progressClick(TObject *Sender);
-        void __fastcall MenuViewData_graphsClick(TObject *Sender);
         void __fastcall SpargeSettings1Click(TObject *Sender);
         void __fastcall Auto1Click(TObject *Sender);
         void __fastcall OFF1Click(TObject *Sender);
@@ -466,76 +473,85 @@ private:	// User declarations
         void __fastcall print_mash_scheme_to_statusbar(void);
         void __fastcall Main_Initialisation(void);
         void __fastcall Init_Sparge_Settings(void);
-        void __fastcall Start_COM_Port_Communication(int known_status);
-        void __fastcall COM_port_open(void);           // Init. COM Port
-        void __fastcall COM_port_close(void);          // Close COM Port
-        void __fastcall COM_port_write(const char *s); // Write COM Port
-        void __fastcall COM_port_read(char *s);        // Read  COM Port
         void __fastcall Restore_Settings(void);
         void __fastcall exit_ebrew(void);
-        void __fastcall Generate_IO_Signals(void);
+        void __fastcall Update_GUI(void);
 
-        timer_vars      tmr;        // struct with timer variables
-        ma              str_thlt;   // Struct for MA5 filter for HLT temperature
-        ma              str_tmlt;   // Struct for MA5 filter for MLT temperature
-        int             ttriac_hlim;      // High limit for Triac Temp. Protection
-        int             ttriac_llim;      // Low  limit for Triac Temp. Protection
-        bool            triac_too_hot;    // true = Triac is overheated
-        bool            cb_i2c_err_msg;   // true = give error message on successful I2C reset
-        bool            cb_debug_com_port; // true = file-logging for COM port communication
-        bool            power_up_flag;    // true = power-up
         int             usb_com_port_nr;  // Number of virtual USB COM port
         char            com_port_settings[20]; // Virtual COM Port Settings
         int             known_hw_devices; // list of known I2C hardware devices
         int             fscl_prescaler;   // index into PCF8584 prescaler values, see i2c_dll.cpp
-        double          thlt_offset;      // calibration offset to add to Thlt measurement
-        double          tmlt_offset;      // calibration offset to add to Tmlt measurement
 
-        double          thlt_slope;       // Slope limiter for Thlt temperature
-        double          tmlt_slope;       // Slope limiter for Tmlt temperature
-        double          tset_hlt_slope;   // Slope limiter for Tset_hlt reference
-        double          vhlt_slope;       // Slope limiter for Vhlt volume
-        double          vmlt_slope;       // Slope limiter for Vmlt volume
+        bool            cb_pid_dbg;        // true = Show PID Debug label
+        byte            cb_pid_out;        // [ELECTRIC, GAS_NON_MOD, GAS_MODULATE]
+        bool            cb_i2c_err_msg;    // true = give error message on successful I2C reset
+        bool            cb_debug_com_port; // true = file-logging for COM port communication
+        bool            power_up_flag;     // true = power-up
+        bool            need_to_read;      // true = read response from COM port
+        int             lsb_io;            // init. byte to write to ebrew hardware
 
-        bool            cb_pid_dbg;       // true = Show PID Debug label
-        byte            cb_pid_out;       // [ELECTRIC, GAS_NON_MOD, GAS_MODULATE]
         double          dac_a;            // a-coefficient for y=a.x+b DAC calc.
         double          dac_b;            // b-coefficient for y=a.x+b DAC calc.
-        enum i2c_adc    vhlt_src;         // Vhlt source AD channel
-        double          vhlt_a;           // a-coefficient for y=a.x+b
-        double          vhlt_b;           // b-coefficient for y=a.x+b
-        enum i2c_adc    vmlt_src;         // Vmlt source AD channel
-        double          vmlt_a;           // a-coefficient for y=a.x+b
-        double          vmlt_b;           // b-coefficient for y=a.x+b
-        enum i2c_adc    ttriac_src;       // Ttriac source AD channel
-        double          ttriac_a;         // a-coefficient for y=a.x+b
-        double          ttriac_b;         // b-coefficient for y=a.x+b
 public:		// User declarations
-        ma              str_vhlt;   // Struct for MA5 filter for HLT volume
-        ma              str_vmlt;   // Struct for MA5 filter for MLT volume
-        swfx_struct     swfx;       // Switch & Fix settings for tset and gamma
-        double          gamma;      // PID controller output
-        double          tset_hlt;   // HLT reference temperature
-        double          tset_mlt;   // MLT reference temperature
         double          thlt;       // HLT actual temperature
-        double          tmlt;       // MLT actual temperature
-        double          ttriac;     // Triac electronics actual temperature
-        pid_params      pid_pars;   // struct containing PID parameters
-        sys_id_params   sys_id_pars; // struct containing system ident. parameters
-        int             hw_status;  // I2C HW status, see i2c_dll.h for bit settings
+        ma              str_thlt;     // Struct for MA5 filter for HLT temperature
+        double          thlt_offset;  // calibration offset to add to Thlt measurement
+        double          thlt_slope;   // Slope limiter for Thlt temperature
+
+        double          tmlt;         // MLT actual temperature
+        ma              str_tmlt;     // Struct for MA5 filter for MLT temperature
+        double          tmlt_offset;  // calibration offset to add to Tmlt measurement
+        double          tmlt_slope;   // Slope limiter for Tmlt temperature
+
+        ma              str_vhlt;     // Struct for MA5 filter for HLT volume
+        double          vhlt_slope;   // Slope limiter for Vhlt volume
+        enum i2c_adc    vhlt_src;     // Vhlt source AD channel
+        double          vhlt_a;       // a-coefficient for y=a.x+b
+        double          vhlt_b;       // b-coefficient for y=a.x+b
+
+        ma              str_vmlt;     // Struct for MA5 filter for MLT volume
+        double          vmlt_slope;   // Slope limiter for Vmlt volume
+        enum i2c_adc    vmlt_src;     // Vmlt source AD channel
+        double          vmlt_a;       // a-coefficient for y=a.x+b
+        double          vmlt_b;       // b-coefficient for y=a.x+b
+
+        double          ttriac;       // Triac electronics actual temperature
+        enum i2c_adc    ttriac_src;   // Ttriac source AD channel
+        double          ttriac_a;     // a-coefficient for y=a.x+b
+        double          ttriac_b;     // b-coefficient for y=a.x+b
+        int             ttriac_hlim;   // High limit for Triac Temp. Protection
+        int             ttriac_llim;   // Low  limit for Triac Temp. Protection
+        bool            triac_too_hot; // true = Triac is overheated
+        bool            toggle_led;    // Status of Alive LED
+
+        volume_struct   volumes;       // Struct for Volumes
+        swfx_struct     swfx;          // Switch & Fix settings for tset and gamma
+        pid_params      pid_pars;      // struct containing PID parameters
+        sys_id_params   sys_id_pars;   // struct containing system ident. parameters
         maisch_schedule ms[MAX_MS]; // struct containing maisch schedule
         sparge_struct   sp;         // Values for Sparging
         std_struct      std;        // Values for State Transition Diagram
+
+        double          gamma;          // PID controller output
+        double          tset_hlt;       // HLT reference temperature
+        double          tset_hlt_slope; // Slope limiter for Tset_hlt reference
+        double          tset_mlt;       // MLT reference temperature
+        int             hw_status;  // I2C HW status, see i2c_dll.h for bit settings
         unsigned int    std_out;    // position of valves
                                     // Bit 0 = Pump, Bit 1..7 = V1..V7
                                     // Bit 8..15: 0 = Auto, 1 = Manual Override
+        timer_vars      tmr;        // struct with timer variables
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
         TDateTime       dt_time_switch;   // object holding date and time
-        volume_struct   volumes;          // Struct for Volumes
         //bool            burner_on;        // true = gas burner is on
         bool            com_port_is_open; // true = COM-port is open for Read/Write
         bool            i2c_hw_scan_req;  // true = check I2C HW devices
         char            *ebrew_revision;  // contains CVS revision number
+
+        void __fastcall COM_port_open(void);           // Init. COM Port
+        void __fastcall COM_port_close(void);          // Close COM Port
+        void __fastcall COM_port_write(const char *s); // Write COM Port
+        void __fastcall COM_port_read(char *s);        // Read  COM Port
         __fastcall TMainForm(TComponent* Owner);
 };
 //---------------------------------------------------------------------------

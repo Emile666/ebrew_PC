@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.60  2013/06/16 14:39:19  Emile
+// Intermediate version for new Ebrew 2.0 USB hardware:
+// - Hardware settings Dialog: COM Port + Settings added + LEDx removed
+// - PortTalk + i2c_dll + Start_i2c_communication + Reset_I2C_Bus removed
+// - New routines for COM-Port added
+// - Generate_IO_Signals() now uses COM_port_write to address all hardware
+// - This version works with new hardware: PUMP on/off + LEDs are working
+// - HEATER led and PWM output do not work yet + TODO: add scheduler.
+//
 // Revision 1.59  2011/05/29 20:56:26  Emile
 // - New Registry variables added: STC_N, STC_TD and STC_ADF
 // - PID Settings Dialog screen extended with new parameters for self-tuning
@@ -396,8 +405,6 @@
 // - "ebrew" registry key now in a define REGKEY
 //
 // ==========================================================================
-
-//---------------------------------------------------------------------------
 #include <vcl.h>
 #pragma hdrstop
 
@@ -412,15 +419,15 @@
 #include "MeasurementsDialog.h"
 #include "EditMashScheme.h"
 #include "ViewMashProgressForm.h"
-#include "DataGraphForm.h"
 #include "Sparge_Settings.h"
 #include "RestoreSettings.h"
 #include "misc.h"
 #include "VersionAwareAbout.h"
 #include <Dialogs.hpp>
+#include "scheduler.h"
+#include "tasks.h"
 
 extern vector theta; // defined in pid_reg.h
-
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 #pragma link "AnimTimer"
@@ -434,29 +441,361 @@ extern vector theta; // defined in pid_reg.h
 TMainForm *MainForm;
 
 // GLOBAL VARIABLES for COM Port Communication
-HANDLE hComm = NULL;
+HANDLE       hComm = NULL;
 COMMTIMEOUTS ctmoNew = {0}, ctmoOld;
-FILE *fdbg_com; // COM-port debug file-descriptor
+FILE         *fdbg_com; // COM-port debug file-descriptor
 
-//----------------------------------------------------------------------------
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 01: Read THLT (HLT Temperature) from Ebrew hardware
+  Period-Time: 1 second
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_thlt(void)
+{
+    char   s[MAX_BUF_READ];
+    double thlt_unf; // unfiltered version of Thlt
+    double old_thlt; // previous value of Thlt
+
+    MainForm->COM_port_write("A3\n"); // A3 = THLT
+    MainForm->COM_port_read(s);       // Read HLT temp. from LM92 device
+    if (!strncmp(s,"Thlt=",5)) MainForm->Val_Thlt->Font->Color = clLime;
+    else                       MainForm->Val_Thlt->Font->Color = clRed;
+    old_thlt = MainForm->thlt;        // Previous value of Thlt
+    thlt_unf = atof(&s[5]);
+    if (MainForm->swfx.thlt_sw)
+    {  // Switch & Fix
+       thlt_unf = (double)(MainForm->swfx.thlt_fx);
+    } // if
+    // No error, limit slope and filter temperature
+    thlt_unf += MainForm->thlt_offset;            // add calibration offset
+    slope_limiter(MainForm->thlt_slope,old_thlt,&thlt_unf); // slope-limit
+    MainForm->thlt = moving_average(&MainForm->str_thlt,thlt_unf); // MA-filter
+} // task_read_thlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 02: Read TMLT (MLT Temperature) from Ebrew hardware
+  Period-Time: 1 second
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_tmlt(void)
+{
+    char   s[MAX_BUF_READ];
+    double tmlt_unf; // unfiltered version of Tmlt
+    double old_tmlt; // previous value of Tmlt
+
+    MainForm->COM_port_write("A4\n"); // A4 = TMLT
+    MainForm->COM_port_read(s);       // Read MLT temp. from LM92 device
+    if (!strncmp(s,"Tmlt=",5)) MainForm->Val_Tmlt->Font->Color = clLime;
+    else                       MainForm->Val_Tmlt->Font->Color = clRed;
+    old_tmlt = MainForm->tmlt;        // Previous value of Tmlt
+    tmlt_unf = atof(&s[5]);
+    if (MainForm->swfx.tmlt_sw)
+    {  // Switch & Fix
+       tmlt_unf = (double)(MainForm->swfx.tmlt_fx);
+    } // if
+    // No error, limit slope and filter temperature
+    tmlt_unf += MainForm->tmlt_offset;            // add calibration offset
+    slope_limiter(MainForm->tmlt_slope,old_tmlt,&tmlt_unf); // slope-limit
+    MainForm->tmlt = moving_average(&MainForm->str_tmlt,tmlt_unf); // MA-filter
+} // task_read_tmlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 03: Read VHLT (HLT Volume) from Ebrew hardware
+  Period-Time: 1 second
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_vhlt(void)
+{
+    char   s[MAX_BUF_READ];
+    double old_vhlt; // previous value of Tmlt
+
+    old_vhlt = MainForm->volumes.Vhlt;        // Previous value of Vhlt
+    if (MainForm->vhlt_src != NONE) // get real value from Ebrew hardware
+    {
+        MainForm->COM_port_write("A1\n"); // A1 = VHLT
+        MainForm->COM_port_read(s);       // Read HLT Volume from pressure sensor
+        if (!strncmp(s,"Vhlt=",5)) MainForm->Vol_HLT->Font->Color = clLime;
+        else                       MainForm->Vol_HLT->Font->Color = clRed;
+        MainForm->volumes.Vhlt  = atof(&s[5]);
+        MainForm->volumes.Vhlt *= MainForm->vhlt_a;
+        MainForm->volumes.Vhlt += MainForm->vhlt_b;
+    } // if
+    //--------------------------------------------------------------------
+    // else: in case Vhlt is simulated and not read from an ADC, the value
+    //       is determined in the state transition diagram.
+    //--------------------------------------------------------------------
+    if (MainForm->swfx.vhlt_sw)
+    {  // Switch & Fix
+       MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
+    } // if
+    // slope-limiter and MA-filter
+    slope_limiter(MainForm->vhlt_slope,old_vhlt,&MainForm->volumes.Vhlt);
+    MainForm->volumes.Vhlt = moving_average(&MainForm->str_vhlt,MainForm->volumes.Vhlt);
+} // task_read_vhlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 04: Read VMLT (MLT Volume) from Ebrew hardware
+  Period-Time: 1 second
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_vmlt(void)
+{
+    char   s[MAX_BUF_READ];
+    double old_vmlt; // previous value of Tmlt
+
+    old_vmlt = MainForm->volumes.Vmlt;        // Previous value of Vmlt
+    if (MainForm->vmlt_src != NONE) // get real value from Ebrew hardware
+    {
+        MainForm->COM_port_write("A2\n"); // A2 = VMLT
+        MainForm->COM_port_read(s);       // Read MLT Volume from pressure sensor
+        if (!strncmp(s,"Vmlt=",5)) MainForm->Vol_MLT->Font->Color = clLime;
+        else                       MainForm->Vol_MLT->Font->Color = clRed;
+        MainForm->volumes.Vmlt  = atof(&s[5]);
+        MainForm->volumes.Vmlt *= MainForm->vmlt_a;
+        MainForm->volumes.Vmlt += MainForm->vmlt_b;
+    } // if
+    if (MainForm->swfx.vmlt_sw)
+    {  // Switch & Fix
+       MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
+    } // if
+    // slope-limiter and MA-filter
+    slope_limiter(MainForm->vmlt_slope,old_vmlt,&MainForm->volumes.Vmlt);
+    MainForm->volumes.Vmlt = moving_average(&MainForm->str_vmlt,MainForm->volumes.Vmlt);
+} // task_read_vmlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 05: Read LM35 temperature from Ebrew hardware. Typically
+               this is the temperature inside the Ebrew hardware and is coupled
+               to the Triac Temp. The check for overtemp. is also done here.
+  Period-Time: 1 second
+  Variables: -
+  Returns  : -
+  ---------------------------------------------------------------------------*/
+void task_read_lm35(void)
+{
+    char   s[MAX_BUF_READ];
+
+    if (MainForm->ttriac_src != NONE) // get real value from Ebrew hardware
+    {
+        MainForm->COM_port_write("A0\n"); // A0 = LM35
+        MainForm->COM_port_read(s);       // Read LM35 Volume from Ebrew hardware
+        if (!strncmp(s,"Lm35=",5)) MainForm->Ttriac_lbl->Font->Color = clLime;
+        else                       MainForm->Ttriac_lbl->Font->Color = clRed;
+        MainForm->ttriac  = atof(&s[5]);
+        //MainForm->ttriac *= MainForm->ttriac_a;
+        //MainForm->ttriac += MainForm->ttriac_b;
+    } // if
+    if (MainForm->swfx.ttriac_sw)
+    {  // Switch & Fix
+       MainForm->ttriac = MainForm->swfx.ttriac_fx;
+    } // if
+    //---------------------------------------------------
+    // Triac Temperature Protection: hysteresis function
+    //---------------------------------------------------
+    if (MainForm->triac_too_hot)
+    { // Reset if temp. < lower-limit
+      MainForm->triac_too_hot = (MainForm->ttriac >= MainForm->ttriac_llim);
+    } // if
+    else
+    { // set if temp. >= upper-limit
+      MainForm->triac_too_hot = (MainForm->ttriac >= MainForm->ttriac_hlim);
+    } // else
+} // task_read_lm35()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 06: Run PID Controller and generate Gamma value [0%..100%]
+  Period-Time: Controlled by Parameter TS [sec.]
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_pid_ctrl(void)
+{
+    char      s[MAX_BUF_READ];
+    TDateTime td_now; // holds current date and time
+
+    // Only useful if PID controller is disabled AND time_switch is enabled
+    if ((MainForm->PID_RB->ItemIndex != 1) && (MainForm->time_switch == 1))
+    {
+       td_now = Now(); // Get Current Date and Time
+       if ((td_now >= MainForm->dt_time_switch) &&
+           (td_now <  MainForm->dt_time_switch + ONE_MINUTE))
+       {
+          MainForm->PID_RB->ItemIndex = 1; // Enable PID Controller
+       } // if
+    } // if
+
+    // PID_RB->ItemIndex = 1 => PID Controller On
+    switch (MainForm->pid_pars.pid_model)
+    {
+         case 0 : pid_reg2(MainForm->thlt             , &MainForm->gamma,
+                           MainForm->tset_hlt         , &MainForm->pid_pars,
+                           MainForm->PID_RB->ItemIndex, &MainForm->sys_id_pars);
+                  break; // Self-Tuning Takahashi Type C
+         case 1 : pid_reg3(MainForm->thlt     , &MainForm->gamma,
+                           MainForm->tset_hlt , &MainForm->pid_pars,
+                           MainForm->PID_RB->ItemIndex);
+                  break; // Type A with filtering of D-action
+         case 2 : pid_reg4(MainForm->thlt     , &MainForm->gamma,
+                           MainForm->tset_hlt , &MainForm->pid_pars,
+                           MainForm->PID_RB->ItemIndex);
+                  break; // Takahashi Type C, NO filtering of D-action
+         default: pid_reg4(MainForm->thlt     , &MainForm->gamma,
+                           MainForm->tset_hlt , &MainForm->pid_pars,
+                           MainForm->PID_RB->ItemIndex);
+                  break; // default to Type C, NO filtering of D-action
+    } // switch
+    if (MainForm->swfx.gamma_sw)
+    {
+       MainForm->gamma = MainForm->swfx.gamma_fx; // fix gamma
+    } // if
+
+    //--------------------------------------------------------------------
+    // Now calculate high and low time for the timers
+    // The Gamma is a value between 0-100%. The Gamma signal has a
+    // period of 5 seconds, which is 100 * 50 msec.
+    // Therefore every percent corresponds to one period of 50 msec.
+    // These timer values are needed for Generate_IO_Signals();
+    //--------------------------------------------------------------------
+    MainForm->tmr.time_high = (int)(MainForm->gamma);
+    MainForm->tmr.time_low  = 100 - MainForm->tmr.time_high;
+
+    //--------------------------------------------------------------------
+    // Now write PID-output (Gamma) as a PWM signal to the Ebrew hardware.
+    // This is relevant only when the Modulating Gas-Burner is selected.
+    //--------------------------------------------------------------------
+    sprintf(s,"W%0d\n", MainForm->gamma); // PID-Output Gamma [0%..100%]
+    MainForm->COM_port_write(s); // output to Ebrew hardware
+    MainForm->COM_port_read(s);  // read response from Ebrew hardware
+} // task_pid_ctrl()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 07: Run Main State Transition Diagram (STD) that controls
+                        the entire application / Brewing States
+  Period-Time: 1 second
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_update_std(void)
+{
+    char   s[MAX_BUF_READ];
+    int    std_tmp = -1;
+    double old_tset_hlt;  // previous value of tset_hlt
+
+    if (MainForm->swfx.std_sw)
+    {
+       std_tmp = MainForm->swfx.std_fx;
+    }
+    old_tset_hlt = MainForm->tset_hlt; // Previous value of HLT temp. reference
+    update_std(&MainForm->volumes ,  MainForm->tmlt    ,  MainForm->thlt,
+               &MainForm->tset_mlt, &MainForm->tset_hlt, &MainForm->std_out,
+                MainForm->ms      , &MainForm->sp      , &MainForm->std,
+                MainForm->PID_RB->ItemIndex, std_tmp);
+    if (MainForm->swfx.tset_hlt_sw)
+    {
+       MainForm->tset_hlt = MainForm->swfx.tset_hlt_fx; // fix tset_hlt
+    } // if
+    slope_limiter(MainForm->tset_hlt_slope, old_tset_hlt, &MainForm->tset_hlt);
+    //-----------------------------------------------------------------
+    // Now output all valve bits to Ebrew hardware (NOT implemented yet).
+    // NOTE: The pump bit is sent using the P0/P1 command
+    //-----------------------------------------------------------------
+    //sprintf(s,"V%02x\n",std_out & 0x00FE); // Output valves except Pump (bit 0)
+    //MainForm->COM_port_write(s); // output to Ebrew hardware
+} // task_update_std()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 08: ALIVE Led toggle
+  Period-Time: 0.5 second
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_alive_led(void)
+{
+    char   s[MAX_BUF_READ];
+
+   //------------------------------------------------------------------
+   // Toggle alive toggle bit to see if this routine is still alive
+   //------------------------------------------------------------------
+   if (MainForm->toggle_led)
+        strcpy(s,"L1\n");
+   else strcpy(s,"L0\n");
+   MainForm->toggle_led = !(MainForm->toggle_led);
+
+   //--------------------------------------------
+   // Send Pump On/Off signal to ebrew hardware.
+   //--------------------------------------------
+   if (MainForm->std_out & P0b)
+   {    // New PUMP bit should be 1
+        strcat(s,"P1\n");
+   } // if
+   else
+   {    // New PUMP bit should be 0
+        strcat(s,"P0\n");
+   } // else
+   MainForm->COM_port_write(s); // Send command to ebrew hardware
+   MainForm->COM_port_read(s);
+} // task_alive_led()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 09: Write all relevant data to a log-file
+  Period-Time: 5 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_log_file(void)
+{
+   FILE   *fd;
+   struct time t1;
+   char   s[MAX_BUF_READ];
+
+   if ((fd = fopen(LOGFILE,"a")) != NULL)
+   {
+      gettime(&t1);
+      fprintf(fd,"%02d:%02d:%02d,",t1.ti_hour,t1.ti_min,t1.ti_sec);
+      fprintf(fd,"%6.2f,%6.2f,%6.2f,%6.2f,%5.1f,%6.1f,%2d,%2d,%3d, %5.1f,%6.1f\n",
+                 MainForm->tset_mlt,
+                 MainForm->tset_hlt,
+                 MainForm->thlt,
+                 MainForm->tmlt,
+                 MainForm->ttriac,
+                 MainForm->volumes.Vmlt,
+                 MainForm->std.sp_idx,
+                 MainForm->std.ms_idx,
+                 MainForm->std.ebrew_std,
+                 MainForm->gamma,
+                 MainForm->volumes.Vhlt);
+      fclose(fd);
+   } // if
+   list_all_tasks();
+} // task_log_file()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : Open Virtual COM Port (Virtual: COM Port emulated via USB)
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
 void __fastcall TMainForm::COM_port_open(void)
 {
    DCB  dcbCommPort;
    char s[50];
 
-    // OPEN THE COM PORT.
-    sprintf(s,"COM%d",usb_com_port_nr); // USB COM Port Number
-    hComm = CreateFile(s,GENERIC_READ | GENERIC_WRITE,0,0,OPEN_EXISTING,0,0);
+   // OPEN THE COM PORT.
+   sprintf(s,"COM%d",usb_com_port_nr); // USB COM Port Number
+   hComm = CreateFile(s,GENERIC_READ | GENERIC_WRITE,0,0,OPEN_EXISTING,0,0);
 
-    // IF THE PORT CANNOT BE OPENED, BAIL OUT.
-    if(hComm == INVALID_HANDLE_VALUE)
-    {
+   // IF THE PORT CANNOT BE OPENED, BAIL OUT.
+   if(hComm == INVALID_HANDLE_VALUE)
+   {
        strcat(s," could not be opened. Please check COM Port Settings.");
        MessageBox(NULL,s,"ERROR Opening Virtual USB COM Port",MB_OK);
        com_port_is_open = false;
-    } // if
-  else
-  {  // Set the Communication Timeouts
+   } // if
+   else
+   {  // Set the Communication Timeouts
      GetCommTimeouts(hComm,&ctmoOld);
      ctmoNew.ReadTotalTimeoutConstant = 100;
      ctmoNew.ReadTotalTimeoutMultiplier = 0;
@@ -471,8 +810,7 @@ void __fastcall TMainForm::COM_port_open(void)
      // BuildCommDCB() defaults to NO Handshaking.
      dcbCommPort.DCBlength = sizeof(DCB);
      GetCommState(hComm, &dcbCommPort);
-     // BuildCommDCB("115200,N,8,1", &dcbCommPort);
-     BuildCommDCB(com_port_settings, &dcbCommPort);
+     BuildCommDCB(com_port_settings, &dcbCommPort); // "19200,N,8,1"
      SetCommState(hComm, &dcbCommPort);
      if ((fdbg_com = fopen(COM_PORT_DEBUG_FNAME,"a")) == NULL)
      {  // Open COM-port debugging file
@@ -480,10 +818,15 @@ void __fastcall TMainForm::COM_port_open(void)
      } /* if */
      else fprintf(fdbg_com,"File opened\n");
      com_port_is_open = true;
-  } // if
+   } // if
 } // COM_port_open()
 
-//----------------------------------------------------------------------------
+/*-----------------------------------------------------------------------------
+  Purpose    : Close Virtual COM Port (Virtual: COM Port emulated via USB)
+               that was opened by COM_port_open().
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
 void __fastcall TMainForm::COM_port_close(void)
 {
    PurgeComm(hComm, PURGE_RXABORT);
@@ -494,7 +837,35 @@ void __fastcall TMainForm::COM_port_close(void)
    com_port_is_open = false; // set flag to 'not open'
 } // COM_port_close()
 
-//----------------------------------------------------------------------------
+/*-----------------------------------------------------------------------------
+  Purpose    : Read a string from the Virtual COM Port opened by COM_port_open()
+  Variables  : s: contains the null-terminated string that is read
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void __fastcall TMainForm::COM_port_read(char *s)
+{
+   DWORD i, dwBytesRead;
+
+   ReadFile(hComm, s, MAX_BUF_READ-1, &dwBytesRead, NULL);
+   if(dwBytesRead)
+   {
+      s[dwBytesRead] = 0; // Null-Terminate the string
+   } // if
+   if (cb_debug_com_port)
+   {
+        for (i = 0; i < dwBytesRead; i++)
+        {
+           if ((s[i] == '\n') || (s[i] == '\r')) s[i] = '_';
+        }
+        fprintf(fdbg_com,"r[%s]\n",s);
+   } // if
+} // COM_port_read()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : Write a string to the Virtual COM Port opened by COM_port_open()
+  Variables  : s: contains the null-terminated string to write to the COM port.
+  Returns    : -
+  ---------------------------------------------------------------------------*/
 void __fastcall TMainForm::COM_port_write(const char *s)
 {
    char send_buffer[MAX_BUF_WRITE]; // contains string to send to RS232 port
@@ -506,7 +877,10 @@ void __fastcall TMainForm::COM_port_write(const char *s)
    bytes_sent    = 0;
    while (bytes_sent < bytes_to_send)
    {
-      TransmitCommChar(hComm, send_buffer[bytes_sent++]);
+      if (!TransmitCommChar(hComm, send_buffer[bytes_sent++]))
+      {
+         MessageBox(NULL,"TransmitCommChar() Error","COM_port_write()",MB_OK);
+      } // if
    } // while()
    if (cb_debug_com_port)
    {
@@ -514,35 +888,19 @@ void __fastcall TMainForm::COM_port_write(const char *s)
         {
            if (send_buffer[i] == '\n') send_buffer[i] = '_';
         }
-        fprintf(fdbg_com,"w[%s]\n",send_buffer);
+        fprintf(fdbg_com,"w[%s]",send_buffer);
    } // if
 } // COM_port_write()
 
-//----------------------------------------------------------------------------
-void __fastcall TMainForm::COM_port_read(char *s)
-{
-   DWORD dwBytesRead;
-
-   ReadFile(hComm, s, MAX_BUF_READ-1, &dwBytesRead, NULL);
-   if(dwBytesRead)
-   {
-      s[dwBytesRead] = 0; // Null-Terminate the string
-   } // if
-   if (cb_debug_com_port)
-   {
-        fprintf(fdbg_com,"r[%s]\n",s);
-   } // if
-} // COM_port_read()
-
-__fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 /*------------------------------------------------------------------
   Purpose  : This is the main constructor for the program.
   Returns  : None
   ------------------------------------------------------------------*/
+__fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
    char s[50];
    ebrew_revision   = "$Revision$";
-   ShowDataGraphs   = new TShowDataGraphs(this);   // create modeless Dialog
+   //ShowDataGraphs   = new TShowDataGraphs(this);   // create modeless Dialog
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -669,6 +1027,254 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
     }
     power_up_flag = false; // power-up is finished
 } // TMainForm::TMainForm()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::Main_Initialisation(void)
+/*------------------------------------------------------------------
+  Purpose  : This function Initialises all I2C Hardware and checks if
+             it is present. It also initialises the Interrupt Service
+             Routine (ISR) and the PID controller.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   TRegistry *Reg = new TRegistry();
+   FILE *fd;   // Log File Descriptor
+   int  i;     // temp. variable
+   char s[255]; // Temp. string
+
+   //----------------------------------------
+   // Initialise all variables from Registry
+   //----------------------------------------
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+         known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
+         pid_pars.ts = Reg->ReadFloat("TS");  // Read TS from registry
+         pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
+         pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
+         pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
+         pid_pars.k_lpf      = Reg->ReadFloat("K_LPF");
+         tset_hlt_slope      = Reg->ReadFloat("TSET_HLT_SLOPE");
+         pid_pars.pid_model  = Reg->ReadInteger("PID_Model"); // [0..3]
+         sys_id_pars.N       = Reg->ReadInteger("STC_N");     // [1,2,3]
+         sys_id_pars.stc_td  = Reg->ReadInteger("STC_TD");    // [0..100]
+         sys_id_pars.stc_adf = Reg->ReadBool("STC_ADF");      // true = use ADF
+         pid_pars.burner_hyst_h = Reg->ReadInteger("BURNER_HHYST");
+         pid_pars.burner_hyst_l = Reg->ReadInteger("BURNER_LHYST");
+         // Send PID-Output to the various heaters / burners
+         cb_pid_out = Reg->ReadInteger("CB_PID_OUT");
+         dac_a = Reg->ReadFloat("DAC_A"); // a-coefficient for y=a.x+b DAC calc.
+         dac_b = Reg->ReadFloat("DAC_B"); // b-coefficient for y=a.x+b DAC calc.
+
+         ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
+         tm_triac->SetPoint->Value = ttriac_hlim;       // update object on screen
+         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
+
+         volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
+         volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
+         cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
+         cb_debug_com_port       = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
+         usb_com_port_nr         = Reg->ReadInteger("USB_COM_PORT");   // Virtual USB COM port number
+         strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
+
+         init_ma(&str_thlt,Reg->ReadInteger("MA_THLT"),thlt); // MA filter for Thlt
+         thlt_offset = Reg->ReadFloat("THLT_OFFSET");         // offset calibration
+         thlt_slope  = Reg->ReadFloat("THLT_SLOPE");          // Slope limiter for Thlt
+         init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT"),tmlt); // MA filter for Tmlt
+         tmlt_slope  = Reg->ReadFloat("TMLT_SLOPE");          // Slope limiter for Tmlt
+         tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");         // offset calibration
+         init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT"),volumes.Vmlt); // MA filter for Vmlt
+
+         //--------------------------------------------------------------------
+         // The enum i2c_adc starts at NONE (0), which is also the start value
+         // of the first entry of the combo-box.
+         //--------------------------------------------------------------------
+         vhlt_src   = (enum i2c_adc)Reg->ReadInteger("VHLT_SRC");    // source AD channel
+         volumes.Vhlt_simulated = vhlt_src;           // needed for STD
+         vhlt_a     = Reg->ReadFloat("VHLT_A");       // a-coefficient for y=a.x+b
+         vhlt_b     = Reg->ReadFloat("VHLT_B");       // b-coefficient for y=a.x+b
+         vhlt_slope = Reg->ReadFloat("VHLT_SLOPE");   // Slope limiter for Vhlt
+         if (vhlt_src == 0)
+         {
+            // Vhlt is simulated, init. MA filter for Vhlt
+            init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt_start);
+         }
+         else
+         {  // Vhlt is measured from pressure transducer, init. MA filter for Vhlt
+            init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt);
+         } // else
+         vmlt_src   = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");   // source AD channel
+         vmlt_a     = Reg->ReadFloat("VMLT_A");       // a-coefficient for y=a.x+b
+         vmlt_b     = Reg->ReadFloat("VMLT_B");       // b-coefficient for y=a.x+b
+         vmlt_slope = Reg->ReadFloat("VMLT_SLOPE");   // Slope limiter for Vmlt
+
+         ttriac_src = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC"); // source AD channel
+         ttriac_a   = Reg->ReadFloat("TTRIAC_A");     // a-coefficient for y=a.x+b
+         ttriac_b   = Reg->ReadFloat("TTRIAC_B");     // b-coefficient for y=a.x+b
+
+         Reg->SaveKey(REGKEY,"ebrew_reg");
+         Reg->CloseKey();      // Close the Registry
+         switch (pid_pars.pid_model)
+         {
+            case 0 : // Self-Tuning Takahashi, N = 1 .. 3
+                     init_pid2(&pid_pars,&sys_id_pars);
+                     break;
+            case 1 : init_pid3(&pid_pars);  // Type A with D-filtering controller
+                     break;
+            case 2 : init_pid4(&pid_pars);  // Takahashi Type C controller
+                     break;
+            default: pid_pars.pid_model = 2; // Takahashi Type C controller
+                     init_pid4(&pid_pars);
+                     break;
+         } // switch
+         // Do NOT delete Reg yet, since we need it further on
+      } // if
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+
+   //----------------------------------------------------------------------
+   // Start Communication with ebrew Hardware and print a list of all
+   // devices found if it does not match known devices.
+   //----------------------------------------------------------------------
+   COM_port_open(); // Open USB Virtual COM port
+
+   //--------------------------------------------------------------------------
+   // Read Mash Scheme for maisch.sch file
+   // Mash scheme is used in the STD, sample time of STD is 1 second
+   // Init mash. timers only when doing a power-up, not after an I2C reset
+   //--------------------------------------------------------------------------
+   if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,power_up_flag ? INIT_TIMERS : NO_INIT_TIMERS))
+   {
+       MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
+   } /* if */
+   print_mash_scheme_to_statusbar();
+   Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
+   if (power_up_flag)
+   {  // only reset time-stamps when doing a power-up, not after an I2C reset
+      for (i = 0; i < sp.sp_batches; i++)
+      {
+         sp.mlt2boil[i][0] = '\0'; // empty time-stamp strings
+         sp.hlt2mlt[i][0]  = '\0';
+      } // for i
+   } // if
+
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+         i = Reg->ReadInteger("ms_idx");
+         if ((i < MAX_MS) && (power_up_flag == true))
+         {
+            //--------------------------------------------------------------
+            // ebrew program was terminated abnormally. Open a dialog box,
+            // present entries from the log file and ask to restore settings
+            // of a particular log-file entry. If yes, restore settings.
+            // Only restore after power-down, no restore after successful
+            // of I2C bus (after I2C bus error occurred).
+            // NB: Make sure that Init_Sparge_Settings is called prior to
+            //     calling Restore_Settings()!
+            //--------------------------------------------------------------
+            Restore_Settings();
+         } // if i
+         Reg->WriteInteger("ms_idx",std.ms_idx); // update registry setting
+         Reg->CloseKey();                        // Close the Registry
+      } // if
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+
+   //-------------
+   // Init. timers
+   //-------------
+   tmr.isrstate  = IDLE;              // disable heaters
+   tmr.htimer    = tmr.ltimer   = 0;  // init. low timer
+   tmr.time_high = tmr.time_low = 0;  // init. time bit = 1
+   tmr.alive     = tmr.alive_tmr = 0; // init. alive timers
+   tmr.pid_tmr   = 1; // init. timer that controls PID controller timing
+
+   //--------------------------------------------------------------------------
+   // Init. the position of all valves & the Pump to OFF (closed).
+   // No Manual Override of valves yet.
+   //--------------------------------------------------------------------------
+   std_out = 0x0000;
+   lsb_io  = 0x00; // disable ALIVE-led and PUMP
+
+   // Init logfile
+   if ((fd = fopen(LOGFILE,"a")) == NULL)
+   {
+      MessageBox(NULL,"Could not open log-file","Error during Initialisation",MB_OK);
+   } /* if */
+   else
+   {
+      date d1;
+      getdate(&d1);
+      fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
+      fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, K_lpf = %6.2f, Ts = %5.2f, ",
+                 pid_pars.kc, pid_pars.ti, pid_pars.td, pid_pars.k_lpf, pid_pars.ts);
+      fprintf(fd,"PID_Model =%2d\n",pid_pars.pid_model);
+      fprintf(fd,"ma_thlt=%d, ma_tmlt=%d, ma_vhlt=%d, ma_vmlt=%d; ",
+                 str_thlt.N, str_tmlt.N, str_vhlt.N, str_vmlt.N);
+      strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
+      s[4] = '\0';
+      fprintf(fd,"ebrew CVS Rev. %s\n",s);
+      fprintf(fd,"hw_status = 0x%02X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,
+                                                                          std.ms_tot,
+                                                                          fscl_prescaler);
+      fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
+      fprintf(fd,"Vhlt_a=%7.4f, Vhlt_b=%7.4f, Vmlt_a=%7.4f, Vmlt_b=%7.4f\n\n",vhlt_a,vhlt_b,vmlt_a,vmlt_b);
+      fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms STD  Gamma  Vhlt\n");
+      fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id       [%]    [L]\n");
+      fprintf(fd,"-------------------------------------------------------------------------\n");
+      fclose(fd);
+   } // else
+
+   //-----------------------------------------
+   // Now add all the tasks for the scheduler
+   //-----------------------------------------
+   add_task(task_read_thlt , "read_thlt"  ,  50, 1000);
+   add_task(task_read_tmlt , "read_tmlt"  , 100, 1000);
+   add_task(task_read_vhlt , "read_vhlt"  , 150, 1000);
+   add_task(task_read_vmlt , "read_vmlt"  , 200, 1000);
+   add_task(task_read_lm35 , "read_lm35"  , 250, 1000);
+   add_task(task_pid_ctrl  , "pid_control", 300, (uint16_t)(pid_pars.ts * 1000));
+   add_task(task_update_std, "update_std" , 350, 1000);
+   add_task(task_alive_led , "alive_pump" , 400,  500);
+   add_task(task_log_file  , "wr_log_file", 450, 5000);
+
+   COM_port_read(s); // Read power-up notice from Ebrew hardware
+
+   //----------------------------------
+   // We came all the way! Start Timers
+   //----------------------------------
+   if (T50msec)          T50msec->Enabled                       = true; // start Interrupt Timer
+   if (ViewMashProgress) ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
+   PID_RB->Enabled = true; // Enable PID Controller Radio-buttons
+   time_switch     = 0;    // Time switch disabled at power-up
+   delete Reg; // Delete Registry object to prevent memory leak
+} // Main_Initialisation()
+//---------------------------------------------------------------------------
+
+/*------------------------------------------------------------------
+  Purpose  : This is the main Timer function which is called every
+             50 milliseconds. This can be seen as the main control
+             loop of the program. It utilises time-slices to divide
+             computations over time.
+             After 60 seconds (1200 calls) the main control loop
+             starts again
+  Returns  : None
+  ------------------------------------------------------------------*/
+void __fastcall TMainForm::T50msecTimer(TObject *Sender)
+{
+   scheduler_isr(); // Scheduler for all tasks
+} // TMainForm::T50msecTimer()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Restore_Settings(void)
@@ -824,22 +1430,6 @@ void __fastcall TMainForm::Restore_Settings(void)
 } // TMainForm::Restore_Settings()
 //---------------------------------------------------------------------------
 
-void __fastcall TMainForm::Start_COM_Port_Communication(int known_status)
-/*------------------------------------------------------------------
-  Purpose  : This function starts the Virtual COM-port communication,
-             (via USB), reports any errors found and performs a check
-             on which hardware devices are present.
-  Variables: known_status: if the hardware status does not match this
-                           variable, a messagebox with the actual
-                           hardware status is printed on the screen.
-  Returns  : None
-             The global variable 'hw_status' is given a value
-  ------------------------------------------------------------------*/
-{
-   COM_port_open(); // Open USB Virtual COM port
-
-} // Start_COM_Port_Communication()
-
 void __fastcall TMainForm::print_mash_scheme_to_statusbar(void)
 /*------------------------------------------------------------------
   Purpose  : This function prints the contents of the mash scheme
@@ -866,224 +1456,6 @@ void __fastcall TMainForm::print_mash_scheme_to_statusbar(void)
    } // for
    StatusBar->Panels->Items[PANEL_MASHS]->Text = AnsiString(s);
 } // TMainForm::print_mash_scheme_to_statusbar()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::Main_Initialisation(void)
-/*------------------------------------------------------------------
-  Purpose  : This function Initialises all I2C Hardware and checks if
-             it is present. It also initialises the Interrupt Service
-             Routine (ISR) and the PID controller.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   TRegistry *Reg = new TRegistry();
-   FILE *fd;   // Log File Descriptor
-   int  i;     // temp. variable
-   char s[40]; // Temp. string
-
-   //----------------------------------------
-   // Initialise all variables from Registry
-   //----------------------------------------
-   try
-   {
-      if (Reg->KeyExists(REGKEY))
-      {
-         Reg->OpenKey(REGKEY,FALSE);
-         known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
-         pid_pars.ts = Reg->ReadFloat("TS");  // Read TS from registry
-         pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
-         pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
-         pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
-         pid_pars.k_lpf      = Reg->ReadFloat("K_LPF");
-         tset_hlt_slope      = Reg->ReadFloat("TSET_HLT_SLOPE");
-         pid_pars.pid_model  = Reg->ReadInteger("PID_Model"); // [0..3]
-         sys_id_pars.N       = Reg->ReadInteger("STC_N");     // [1,2,3]
-         sys_id_pars.stc_td  = Reg->ReadInteger("STC_TD");    // [0..100]
-         sys_id_pars.stc_adf = Reg->ReadBool("STC_ADF");      // true = use ADF
-         pid_pars.burner_hyst_h = Reg->ReadInteger("BURNER_HHYST");
-         pid_pars.burner_hyst_l = Reg->ReadInteger("BURNER_LHYST");
-         // Send PID-Output to the various heaters / burners
-         cb_pid_out = Reg->ReadInteger("CB_PID_OUT");
-         dac_a = Reg->ReadFloat("DAC_A"); // a-coefficient for y=a.x+b DAC calc.
-         dac_b = Reg->ReadFloat("DAC_B"); // b-coefficient for y=a.x+b DAC calc.
-
-         ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
-         tm_triac->SetPoint->Value = ttriac_hlim;       // update object on screen
-         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
-
-         volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
-         volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
-         cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
-         cb_debug_com_port       = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
-         usb_com_port_nr         = Reg->ReadInteger("USB_COM_PORT");   // Virtual USB COM port number
-         strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
-
-         init_ma(&str_thlt,Reg->ReadInteger("MA_THLT"),thlt); // MA filter for Thlt
-         thlt_offset = Reg->ReadFloat("THLT_OFFSET");         // offset calibration
-         thlt_slope  = Reg->ReadFloat("THLT_SLOPE");          // Slope limiter for Thlt
-         init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT"),tmlt); // MA filter for Tmlt
-         tmlt_slope  = Reg->ReadFloat("TMLT_SLOPE");          // Slope limiter for Tmlt
-         tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");         // offset calibration
-         init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT"),volumes.Vmlt); // MA filter for Vmlt
-
-         //--------------------------------------------------------------------
-         // The enum i2c_adc starts at NONE (0), which is also the start value
-         // of the first entry of the combo-box.
-         //--------------------------------------------------------------------
-         vhlt_src   = (enum i2c_adc)Reg->ReadInteger("VHLT_SRC");    // source AD channel
-         volumes.Vhlt_simulated = vhlt_src;           // needed for STD
-         vhlt_a     = Reg->ReadFloat("VHLT_A");       // a-coefficient for y=a.x+b
-         vhlt_b     = Reg->ReadFloat("VHLT_B");       // b-coefficient for y=a.x+b
-         vhlt_slope = Reg->ReadFloat("VHLT_SLOPE");   // Slope limiter for Vhlt
-         if (vhlt_src == 0)
-         {
-            // Vhlt is simulated, init. MA filter for Vhlt
-            init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt_start);
-         }
-         else
-         {  // Vhlt is measured from pressure transducer, init. MA filter for Vhlt
-            init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt);
-         } // else
-         vmlt_src   = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");   // source AD channel
-         vmlt_a     = Reg->ReadFloat("VMLT_A");       // a-coefficient for y=a.x+b
-         vmlt_b     = Reg->ReadFloat("VMLT_B");       // b-coefficient for y=a.x+b
-         vmlt_slope = Reg->ReadFloat("VMLT_SLOPE");   // Slope limiter for Vmlt
-
-         ttriac_src = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC"); // source AD channel
-         ttriac_a   = Reg->ReadFloat("TTRIAC_A");     // a-coefficient for y=a.x+b
-         ttriac_b   = Reg->ReadFloat("TTRIAC_B");     // b-coefficient for y=a.x+b
-
-         Reg->SaveKey(REGKEY,"ebrew_reg");
-         Reg->CloseKey();      // Close the Registry
-         switch (pid_pars.pid_model)
-         {
-            case 0 : // Self-Tuning Takahashi, N = 1 .. 3
-                     init_pid2(&pid_pars,&sys_id_pars);
-                     break;
-            case 1 : init_pid3(&pid_pars);  // Type A with D-filtering controller
-                     break;
-            case 2 : init_pid4(&pid_pars);  // Takahashi Type C controller
-                     break;
-            default: pid_pars.pid_model = 2; // Takahashi Type C controller
-                     init_pid4(&pid_pars);
-                     break;
-         } // switch
-         // Do NOT delete Reg yet, since we need it further on
-      } // if
-   } // try
-   catch (ERegistryException &E)
-   {
-      ShowMessage(E.Message);
-   } // catch
-
-   //----------------------------------------------------------------------
-   // Start Communication with ebrew Hardware and print a list of all
-   // devices found if it does not match known devices.
-   //----------------------------------------------------------------------
-   Start_COM_Port_Communication(known_hw_devices); // Open COM port with Registry Settings
-
-   //--------------------------------------------------------------------------
-   // Read Mash Scheme for maisch.sch file
-   // Mash scheme is used in the STD, sample time of STD is 1 second
-   // Init mash. timers only when doing a power-up, not after an I2C reset
-   //--------------------------------------------------------------------------
-   if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,power_up_flag ? INIT_TIMERS : NO_INIT_TIMERS))
-   {
-       MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
-   } /* if */
-   print_mash_scheme_to_statusbar();
-   Init_Sparge_Settings(); // Initialise the Sparge Settings struct (STD needs it)
-   if (power_up_flag)
-   {  // only reset time-stamps when doing a power-up, not after an I2C reset
-      for (i = 0; i < sp.sp_batches; i++)
-      {
-         sp.mlt2boil[i][0] = '\0'; // empty time-stamp strings
-         sp.hlt2mlt[i][0]  = '\0';
-      } // for i
-   } // if
-
-   try
-   {
-      if (Reg->KeyExists(REGKEY))
-      {
-         Reg->OpenKey(REGKEY,FALSE);
-         i = Reg->ReadInteger("ms_idx");
-         if ((i < MAX_MS) && (power_up_flag == true))
-         {
-            //--------------------------------------------------------------
-            // ebrew program was terminated abnormally. Open a dialog box,
-            // present entries from the log file and ask to restore settings
-            // of a particular log-file entry. If yes, restore settings.
-            // Only restore after power-down, no restore after successful
-            // of I2C bus (after I2C bus error occurred).
-            // NB: Make sure that Init_Sparge_Settings is called prior to
-            //     calling Restore_Settings()!
-            //--------------------------------------------------------------
-            Restore_Settings();
-         } // if i
-         Reg->WriteInteger("ms_idx",std.ms_idx); // update registry setting
-         Reg->CloseKey();                        // Close the Registry
-      } // if
-   } // try
-   catch (ERegistryException &E)
-   {
-      ShowMessage(E.Message);
-   } // catch
-
-   //-------------
-   // Init. timers
-   //-------------
-   tmr.isrstate  = IDLE;              // disable heaters
-   tmr.htimer    = tmr.ltimer   = 0;  // init. low timer
-   tmr.time_high = tmr.time_low = 0;  // init. time bit = 1
-   tmr.alive     = tmr.alive_tmr = 0; // init. alive timers
-   tmr.pid_tmr   = 1; // init. timer that controls PID controller timing
-
-   //--------------------------------------------------------------------------
-   // Init. the position of all valves & the Pump to OFF (closed).
-   // No Manual Override of valves yet.
-   //--------------------------------------------------------------------------
-   std_out = 0x0000;
-
-   // Init logfile
-   if ((fd = fopen(LOGFILE,"a")) == NULL)
-   {
-      MessageBox(NULL,"Could not open log-file","Error during Initialisation",MB_OK);
-   } /* if */
-   else
-   {
-      date d1;
-      getdate(&d1);
-      fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
-      fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, K_lpf = %6.2f, Ts = %5.2f, ",
-                 pid_pars.kc, pid_pars.ti, pid_pars.td, pid_pars.k_lpf, pid_pars.ts);
-      fprintf(fd,"PID_Model =%2d\n",pid_pars.pid_model);
-      fprintf(fd,"ma_thlt=%d, ma_tmlt=%d, ma_vhlt=%d, ma_vmlt=%d; ",
-                 str_thlt.N, str_tmlt.N, str_vhlt.N, str_vmlt.N);
-      strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
-      s[4] = '\0';
-      fprintf(fd,"ebrew CVS Rev. %s\n",s);
-      fprintf(fd,"hw_status = 0x%02X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,
-                                                                          std.ms_tot,
-                                                                          fscl_prescaler);
-      fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
-      fprintf(fd,"Vhlt_a=%7.4f, Vhlt_b=%7.4f, Vmlt_a=%7.4f, Vmlt_b=%7.4f\n\n",vhlt_a,vhlt_b,vmlt_a,vmlt_b);
-      fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms STD  Gamma  Vhlt\n");
-      fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id       [%]    [L]\n");
-      fprintf(fd,"-------------------------------------------------------------------------\n");
-      fclose(fd);
-   } // else
-
-   //----------------------------------
-   // We came all the way! Start Timers
-   //----------------------------------
-   if (T50msec)          T50msec->Enabled                       = true; // start Interrupt Timer
-   if (ShowDataGraphs)   ShowDataGraphs->GraphTimer->Enabled    = true; // Start Graph Update timer
-   if (ViewMashProgress) ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
-   PID_RB->Enabled = true; // Enable PID Controller Radio-buttons
-   time_switch     = 0;    // Time switch disabled at power-up
-   delete Reg; // Delete Registry object to prevent memory leak
-} // Main_Initialisation()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
@@ -1361,28 +1733,19 @@ void __fastcall TMainForm::exit_ebrew(void)
    TRegistry *Reg = new TRegistry();
 
    if (T50msec) T50msec->Enabled = false; // Disable Interrupt Timer
-   if (ShowDataGraphs)
-   {
-      ShowDataGraphs->GraphTimer->Enabled = false; // Stop Graph Update timer
-   }
    if (ViewMashProgress)
    {
       ViewMashProgress->UpdateTimer->Enabled = false; // Stop Mash Progress Update timer
    }
    Sleep(51);                // Make sure that Timer is disabled
-   if (ShowDataGraphs)
-   {
-      delete ShowDataGraphs;    // close modeless dialog
-      ShowDataGraphs = 0;       // null the pointer
-   }
    if (ViewMashProgress)
    {
       delete ViewMashProgress;  // close modeless dialog
       ViewMashProgress = 0;     // null the pointer
    }
    if (com_port_is_open)
-   {    // Disable Gas-Burner PWM, Heater, Burner and all LEDs
-        COM_port_write("l0\nw0\np0\nh0\n");
+   {    // Disable Gas-Burner PWM, Heater and Alive LEDs
+        COM_port_write("l0\nw0\np0\n");
         COM_port_close();
    } // if
 
@@ -1491,562 +1854,6 @@ void __fastcall TMainForm::MenuHelpAboutClick(TObject *Sender)
 } // TMainForm::About1Click()
 //---------------------------------------------------------------------------
 
-void __fastcall TMainForm::Generate_IO_Signals(void)
-/*------------------------------------------------------------------
-  Purpose  : This routines does the following (called every 50 msec.)
-             1) It calculates a new pulse for Gamma, the triac control.
-                Example: Gamma = 60 % => output is 60 times '1' and
-                40 times '0'.
-
-                      '1'          |-----------|
-                                   |           |
-                      '0' |--------|  Gamma    |---------
-                             40%       60%
-             2) It calculates the Alive bit (blinking LED)
-             3) It calculates the Pump bit (control pump on/off)
-             4) It calculates the 'Gas Burner On' bit
-             5) It sends all signals to the ebrew Hardware
-  Variables: The timer variables in tmr (Unit1.h) are used and updated.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   // lsb_io: see misc.h for bit definitions
-   int        lsb_io      = 0x00;  // init. byte to write to ebrew hardware
-   static int old_lsb_io  = 0x00;  // previous value of leds variable
-   char       s[20]       = {0};   // Temporary String
-   char       scom[50]    = {0};   // String to send to ebrew hardware
-
-   switch (tmr.isrstate)
-   {
-      case IDLE:
-              //------------------------------------------------------------------
-              // This is the default state after power-up. Main function
-              // of this state is to select whether the electrical heater
-              // states should be entered or the modulating gas burner
-              // states.
-              //
-              // The modulating gas burner and the electrical heater share
-              // the same power outlet. A decision has to be made, which power
-              // source has priority over the other.
-              // This is defined with the following table:
-              //
-              // Heater | Mod. Gas | Power Outlet (220 V) = HEATERb bit of lsb_io
-              // -----------------------------------------------------------------
-              //   0    |    0     | None selected
-              //   0    |    1     | Used by modulating gas burner
-              //   1    |    X     | Used by electrical heater
-              //------------------------------------------------------------------
-              lsb_io &= ~HEATERb; // set heater OFF
-              if (cb_pid_out & PID_OUT_ELECTRIC)
-              {
-                 tmr.ltimer   = tmr.time_low; // init. low-timer
-                 tmr.isrstate = EL_HTR_OFF;   // goto 'disable heater' state
-              }
-              else if ((cb_pid_out & PID_OUT_GAS_MODULATE) && !time_switch)
-              {
-                 tmr.isrstate = MOD_GAS_OFF;  // goto 'disable gas burner' state
-              } // else if
-              // else remain in idle state
-              break;
-
-      case EL_HTR_ON:
-              //---------------------------------------------------------
-              // State 0: Enable heating element
-              // Goto 'disable heating element' if triac_too_hot     or
-              //      pid output not routed to triac/electric heater or
-              //      (timeout_htimer && !100%_gamma)
-              //---------------------------------------------------------
-              if (!(cb_pid_out & PID_OUT_ELECTRIC))
-              {
-                 lsb_io &= ~HEATERb; // set heater OFF
-                 tmr.isrstate = IDLE;
-              }
-              else if (triac_too_hot)
-              {
-                 lsb_io &= ~HEATERb; // set heater OFF
-                 tmr.isrstate = EL_HTR_OFF;   // go to 'disable heater' state
-                 tmr.ltimer   = tmr.time_low; // init. low-timer
-              }
-              else if (tmr.htimer == 0)
-              {  // timer has counted down
-                 if (tmr.time_low == 0)
-                 {  // indication for 100% gamma, remain in this state
-                    tmr.htimer = tmr.time_high; // init. high-timer again
-                    lsb_io |= HEATERb; // Set heater ON
-                 }
-                 else
-                 {
-                    lsb_io &= ~HEATERb; // set heater OFF
-                    tmr.isrstate = EL_HTR_OFF;   // go to 'disable heater' state
-                    tmr.ltimer   = tmr.time_low; // init. low-timer
-                 } // else
-              } // if
-              else
-              {  // timer has not counted down yet, continue
-                 lsb_io |= HEATERb; // Set heater ON
-                 tmr.htimer--;      // decrement high-timer
-              } /* else */
-              break;
-
-      case EL_HTR_OFF:
-              //---------------------------------------------------------
-              // State 1: Disable heating element
-              // Goto 'enable heating element' if timeout_ltimer &&
-              //      pid output routed to triac/electric heater &&
-              //      !0%_gamma && !triac_too_hot
-              //---------------------------------------------------------
-              if (!(cb_pid_out & PID_OUT_ELECTRIC))
-              {
-                 lsb_io &= ~HEATERb; // set heater OFF
-                 tmr.isrstate = IDLE;
-              }
-              else if (tmr.ltimer == 0)
-              {  // timer has counted down
-                 if (tmr.time_high == 0)
-                 {
-                    // indication for 0% gamma, remain in this state
-                    tmr.ltimer = tmr.time_low; // init. timer again
-                    lsb_io &= ~HEATERb; // set heater OFF
-                 }
-                 else if (!triac_too_hot)
-                 {
-                    lsb_io |= HEATERb; // set heater ON
-                    tmr.isrstate = EL_HTR_ON;     // go to 'enable heater' state
-                    tmr.htimer   = tmr.time_high; // init. high-timer
-                 } // else if
-                 // Remain in this state if timeout && !0% && triac_too_hot
-              } // if
-              else
-              {
-                 // timer has not counted down yet, continue
-                 lsb_io &= ~HEATERb; // Set heater OFF
-                 tmr.ltimer--; // decrement low-timer
-              } // else
-              break;
-
-      case MOD_GAS_OFF:
-              //---------------------------------------------------------
-              // The modulating gas burner is enabled as follows:
-              // 1) a PWM voltage is applied to the gas-valve, this is done
-              //    in the main interrupt loop
-              // 2) a 230 V voltage is applied. This is done in this STD.
-              //---------------------------------------------------------
-              if (time_switch || (cb_pid_out & PID_OUT_ELECTRIC) ||
-                                !(cb_pid_out & PID_OUT_GAS_MODULATE))
-              {
-                 lsb_io &= ~HEATERb; // set heater OFF
-                 tmr.isrstate = IDLE;
-              }
-              else if (tmr.time_high > pid_pars.burner_hyst_h)
-              {  // hysteresis
-                 lsb_io |= HEATERb; // set heater ON
-                 tmr.isrstate = MOD_GAS_ON;
-              }
-              else
-              {
-                 lsb_io &= ~HEATERb; // set heater OFF
-                 // remain in this state
-              } // else
-              break;
-
-      case MOD_GAS_ON:
-              //---------------------------------------------------------
-              // The modulating gas burner is enabled
-              //---------------------------------------------------------
-              if (time_switch || (cb_pid_out & PID_OUT_ELECTRIC) ||
-                                !(cb_pid_out & PID_OUT_GAS_MODULATE))
-              {
-                 lsb_io &= ~HEATERb; // set heater OFF
-                 tmr.isrstate = IDLE;
-              }
-              else if (tmr.time_high < pid_pars.burner_hyst_l)
-              {
-                 lsb_io &= ~HEATERb; // set heater OFF
-                 tmr.isrstate = MOD_GAS_OFF;
-              }
-              else
-              {
-                 lsb_io |= HEATERb; // set heater ON
-                 // remain in this state
-              } // else
-              break;
-
-     default: tmr.isrstate = IDLE;
-              break;
-   } // case
-
-   //-----------------------------------------------------------------
-   // Send Non-Modulating Gas-Burner On/Off signal to ebrew hardware.
-   // Activate this only when the PID-output is routed to a non-
-   // modulating gas-burner. Disable burner if deselected.
-   // Safety: disable gas burner when time_switch is true
-   //-----------------------------------------------------------------
-   if (time_switch || !(cb_pid_out & PID_OUT_GAS_NON_MOD))
-   {
-      lsb_io &= ~BURNERb; // Disable Non-Modulating gas-burner
-   }
-   else
-   {   // time-switch is disabled and non-modulating gas-burner is selected
-       if (tmr.time_high > pid_pars.burner_hyst_h)
-       {
-          lsb_io |= BURNERb;  // Fire it up!
-       }
-       else if (tmr.time_high < pid_pars.burner_hyst_l)
-       {
-          lsb_io &= ~BURNERb; // Disable Non-Modulating gas-burner
-       } // else if
-       // else: do nothing (hysteresis)
-   } // else
-
-   //------------------------------------------------------------------
-   // Calculate alive toggle bit to see if this routine is still alive
-   //------------------------------------------------------------------
-   if (++tmr.alive_tmr >= ALIVE_TICKS)
-   {
-     tmr.alive_tmr = 0;          // reset timer
-     tmr.alive     = !tmr.alive; // invert alive (bit 1 of IO port)
-   } // if
-   if (tmr.alive) lsb_io |= ALIVEb;  // Enable alive LED
-   else           lsb_io &= ~ALIVEb; // Disable alive LED
-
-   //--------------------------------------------
-   // Send Pump On/Off signal to ebrew hardware.
-   //--------------------------------------------
-   if (std_out & P0b) lsb_io |= PUMPb;
-   else               lsb_io &= ~PUMPb;
-
-   if (lsb_io != old_lsb_io)
-   {
-      s[0]    = 0; // init. temp. string
-      scom[0] = 0; // init. string to send
-      if ((lsb_io ^ old_lsb_io) & PUMPb)
-      { // The PUMP signal changed
-        sprintf(scom,"P%1d\n",(lsb_io & PUMPb) ? 1 : 0);
-      } // if
-      if ((lsb_io ^ old_lsb_io) & BURNERb)
-      { // The Non-Modulating Gas-Burner signal changed
-        sprintf(s,"N%1d\n",(lsb_io & BURNERb) ? 1 : 0);
-        strcat(scom,s);
-      } // if
-      if ((lsb_io ^ old_lsb_io) & (ALIVEb | HEATERb | PUMPb))
-      { // At least one of the LEDs has changed
-        sprintf(s,"L%1d\n",lsb_io & (ALIVEb | HEATERb | PUMPb));
-        strcat(scom,s);
-      } // if
-      COM_port_write(scom); // Send command to ebrew hardware
-      old_lsb_io = lsb_io;  // update previous value
-   } // if
-} // Generate_IO_Signals()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::T50msec2Timer(TObject *Sender)
-/*------------------------------------------------------------------
-  Purpose  : This is the main Timer function which is called every
-             50 milliseconds. This can be seen as the main control
-             loop of the program. It utilises time-slices to divide
-             computations over time.
-             After 60 seconds (1200 calls) the main control loop
-             starts again
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   //int        err = 0;       // error return value, needed for SET_LED macro
-   TDateTime  td_now;        // holds current date and time
-   double     thlt_unf;      // unfiltered version of Thlt
-   double     tmlt_unf;      // unfiltered version of Tmlt
-   adda_t     adc;           // struct containing 4 ADC values + DA value
-   double     dac_x;         // temp. variable for calculating DA value
-   double     old_vhlt;      // previous value of Vhlt
-   double     old_vmlt;      // previous value of Vmlt
-   double     old_thlt;      // previous value of Thlt
-   double     old_tmlt;      // previous value of Tmlt
-   double     old_tset_hlt;  // previous value of tset_hlt
-   
-   //--------------------------------------------------------------
-   // This is the main control loop, executed once every 50 msec.
-   // Do some time-slicing to reduce #computations in one loop.
-   // Every time-slice is executed once every TS seconds.
-   // tmr.pid_tmr runs from 1 to SIXTY_SECONDS
-   //--------------------------------------------------------------
-
-   //----------------------------------------------------------------
-   // TIME-SLICE: this time-slice is executed once every second.
-   //             Read HLT volume (Vhlt) and call MA filter for Vhlt.
-   //----------------------------------------------------------------
-   if (tmr.pid_tmr % ONE_SECOND == 1)
-   {
-       old_vhlt = volumes.Vhlt;
-       if (vhlt_src != NONE) // get real value from ADC
-       {
-          //volumes.Vhlt = get_analog_input(hw_status, vhlt_src, vhlt_a, vhlt_b, &err);
-          //if (err) Reset_I2C_Bus(base_adc[vhlt_src],err);
-       } // if
-       //--------------------------------------------------------------------
-       // else: in case Vhlt is simulated and not read from an ADC, the value
-       //       is determined in the state transition diagram.
-       //--------------------------------------------------------------------
-       if (swfx.vhlt_sw)
-       {
-          volumes.Vhlt = swfx.vhlt_fx;
-       }
-       slope_limiter(vhlt_slope,old_vhlt,&volumes.Vhlt);      // slope limiter
-       volumes.Vhlt = moving_average(&str_vhlt,volumes.Vhlt); // MA filter
-   } // if time-slice
-
-   //----------------------------------------------------------------
-   // TIME-SLICE: this time-slice is executed once every second.
-   //             Read MLT volume (Vmlt) and call MA filter for Vmlt.
-   //----------------------------------------------------------------
-   if (tmr.pid_tmr % ONE_SECOND == 2)
-   {
-       old_vmlt = volumes.Vmlt;
-       if (vmlt_src != NONE) // get real value from ADC
-       {
-          //volumes.Vmlt = get_analog_input(hw_status, vmlt_src, vmlt_a, vmlt_b, &err);
-          //if (err) Reset_I2C_Bus(base_adc[vmlt_src],err);
-       } // if
-       if (swfx.vmlt_sw)
-       {
-          volumes.Vmlt = swfx.vmlt_fx;
-       } // if
-       slope_limiter(vmlt_slope,old_vmlt,&volumes.Vmlt);      // slope limiter
-       volumes.Vmlt = moving_average(&str_vmlt,volumes.Vmlt); // MA filter
-   } // if time-slice
-
-   //----------------------------------------------------------------------
-   // TIME-SLICE: this time-slice is executed once every second. Read
-   //             Triac Temperature (Ttriac) and check if it is too high.
-   //----------------------------------------------------------------------
-   if (tmr.pid_tmr % ONE_SECOND == 3)
-   {
-       if (ttriac_src != NONE) // get real value from ADC
-       {
-          //ttriac = get_analog_input(hw_status, ttriac_src, ttriac_a, ttriac_b, &err);
-          //if (err) Reset_I2C_Bus(base_adc[ttriac_src],err);
-       } // if
-       if (swfx.ttriac_sw)
-       {
-          ttriac = swfx.ttriac_fx;
-       } // if
-
-       //---------------------------------------------------
-       // Triac Temperature Protection: hysteresis function
-       //---------------------------------------------------
-       if (triac_too_hot)
-       {
-          if (ttriac < ttriac_llim)
-          {
-             triac_too_hot = false;
-          }
-       }
-       else
-       {
-          if (ttriac > ttriac_hlim)
-          {
-             triac_too_hot = true;
-          }
-       }
-   } // if time-slice
-
-   //----------------------------------------------------------------
-   // TIME-SLICE: this time-slice is executed once every second.
-   //             It reads the LM92 temperature sensor (HLT)
-   //----------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 4)
-   {
-       old_thlt = thlt;  // Previous value of Thlt
-       if (hw_status & LM92_1_OK)
-       {
-          //thlt_unf = lm92_read(0); // Read HLT temp. from LM92 device
-       } // if
-       else thlt_unf = 0.0; // Reset Thlt
-       if (swfx.thlt_sw)
-       {  // Switch & Fix
-          thlt_unf = (double)swfx.thlt_fx;
-       } // if
-       if (thlt_unf == LM92_ERR)
-       {  // Reset I2C bus when lm92_read() returned an error
-          //if (hw_status & LM92_1_OK) Reset_I2C_Bus(LM92_1_BASE, I2C_LM92_ERR);
-       } // if
-       else
-       {  // No error, limit slope and filter temperature
-          thlt_unf += thlt_offset;                      // add calibration offset
-          slope_limiter(thlt_slope,old_thlt,&thlt_unf); // slope-limit
-          thlt = moving_average(&str_thlt,thlt_unf);    // MA-filter
-       } // else
-   } // else if
-
-   //----------------------------------------------------------------
-   // TIME-SLICE: this time-slice is executed once every second.
-   //             It reads the LM92 temperature sensor (MLT)
-   //----------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 5)
-   {
-       old_tmlt = tmlt;  // Previous value of Tmlt
-       if (hw_status & LM92_2_OK)
-       {
-          //tmlt_unf = lm92_read(1); // Read MLT temp. from LM92 device
-       } // if
-       else tmlt_unf = 0.0; // Reset Tmlt
-       if (swfx.tmlt_sw)
-       {  // Switch & Fix
-          tmlt_unf = (double)swfx.tmlt_fx;
-       } // if
-       if (tmlt_unf == LM92_ERR)
-       {  // Reset I2C bus when lm92_read() returned an error
-          //if (hw_status & LM92_2_OK) Reset_I2C_Bus(LM92_2_BASE, I2C_LM92_ERR);
-       } // if
-       else
-       {  // No error, limit slope and filter temperature
-          tmlt_unf += tmlt_offset;                      // add calibration offset
-          slope_limiter(tmlt_slope,old_tmlt,&tmlt_unf); // slope-limit
-          tmlt = moving_average(&str_tmlt,tmlt_unf);    // MA-filter
-       } // else
-   } // else if
-
-   //-----------------------------------------------------------------------
-   // TIME-SLICE: Time switch controller. Enable PI controller
-   // [TS sec.]   if current date & time matches the date & time set.
-   //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % pid_pars.ts_ticks == 6)
-   {
-      // Only useful if PID controller is disabled AND time_switch is enabled
-      if ((PID_RB->ItemIndex != 1) && (time_switch == 1))
-      {
-         td_now = Now(); // Get Current Date and Time
-         if ((td_now >= dt_time_switch) && (td_now < dt_time_switch + ONE_MINUTE))
-         {
-            PID_RB->ItemIndex = 1; // Enable PID Controller
-         }
-      } // if
-
-      // PID_RB->ItemIndex = 1 => PID Controller On
-      switch (pid_pars.pid_model)
-      {
-         case 0 : pid_reg2(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex,&sys_id_pars);
-                  break; // Self-Tuning Takahashi Type C
-         case 1 : pid_reg3(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-                  break; // Type A with filtering of D-action
-         case 2 : pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-                  break; // Takahashi Type C, NO filtering of D-action
-         default: pid_reg4(thlt,&gamma,tset_hlt,&pid_pars,PID_RB->ItemIndex);
-                  break; // default to Type C, NO filtering of D-action
-      } // switch
-      if (swfx.gamma_sw)
-      {
-         gamma = swfx.gamma_fx; // fix gamma
-      } // if
-
-      //--------------------------------------------------------------------
-      // Now calculate high and low time for the timers
-      // The Gamma is a value between 0-100%. The Gamma signal has a
-      // period of 5 seconds, which is 100 * 50 msec.
-      // Therefore every percent corresponds to one period of 50 msec.
-      // These timer values are needed for Generate_IO_Signals();
-      //--------------------------------------------------------------------
-      tmr.time_high = (int)gamma;
-      tmr.time_low  = 100 - tmr.time_high;
-   } // else if
-
-   //-----------------------------------------------------------------------
-   // TIME-SLICE: Output values to DA-Converter to create a PWM signal for
-   //             the modulating gas-burner
-   //-----------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 7)
-   {
-       //---------------------------------------------------------------------
-       // Send Modulating Gas-Burner On/Off signal to the DAC of the PCF8591.
-       // Activate this only when the PID-output is routed to a modulating
-       // gas-burner. Disable burner if deselected.
-       // Safety: disable gas burner when time_switch is true
-       //---------------------------------------------------------------------
-       if (!time_switch && (cb_pid_out & PID_OUT_GAS_MODULATE) && (hw_status & ADDA_OK))
-       {
-          dac_x   = gamma * dac_a + dac_b; // convert from [0..100%] to value for DAC
-          if (dac_x > 255.0)
-          {
-             adc.dac = 255;
-          }
-          else if (dac_x < 0.0)
-          {
-             adc.dac = 0;
-          }
-          else
-          {
-             adc.dac = (byte)dac_x;
-          } // else
-          //err = read_adc(&adc);                  // Send value to DA-Converter
-          //if (err) Reset_I2C_Bus(ADDA_BASE,err); // Reset if necessary
-       } // if
-   } // else if
-
-   //--------------------------------------------------------------------------
-   // TIME-SLICE: Calculate State Transition Diagram (STD) and determine
-   //             new settings of the valves (every second)
-   //--------------------------------------------------------------------------
-   else if (tmr.pid_tmr % ONE_SECOND == 12)
-   {
-      int std_tmp;
-      if (swfx.std_sw)
-      {
-         std_tmp = swfx.std_fx;
-      }
-      else
-      {
-         std_tmp = -1;
-      }
-      old_tset_hlt = tset_hlt; // Previous value of HLT temperature reference
-      update_std(&volumes, tmlt, thlt, &tset_mlt, &tset_hlt, &std_out,
-                 ms, &sp, &std, PID_RB->ItemIndex, std_tmp);
-      if (swfx.tset_hlt_sw)
-      {
-         tset_hlt = swfx.tset_hlt_fx; // fix tset_hlt
-      } // if
-      slope_limiter(tset_hlt_slope,old_tset_hlt,&tset_hlt); // limit slope
-
-      //-----------------------------------------------------------------
-      // Now output all valve bits to DIG_IO_MSB_BASE (if it is present).
-      // NOTE: The pump bit is output to DIG_IO_LSB_IO!
-      //-----------------------------------------------------------------
-      if (hw_status & DIG_IO_MSB_OK)
-      {
-         //err = WriteIOByte((byte)(std_out & 0x00FE),MSB_IO);
-         //if (err) Reset_I2C_Bus(DIG_IO_MSB_BASE,err);
-      } // if
-   } // else if
-
-   //--------------------------------------------------------------------------
-   // TIME-SLICE: Do a complete scan of the I2C bus (within a second)
-   //--------------------------------------------------------------------------
-   else if ((tmr.pid_tmr % ONE_SECOND == 13) && (i2c_hw_scan_req))
-   {
-      //Start_I2C_Communication(-1); // print all I2C devices found
-      i2c_hw_scan_req = false;
-   } // else if
-
-   //--------------------------------------------------------------------------
-   // Reset timer if necessary
-   //--------------------------------------------------------------------------
-   if (++tmr.pid_tmr > SIXTY_SECONDS)
-   {
-      tmr.pid_tmr = 1; // reset timer
-   } // else if
-   //--------------------------------------------------------------------------
-   // END OF TIME-SLICES
-   //--------------------------------------------------------------------------
-
-   //------------------------------------------------
-   // Calculate IO signals (done every 50 msec.)
-   // - Gamma (triac) pulse
-   // - Alive bit (LED)
-   // - Pump bit
-   // - Gas burner bit
-   // - Output value to PCF874 IO port every 50 msec.
-   //------------------------------------------------
-   Generate_IO_Signals();
-} // TMainForm::T50msecTimer()
-//---------------------------------------------------------------------------
-
 void __fastcall TMainForm::MenuEditMashSchemeClick(TObject *Sender)
 /*------------------------------------------------------------------
   Purpose  : This is the function which is called whenever the user
@@ -2084,17 +1891,6 @@ void __fastcall TMainForm::MenuViewMash_progressClick(TObject *Sender)
 {
    ViewMashProgress->Show(); // Show modeless Dialog
 } // TMainForm::MenuViewMash_progressClick()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::MenuViewData_graphsClick(TObject *Sender)
-/*------------------------------------------------------------------
-  Purpose  : This is the function which is called whenever the user
-             presses 'View | Data (Graphs)'.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   ShowDataGraphs->Show(); // Show modeless Dialog
-} // TMainForm::MenuViewData_graphsClick()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Init_Sparge_Settings(void)
@@ -2389,7 +2185,7 @@ void __fastcall TMainForm::ReadLogFile1Click(TObject *Sender)
 } // TMainForm::ReadLogFile1Click()
 //---------------------------------------------------------------------------
 
-void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
+void __fastcall TMainForm::Update_GUI(void)
 {
    char tmp_str[120];  // temp string for calculations
    char tmp_str2[80];  // temp string for calculations
@@ -2405,9 +2201,9 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
    tm_mlt->Value->Value = tmlt;     // update MLT thermometer object
 
    tm_triac->Value->Value = ttriac; // Update thermometer object
-   sprintf(tmp_str,"%2.0f",ttriac);
+   sprintf(tmp_str,"%2.0f",ttriac+0.5);
    Ttriac_lbl->Caption    = tmp_str;
-   
+
    //---------------------------------------------------
    // Triac Temperature Protection: hysteresis function
    //---------------------------------------------------
@@ -2604,6 +2400,12 @@ void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
    } // for
    strcat(tmp_str,"] V1");
    StatusBar->Panels->Items[PANEL_VALVE]->Text = AnsiString(tmp_str);
+} // Update_GUI()
+
+void __fastcall TMainForm::ebrew_idle_handler(TObject *Sender, bool &Done)
+{
+   dispatch_tasks(); // Call all tasks that are ready to run
+   Update_GUI();
 } // ebrew_idle_handler()
 //---------------------------------------------------------------------------
 
@@ -2819,5 +2621,7 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
    }
 } // FormKeyPress()
 //---------------------------------------------------------------------------
+
+
 
 

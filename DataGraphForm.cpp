@@ -4,6 +4,9 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.15  2005/10/23 17:50:26  Emile
+// - Writing to log-file updated with Vhlt
+//
 // Revision 1.14  2005/10/23 12:44:38  Emile
 // Several changes because of new hardware (MAX1238 instead of PCF8591):
 // - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
@@ -155,24 +158,24 @@ void __fastcall TShowDataGraphs::GraphTimerTimer(TObject *Sender)
    FILE *fd;
    struct time t1;
 
-   if ((fd = fopen(LOGFILE,"a")) != NULL)
-   {
-      gettime(&t1);
-      fprintf(fd,"%02d:%02d:%02d,",t1.ti_hour,t1.ti_min,t1.ti_sec);
-      fprintf(fd,"%6.2f,%6.2f,%6.2f,%6.2f,%5.1f,%6.1f,%2d,%2d,%3d, %5.1f,%6.1f\n",
-                 MainForm->tset_mlt,
-                 MainForm->tset_hlt,
-                 MainForm->thlt,
-                 MainForm->tmlt,
-                 MainForm->ttriac,
-                 MainForm->volumes.Vmlt,
-                 MainForm->std.sp_idx,
-                 MainForm->std.ms_idx,
-                 MainForm->std.ebrew_std,
-                 MainForm->gamma,
-                 MainForm->volumes.Vhlt);
-      fclose(fd);
-   } /* if */
+   //if ((fd = fopen(LOGFILE,"a")) != NULL)
+   //{
+   //   gettime(&t1);
+   //   fprintf(fd,"%02d:%02d:%02d,",t1.ti_hour,t1.ti_min,t1.ti_sec);
+   //   fprintf(fd,"%6.2f,%6.2f,%6.2f,%6.2f,%5.1f,%6.1f,%2d,%2d,%3d, %5.1f,%6.1f\n",
+   //              MainForm->tset_mlt,
+   //              MainForm->tset_hlt,
+   //              MainForm->thlt,
+   //              MainForm->tmlt,
+   //              MainForm->ttriac,
+   //              MainForm->volumes.Vmlt,
+   //              MainForm->std.sp_idx,
+   //              MainForm->std.ms_idx,
+   //              MainForm->std.ebrew_std,
+   //              MainForm->gamma,
+   //              MainForm->volumes.Vhlt);
+   //   fclose(fd);
+   //} /* if */
 
    if (ShowDataGraphs)
    {
