@@ -5,6 +5,14 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2007/08/26 22:23:20  Emile
+// - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
+// - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
+//   VMLT_SLOPE and TSET_HLT_SLOPE
+// - Bug-fix setting MA order for HLT Volume: this was coupled to MA order of
+//   HLT temperature. Corrected
+// - Measurements... and PID controller settings... dialog screen updated.
+//
 // Revision 1.3  2005/11/12 22:19:38  Emile
 // - PID Output (Gamma) routing added. It is now possible to send the output
 //   of the PID controller to 3 devices: 1) electrical heating element,
@@ -66,59 +74,31 @@ __published:	// IDE-managed Components
         TButton *Help_Button;
         TCheckBox *Vboil_simulated;
         TLabel *Label8;
-        TEdit *Vhlt_init_Edit;
-        TLabel *Label3;
-        TUpDown *UD_MA_VMLT;
-        TEdit *NMA_edit;
+        TEdit *Vhlt_Max_Edit;
         TLabel *Label1;
         TLabel *Label2;
-        TLabel *Label4;
         TLabel *Label5;
         TLabel *Label6;
-        TLabel *Label7a;
-        TEdit *Ttriac_a;
         TLabel *Label9;
-        TLabel *Label10;
-        TUpDown *UD_MA_HLT;
-        TEdit *MA_HLT_Edit;
-        TLabel *Label11;
-        TUpDown *UD_MA_MLT;
-        TEdit *MA_MLT_Edit;
         TLabel *Label12;
-        TEdit *Thlt_Offset;
+        TEdit *Thlt_Offset_Edit;
         TLabel *Label13;
-        TEdit *Tmlt_Offset;
-        TComboBox *Vhlt_src;
-        TLabel *Label14;
-        TLabel *Label15;
-        TComboBox *Vmlt_src;
-        TComboBox *Ttriac_src;
-        TLabel *Label16;
-        TLabel *Label7b;
-        TEdit *Ttriac_b;
+        TEdit *Tmlt_Offset_Edit;
         TLabel *Label17;
-        TEdit *Vmlt_a;
+        TEdit *Vmlt_Max_Edit;
         TLabel *Label18;
-        TEdit *Vmlt_b;
+        TEdit *Vmlt_Offset_Edit;
         TLabel *Label19;
-        TEdit *Vhlt_a;
-        TLabel *Label20;
-        TEdit *Vhlt_b;
-        TLabel *Label21;
-        TUpDown *UD_MA_VHLT;
-        TEdit *MA_Vhlt;
+        TEdit *Vhlt_Offset_Edit;
         TLabel *Label7;
         TLabel *Label22;
-        TEdit *Thlt_Slope;
-        TEdit *Tmlt_Slope;
+        TEdit *Thlt_Slope_Edit;
+        TEdit *Tmlt_Slope_Edit;
         TLabel *Label23;
-        TEdit *Vhlt_Slope;
+        TEdit *Vhlt_Slope_Edit;
         TLabel *Label24;
-        TEdit *Vmlt_Slope;
+        TEdit *Vmlt_Slope_Edit;
         void __fastcall Help_ButtonClick(TObject *Sender);
-        void __fastcall Vhlt_srcChange(TObject *Sender);
-        void __fastcall Vmlt_srcChange(TObject *Sender);
-        void __fastcall Ttriac_srcChange(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TMeasurements(TComponent* Owner);

@@ -5,6 +5,17 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2011/05/29 20:56:25  Emile
+// - New Registry variables added: STC_N, STC_TD and STC_ADF
+// - PID Settings Dialog screen extended with new parameters for self-tuning
+//   controller: possibility to set the system order N, an estimate for the
+//   time-delay and a boolean whether or not to use adaptive dir. forgetting.
+// - PID Settings Dialog screen: parameters enabled/disabled when a
+//   specific PID controller is chosen.
+// - New functions time_delay() and init_time_delay() added
+// - Changes made in init_pid2() function header.
+// - Unit-test cases updated and extended with tests for new functions.
+//
 // Revision 1.7  2011/05/06 11:09:42  Emile
 // - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
 // - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
@@ -152,11 +163,6 @@ void __fastcall TPID_Settings::CB_Pid_out2Click(TObject *Sender)
    //---------------------------------------------------------------
    if (CB_Pid_out2->Checked)
    {
-      DAC_A_Edit->Enabled = true;
-      DAC_B_Edit->Enabled = true;
-      Label14->Enabled    = true;
-      Label16->Enabled    = true;
-
       Burner_On->Enabled  = true;
       Burner_Off->Enabled = true;
       Label10->Enabled    = true;
@@ -166,10 +172,6 @@ void __fastcall TPID_Settings::CB_Pid_out2Click(TObject *Sender)
    }
    else
    {
-      DAC_A_Edit->Enabled = false;
-      DAC_B_Edit->Enabled = false;
-      Label14->Enabled    = false;
-      Label16->Enabled    = false;
       if (!CB_Pid_out1->Checked)
       {  // Only disable gas burner on hysteresis when both the modulating
          // AND the non-modulating burners are disabled.

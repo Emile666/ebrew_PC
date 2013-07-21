@@ -5,6 +5,17 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2011/05/29 20:56:26  Emile
+// - New Registry variables added: STC_N, STC_TD and STC_ADF
+// - PID Settings Dialog screen extended with new parameters for self-tuning
+//   controller: possibility to set the system order N, an estimate for the
+//   time-delay and a boolean whether or not to use adaptive dir. forgetting.
+// - PID Settings Dialog screen: parameters enabled/disabled when a
+//   specific PID controller is chosen.
+// - New functions time_delay() and init_time_delay() added
+// - Changes made in init_pid2() function header.
+// - Unit-test cases updated and extended with tests for new functions.
+//
 // Revision 1.11  2007/08/26 22:23:20  Emile
 // - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
 // - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
@@ -150,10 +161,6 @@ __published:
         TCheckBox *CB_Pid_out0;
         TCheckBox *CB_Pid_out1;
         TCheckBox *CB_Pid_out2;
-        TLabel *Label14;
-        TLabel *Label16;
-        TEdit *DAC_A_Edit;
-        TEdit *DAC_B_Edit;
         TLabel *Label15;
         TLabel *Label17;
         TEdit *Tset_hlt_slope;

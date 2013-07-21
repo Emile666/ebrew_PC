@@ -6,6 +6,11 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.21  2013/06/22 23:04:19  Emile
+  - Second intermediate version: scheduler added and timer interrupt divided
+    over a number of tasks.
+  - Version works with Ebrew hardware, task duration needs to be optimised!
+
   Revision 1.20  2011/05/29 20:56:26  Emile
   - New Registry variables added: STC_N, STC_TD and STC_ADF
   - PID Settings Dialog screen extended with new parameters for self-tuning
@@ -814,10 +819,6 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       case S02_FILL_MLT:
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + 2 * sps->temp_offset;
-           if (vol->Vhlt_simulated)
-           {
-              vol->Vhlt = vol->Vhlt_old - vol->Vmlt;
-           }
            if (vol->Vmlt >= sps->mash_vol)
            {
               std->ebrew_std = S03_MASH_IN_PROGRESS;
@@ -942,10 +943,6 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       case S07_PUMP_FROM_HLT_TO_MLT:
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
-           if (vol->Vhlt_simulated)
-           {
-              vol->Vhlt = vol->Vhlt_old + vol->Vmlt_old - vol->Vmlt;
-           }
            if (vol->Vmlt >= vol->Vmlt_old + sps->sp_vol_batch)
            {
               std->sp_idx++;              // Increase #Sparging Sessions done

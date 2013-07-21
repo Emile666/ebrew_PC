@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.38  2013/06/22 23:04:18  Emile
+// - Second intermediate version: scheduler added and timer interrupt divided
+//   over a number of tasks.
+// - Version works with Ebrew hardware, task duration needs to be optimised!
+//
 // Revision 1.37  2013/06/16 14:39:19  Emile
 // Intermediate version for new Ebrew 2.0 USB hardware:
 // - Hardware settings Dialog: COM Port + Settings added + LEDx removed
@@ -325,9 +330,6 @@
 // 1 minute = 1/(60*24) part of one day, see TDateTime for details
 #define ONE_MINUTE (6.94444E-04)
 
-// Macro, used in TMainForm::Main_Initialisation()
-#define PR_HW_STAT(x)   hw_status & x ? strcpy(s1,YES_TXT) : strcpy(s1,NOT_TXT)
-
 //------------------------------
 // Defines for StatusBar object
 //------------------------------
@@ -480,7 +482,7 @@ private:	// User declarations
         int             usb_com_port_nr;  // Number of virtual USB COM port
         char            com_port_settings[20]; // Virtual COM Port Settings
         int             known_hw_devices; // list of known I2C hardware devices
-        int             fscl_prescaler;   // index into PCF8584 prescaler values, see i2c_dll.cpp
+        int             fscl_prescaler;   // index into I2C SCL Frequency values
 
         bool            cb_pid_dbg;        // true = Show PID Debug label
         byte            cb_pid_out;        // [ELECTRIC, GAS_NON_MOD, GAS_MODULATE]
@@ -490,30 +492,22 @@ private:	// User declarations
         bool            need_to_read;      // true = read response from COM port
         int             lsb_io;            // init. byte to write to ebrew hardware
 
-        double          dac_a;            // a-coefficient for y=a.x+b DAC calc.
-        double          dac_b;            // b-coefficient for y=a.x+b DAC calc.
 public:		// User declarations
-        double          thlt;       // HLT actual temperature
-        ma              str_thlt;     // Struct for MA5 filter for HLT temperature
+        double          thlt;         // HLT actual temperature
         double          thlt_offset;  // calibration offset to add to Thlt measurement
         double          thlt_slope;   // Slope limiter for Thlt temperature
 
         double          tmlt;         // MLT actual temperature
-        ma              str_tmlt;     // Struct for MA5 filter for MLT temperature
         double          tmlt_offset;  // calibration offset to add to Tmlt measurement
         double          tmlt_slope;   // Slope limiter for Tmlt temperature
 
-        ma              str_vhlt;     // Struct for MA5 filter for HLT volume
+        double          vhlt_offset;  // Offset to add to Vhlt measurement
+        double          vhlt_max;     // Max. Volume for Vhlt
         double          vhlt_slope;   // Slope limiter for Vhlt volume
-        enum i2c_adc    vhlt_src;     // Vhlt source AD channel
-        double          vhlt_a;       // a-coefficient for y=a.x+b
-        double          vhlt_b;       // b-coefficient for y=a.x+b
 
-        ma              str_vmlt;     // Struct for MA5 filter for MLT volume
+        double          vmlt_offset;  // Offset to add to Vmlt measurement
+        double          vmlt_max;     // Max. Volume for Vmlt
         double          vmlt_slope;   // Slope limiter for Vmlt volume
-        enum i2c_adc    vmlt_src;     // Vmlt source AD channel
-        double          vmlt_a;       // a-coefficient for y=a.x+b
-        double          vmlt_b;       // b-coefficient for y=a.x+b
 
         double          ttriac;       // Triac electronics actual temperature
         enum i2c_adc    ttriac_src;   // Ttriac source AD channel
@@ -543,7 +537,6 @@ public:		// User declarations
         timer_vars      tmr;        // struct with timer variables
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
         TDateTime       dt_time_switch;   // object holding date and time
-        //bool            burner_on;        // true = gas burner is on
         bool            com_port_is_open; // true = COM-port is open for Read/Write
         bool            i2c_hw_scan_req;  // true = check I2C HW devices
         char            *ebrew_revision;  // contains CVS revision number

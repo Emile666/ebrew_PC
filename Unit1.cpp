@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.61  2013/06/22 23:04:18  Emile
+// - Second intermediate version: scheduler added and timer interrupt divided
+//   over a number of tasks.
+// - Version works with Ebrew hardware, task duration needs to be optimised!
+//
 // Revision 1.60  2013/06/16 14:39:19  Emile
 // Intermediate version for new Ebrew 2.0 USB hardware:
 // - Hardware settings Dialog: COM Port + Settings added + LEDx removed
@@ -425,7 +430,6 @@
 #include "VersionAwareAbout.h"
 #include <Dialogs.hpp>
 #include "scheduler.h"
-#include "tasks.h"
 
 extern vector theta; // defined in pid_reg.h
 //---------------------------------------------------------------------------
@@ -454,23 +458,16 @@ FILE         *fdbg_com; // COM-port debug file-descriptor
 void task_read_thlt(void)
 {
     char   s[MAX_BUF_READ];
-    double thlt_unf; // unfiltered version of Thlt
-    double old_thlt; // previous value of Thlt
 
     MainForm->COM_port_write("A3\n"); // A3 = THLT
     MainForm->COM_port_read(s);       // Read HLT temp. from LM92 device
     if (!strncmp(s,"Thlt=",5)) MainForm->Val_Thlt->Font->Color = clLime;
     else                       MainForm->Val_Thlt->Font->Color = clRed;
-    old_thlt = MainForm->thlt;        // Previous value of Thlt
-    thlt_unf = atof(&s[5]);
+    MainForm->thlt = atof(&s[5]);
     if (MainForm->swfx.thlt_sw)
     {  // Switch & Fix
-       thlt_unf = (double)(MainForm->swfx.thlt_fx);
+       MainForm->thlt = (double)(MainForm->swfx.thlt_fx);
     } // if
-    // No error, limit slope and filter temperature
-    thlt_unf += MainForm->thlt_offset;            // add calibration offset
-    slope_limiter(MainForm->thlt_slope,old_thlt,&thlt_unf); // slope-limit
-    MainForm->thlt = moving_average(&MainForm->str_thlt,thlt_unf); // MA-filter
 } // task_read_thlt()
 
 /*-----------------------------------------------------------------------------
@@ -482,23 +479,16 @@ void task_read_thlt(void)
 void task_read_tmlt(void)
 {
     char   s[MAX_BUF_READ];
-    double tmlt_unf; // unfiltered version of Tmlt
-    double old_tmlt; // previous value of Tmlt
 
     MainForm->COM_port_write("A4\n"); // A4 = TMLT
     MainForm->COM_port_read(s);       // Read MLT temp. from LM92 device
     if (!strncmp(s,"Tmlt=",5)) MainForm->Val_Tmlt->Font->Color = clLime;
     else                       MainForm->Val_Tmlt->Font->Color = clRed;
-    old_tmlt = MainForm->tmlt;        // Previous value of Tmlt
-    tmlt_unf = atof(&s[5]);
+    MainForm->tmlt = atof(&s[5]);
     if (MainForm->swfx.tmlt_sw)
     {  // Switch & Fix
-       tmlt_unf = (double)(MainForm->swfx.tmlt_fx);
+       MainForm->tmlt = (double)(MainForm->swfx.tmlt_fx);
     } // if
-    // No error, limit slope and filter temperature
-    tmlt_unf += MainForm->tmlt_offset;            // add calibration offset
-    slope_limiter(MainForm->tmlt_slope,old_tmlt,&tmlt_unf); // slope-limit
-    MainForm->tmlt = moving_average(&MainForm->str_tmlt,tmlt_unf); // MA-filter
 } // task_read_tmlt()
 
 /*-----------------------------------------------------------------------------
@@ -510,30 +500,16 @@ void task_read_tmlt(void)
 void task_read_vhlt(void)
 {
     char   s[MAX_BUF_READ];
-    double old_vhlt; // previous value of Tmlt
 
-    old_vhlt = MainForm->volumes.Vhlt;        // Previous value of Vhlt
-    if (MainForm->vhlt_src != NONE) // get real value from Ebrew hardware
-    {
-        MainForm->COM_port_write("A1\n"); // A1 = VHLT
-        MainForm->COM_port_read(s);       // Read HLT Volume from pressure sensor
-        if (!strncmp(s,"Vhlt=",5)) MainForm->Vol_HLT->Font->Color = clLime;
-        else                       MainForm->Vol_HLT->Font->Color = clRed;
-        MainForm->volumes.Vhlt  = atof(&s[5]);
-        MainForm->volumes.Vhlt *= MainForm->vhlt_a;
-        MainForm->volumes.Vhlt += MainForm->vhlt_b;
-    } // if
-    //--------------------------------------------------------------------
-    // else: in case Vhlt is simulated and not read from an ADC, the value
-    //       is determined in the state transition diagram.
-    //--------------------------------------------------------------------
+    MainForm->COM_port_write("A1\n"); // A1 = VHLT
+    MainForm->COM_port_read(s);       // Read HLT Volume from pressure sensor
+    if (!strncmp(s,"Vhlt=",5)) MainForm->Vol_HLT->Font->Color = clLime;
+    else                       MainForm->Vol_HLT->Font->Color = clRed;
+    MainForm->volumes.Vhlt  = atof(&s[5]);
     if (MainForm->swfx.vhlt_sw)
     {  // Switch & Fix
        MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
     } // if
-    // slope-limiter and MA-filter
-    slope_limiter(MainForm->vhlt_slope,old_vhlt,&MainForm->volumes.Vhlt);
-    MainForm->volumes.Vhlt = moving_average(&MainForm->str_vhlt,MainForm->volumes.Vhlt);
 } // task_read_vhlt()
 
 /*-----------------------------------------------------------------------------
@@ -545,26 +521,16 @@ void task_read_vhlt(void)
 void task_read_vmlt(void)
 {
     char   s[MAX_BUF_READ];
-    double old_vmlt; // previous value of Tmlt
 
-    old_vmlt = MainForm->volumes.Vmlt;        // Previous value of Vmlt
-    if (MainForm->vmlt_src != NONE) // get real value from Ebrew hardware
-    {
-        MainForm->COM_port_write("A2\n"); // A2 = VMLT
-        MainForm->COM_port_read(s);       // Read MLT Volume from pressure sensor
-        if (!strncmp(s,"Vmlt=",5)) MainForm->Vol_MLT->Font->Color = clLime;
-        else                       MainForm->Vol_MLT->Font->Color = clRed;
-        MainForm->volumes.Vmlt  = atof(&s[5]);
-        MainForm->volumes.Vmlt *= MainForm->vmlt_a;
-        MainForm->volumes.Vmlt += MainForm->vmlt_b;
-    } // if
+    MainForm->COM_port_write("A2\n"); // A2 = VMLT
+    MainForm->COM_port_read(s);       // Read MLT Volume from pressure sensor
+    if (!strncmp(s,"Vmlt=",5)) MainForm->Vol_MLT->Font->Color = clLime;
+    else                       MainForm->Vol_MLT->Font->Color = clRed;
+    MainForm->volumes.Vmlt  = atof(&s[5]);
     if (MainForm->swfx.vmlt_sw)
     {  // Switch & Fix
        MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
     } // if
-    // slope-limiter and MA-filter
-    slope_limiter(MainForm->vmlt_slope,old_vmlt,&MainForm->volumes.Vmlt);
-    MainForm->volumes.Vmlt = moving_average(&MainForm->str_vmlt,MainForm->volumes.Vmlt);
 } // task_read_vmlt()
 
 /*-----------------------------------------------------------------------------
@@ -586,8 +552,6 @@ void task_read_lm35(void)
         if (!strncmp(s,"Lm35=",5)) MainForm->Ttriac_lbl->Font->Color = clLime;
         else                       MainForm->Ttriac_lbl->Font->Color = clRed;
         MainForm->ttriac  = atof(&s[5]);
-        //MainForm->ttriac *= MainForm->ttriac_a;
-        //MainForm->ttriac += MainForm->ttriac_b;
     } // if
     if (MainForm->swfx.ttriac_sw)
     {  // Switch & Fix
@@ -652,16 +616,6 @@ void task_pid_ctrl(void)
     {
        MainForm->gamma = MainForm->swfx.gamma_fx; // fix gamma
     } // if
-
-    //--------------------------------------------------------------------
-    // Now calculate high and low time for the timers
-    // The Gamma is a value between 0-100%. The Gamma signal has a
-    // period of 5 seconds, which is 100 * 50 msec.
-    // Therefore every percent corresponds to one period of 50 msec.
-    // These timer values are needed for Generate_IO_Signals();
-    //--------------------------------------------------------------------
-    MainForm->tmr.time_high = (int)(MainForm->gamma);
-    MainForm->tmr.time_low  = 100 - MainForm->tmr.time_high;
 
     //--------------------------------------------------------------------
     // Now write PID-output (Gamma) as a PWM signal to the Ebrew hardware.
@@ -797,10 +751,10 @@ void __fastcall TMainForm::COM_port_open(void)
    else
    {  // Set the Communication Timeouts
      GetCommTimeouts(hComm,&ctmoOld);
-     ctmoNew.ReadTotalTimeoutConstant = 100;
-     ctmoNew.ReadTotalTimeoutMultiplier = 0;
-     ctmoNew.WriteTotalTimeoutMultiplier = 0;
-     ctmoNew.WriteTotalTimeoutConstant = 0;
+     ctmoNew.ReadTotalTimeoutConstant    = 100;
+     ctmoNew.ReadTotalTimeoutMultiplier  =   0;
+     ctmoNew.WriteTotalTimeoutMultiplier =   0;
+     ctmoNew.WriteTotalTimeoutConstant   =   0;
      SetCommTimeouts(hComm, &ctmoNew);
 
      // Set Baud-rate, Parity, wordsize and stop-bits.
@@ -846,18 +800,21 @@ void __fastcall TMainForm::COM_port_read(char *s)
 {
    DWORD i, dwBytesRead;
 
-   ReadFile(hComm, s, MAX_BUF_READ-1, &dwBytesRead, NULL);
-   if(dwBytesRead)
+   if (com_port_is_open)
    {
-      s[dwBytesRead] = 0; // Null-Terminate the string
-   } // if
-   if (cb_debug_com_port)
-   {
-        for (i = 0; i < dwBytesRead; i++)
-        {
-           if ((s[i] == '\n') || (s[i] == '\r')) s[i] = '_';
-        }
-        fprintf(fdbg_com,"r[%s]\n",s);
+     ReadFile(hComm, s, MAX_BUF_READ-1, &dwBytesRead, NULL);
+     if(dwBytesRead)
+     {
+        s[dwBytesRead] = 0; // Null-Terminate the string
+     } // if
+     if (cb_debug_com_port)
+     {
+          for (i = 0; i < dwBytesRead; i++)
+          {
+             if ((s[i] == '\n') || (s[i] == '\r')) s[i] = '_';
+          }
+          fprintf(fdbg_com,"r[%s]\n",s);
+     } // if
    } // if
 } // COM_port_read()
 
@@ -872,23 +829,26 @@ void __fastcall TMainForm::COM_port_write(const char *s)
    int  bytes_to_send = 0;          // Number of bytes to send
    int  i, bytes_sent = 0;          // Number of bytes sent to COM port
 
-   strcpy(send_buffer,s);    // copy command to send into send_buffer
-   bytes_to_send = strlen(send_buffer);
-   bytes_sent    = 0;
-   while (bytes_sent < bytes_to_send)
+   if (com_port_is_open)
    {
-      if (!TransmitCommChar(hComm, send_buffer[bytes_sent++]))
-      {
-         MessageBox(NULL,"TransmitCommChar() Error","COM_port_write()",MB_OK);
-      } // if
-   } // while()
-   if (cb_debug_com_port)
-   {
-        for (i = 0; i < bytes_to_send; i++)
+     strcpy(send_buffer,s);    // copy command to send into send_buffer
+     bytes_to_send = strlen(send_buffer);
+     bytes_sent    = 0;
+     while (bytes_sent < bytes_to_send)
+     {
+        if (!TransmitCommChar(hComm, send_buffer[bytes_sent++]))
         {
-           if (send_buffer[i] == '\n') send_buffer[i] = '_';
-        }
-        fprintf(fdbg_com,"w[%s]",send_buffer);
+           MessageBox(NULL,"TransmitCommChar() Error","COM_port_write()",MB_OK);
+        } // if
+     } // while()
+     if (cb_debug_com_port)
+     {
+          for (i = 0; i < bytes_to_send; i++)
+          {
+             if (send_buffer[i] == '\n') send_buffer[i] = '_';
+          }
+          fprintf(fdbg_com,"w[%s]",send_buffer);
+     } // if
    } // if
 } // COM_port_write()
 
@@ -916,8 +876,8 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("USB_COM_PORT",3);   // Virtual USB COM port number
           Reg->WriteString("COM_PORT_SETTINGS","19200,N,8,1"); // COM port settings
           Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
-          fscl_prescaler = 5;
-          Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler); // set fscl to 11.72 kHz
+          fscl_prescaler = 10;
+          Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler); // set fscl to 20 kHz
           // PID Settings Dialog
           Reg->WriteFloat("TS",TS_INIT);         // Set Default sample time
           Reg->WriteFloat("Kc",KC_INIT);         // Controller gain
@@ -939,9 +899,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           // Send PID-Output to the various heaters / burners
           cb_pid_out = 0; // The PID-output is not connected to anything
           Reg->WriteInteger("CB_PID_OUT",cb_pid_out);
-          dac_a = -2.04; dac_b = 232.05;  // 5% -> just on, 95% -> full on
-          Reg->WriteFloat("DAC_A",dac_a); // default value for DAC calculations
-          Reg->WriteFloat("DAC_B",dac_b);
 
           ttriac_hlim = 70; // Upper limit for triac temp.
           Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
@@ -969,27 +926,16 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
           Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
           // Measurements
-          Reg->WriteInteger("MA_THLT",5);      // Order MA filter Thlt
           Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
           Reg->WriteFloat("THLT_SLOPE",2.0);   // Slope limit for Thlt °C/sec.
-          Reg->WriteInteger("MA_TMLT",5);      // Order MA filter Tmlt
           Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
           Reg->WriteFloat("TMLT_SLOPE",2.0);   // Slope limit for Tmlt °C/sec.
-          Reg->WriteInteger("MA_VMLT",5);      // Order MA filter Vmlt
-          Reg->WriteInteger("MA_VHLT",5);      // Order MA filter Vhlt
-          volumes.Vhlt_start = 90;             // Starting volume of HLT
-          Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
-          Reg->WriteInteger("VHLT_SRC",6);     // Vhlt = AIN1_MAX1238
-          Reg->WriteFloat("VHLT_A",0.025);     // a-coefficient for y=a.x+b
-          Reg->WriteFloat("VHLT_B",0.0);       // b-coefficient for y=a.x+b
+          Reg->WriteFloat("VHLT_OFFSET",0.0);  // Offset for Vhlt
+          Reg->WriteFloat("VHLT_MAX",140.1);   // Max. HLT volume
           Reg->WriteFloat("VHLT_SLOPE",1.0);   // Slope limit for Vhlt L/sec.
-          Reg->WriteInteger("VMLT_SRC",7);     // Vmlt = AIN2_MAX1238
-          Reg->WriteFloat("VMLT_A",0.025);     // a-coefficient for y=a.x+b
-          Reg->WriteFloat("VMLT_B",0.0);       // b-coefficient for y=a.x+b
+          Reg->WriteFloat("VMLT_OFFSET",0.0);  // Offset for Vmlt
+          Reg->WriteFloat("VMLT_MAX",110.1);   // Max. MLT volume
           Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
-          Reg->WriteInteger("TTRIAC_SRC",5);   // Ttriac = AIN0_MAX1238
-          Reg->WriteFloat("TTRIAC_A",0.1);     // a-coefficient for y=a.x+b
-          Reg->WriteFloat("TTRIAC_B",0.0);     // b-coefficient for y=a.x+b
           volumes.Vboil_simulated = true;
           Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
           cb_pid_dbg       = false; // no PID debug to screen
@@ -1016,11 +962,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
     //----------------------------------------
     // Init. volumes. Should be done only once
     //----------------------------------------
-    volumes.Vhlt_simulated = vhlt_src; // needed for STD
-    if (vhlt_src == 0)
-    {  // Vhlt is not measured but calculated from Vmlt
-       volumes.Vhlt  = volumes.Vhlt_start;
-    }
     if (volumes.Vboil_simulated)
     {  // Vboil is not measured but calculated from Vmlt
        volumes.Vboil  = VBOIL_START;
@@ -1065,54 +1006,28 @@ void __fastcall TMainForm::Main_Initialisation(void)
          pid_pars.burner_hyst_l = Reg->ReadInteger("BURNER_LHYST");
          // Send PID-Output to the various heaters / burners
          cb_pid_out = Reg->ReadInteger("CB_PID_OUT");
-         dac_a = Reg->ReadFloat("DAC_A"); // a-coefficient for y=a.x+b DAC calc.
-         dac_b = Reg->ReadFloat("DAC_B"); // b-coefficient for y=a.x+b DAC calc.
 
          ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
          tm_triac->SetPoint->Value = ttriac_hlim;       // update object on screen
          ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
 
-         volumes.Vhlt_start      = Reg->ReadInteger("VHLT_START"); // Read initial volume
          volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
          cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
          cb_debug_com_port       = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
          usb_com_port_nr         = Reg->ReadInteger("USB_COM_PORT");   // Virtual USB COM port number
          strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
 
-         init_ma(&str_thlt,Reg->ReadInteger("MA_THLT"),thlt); // MA filter for Thlt
          thlt_offset = Reg->ReadFloat("THLT_OFFSET");         // offset calibration
          thlt_slope  = Reg->ReadFloat("THLT_SLOPE");          // Slope limiter for Thlt
-         init_ma(&str_tmlt,Reg->ReadInteger("MA_TMLT"),tmlt); // MA filter for Tmlt
-         tmlt_slope  = Reg->ReadFloat("TMLT_SLOPE");          // Slope limiter for Tmlt
          tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");         // offset calibration
-         init_ma(&str_vmlt,Reg->ReadInteger("MA_VMLT"),volumes.Vmlt); // MA filter for Vmlt
+         tmlt_slope  = Reg->ReadFloat("TMLT_SLOPE");          // Slope limiter for Tmlt
 
-         //--------------------------------------------------------------------
-         // The enum i2c_adc starts at NONE (0), which is also the start value
-         // of the first entry of the combo-box.
-         //--------------------------------------------------------------------
-         vhlt_src   = (enum i2c_adc)Reg->ReadInteger("VHLT_SRC");    // source AD channel
-         volumes.Vhlt_simulated = vhlt_src;           // needed for STD
-         vhlt_a     = Reg->ReadFloat("VHLT_A");       // a-coefficient for y=a.x+b
-         vhlt_b     = Reg->ReadFloat("VHLT_B");       // b-coefficient for y=a.x+b
-         vhlt_slope = Reg->ReadFloat("VHLT_SLOPE");   // Slope limiter for Vhlt
-         if (vhlt_src == 0)
-         {
-            // Vhlt is simulated, init. MA filter for Vhlt
-            init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt_start);
-         }
-         else
-         {  // Vhlt is measured from pressure transducer, init. MA filter for Vhlt
-            init_ma(&str_vhlt,Reg->ReadInteger("MA_VHLT"),volumes.Vhlt);
-         } // else
-         vmlt_src   = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");   // source AD channel
-         vmlt_a     = Reg->ReadFloat("VMLT_A");       // a-coefficient for y=a.x+b
-         vmlt_b     = Reg->ReadFloat("VMLT_B");       // b-coefficient for y=a.x+b
-         vmlt_slope = Reg->ReadFloat("VMLT_SLOPE");   // Slope limiter for Vmlt
-
-         ttriac_src = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC"); // source AD channel
-         ttriac_a   = Reg->ReadFloat("TTRIAC_A");     // a-coefficient for y=a.x+b
-         ttriac_b   = Reg->ReadFloat("TTRIAC_B");     // b-coefficient for y=a.x+b
+         vhlt_max    = Reg->ReadFloat("VHLT_MAX");    // Read max. HLT volume
+         vhlt_offset = Reg->ReadFloat("VHLT_OFFSET"); // Read Vmlt Offset
+         vhlt_slope  = Reg->ReadFloat("VHLT_SLOPE");  // Slope limiter for Vhlt
+         vmlt_max    = Reg->ReadFloat("VMLT_MAX");    // Read max. MLT volume
+         vmlt_offset = Reg->ReadFloat("VMLT_OFFSET"); // Read Vmlt Offset
+         vmlt_slope  = Reg->ReadFloat("VMLT_SLOPE");  // Slope limiter for Vmlt
 
          Reg->SaveKey(REGKEY,"ebrew_reg");
          Reg->CloseKey();      // Close the Registry
@@ -1196,7 +1111,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-------------
    tmr.isrstate  = IDLE;              // disable heaters
    tmr.htimer    = tmr.ltimer   = 0;  // init. low timer
-   tmr.time_high = tmr.time_low = 0;  // init. time bit = 1
    tmr.alive     = tmr.alive_tmr = 0; // init. alive timers
    tmr.pid_tmr   = 1; // init. timer that controls PID controller timing
 
@@ -1220,16 +1134,13 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, K_lpf = %6.2f, Ts = %5.2f, ",
                  pid_pars.kc, pid_pars.ti, pid_pars.td, pid_pars.k_lpf, pid_pars.ts);
       fprintf(fd,"PID_Model =%2d\n",pid_pars.pid_model);
-      fprintf(fd,"ma_thlt=%d, ma_tmlt=%d, ma_vhlt=%d, ma_vmlt=%d; ",
-                 str_thlt.N, str_tmlt.N, str_vhlt.N, str_vmlt.N);
       strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
       s[4] = '\0';
-      fprintf(fd,"ebrew CVS Rev. %s\n",s);
-      fprintf(fd,"hw_status = 0x%02X, ms_tot =%2d, fscl_prescaler =%2d\n",hw_status,
-                                                                          std.ms_tot,
-                                                                          fscl_prescaler);
+      fprintf(fd,"ebrew CVS Rev. %s\n\n",s);
+      fprintf(fd,"ms_tot =%2d, fscl_prescaler =%2d\n", std.ms_tot, fscl_prescaler);
       fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
-      fprintf(fd,"Vhlt_a=%7.4f, Vhlt_b=%7.4f, Vmlt_a=%7.4f, Vmlt_b=%7.4f\n\n",vhlt_a,vhlt_b,vmlt_a,vmlt_b);
+      fprintf(fd,"Vhlt_max=%7.4f, Vhlt_offset=%7.4f, Vmlt_max=%7.4f, Vmlt_offset=%7.4f\n\n",
+                 vhlt_max, vhlt_offset, vmlt_max, vmlt_offset);
       fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms STD  Gamma  Vhlt\n");
       fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id       [%]    [L]\n");
       fprintf(fd,"-------------------------------------------------------------------------\n");
@@ -1239,17 +1150,19 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-----------------------------------------
    // Now add all the tasks for the scheduler
    //-----------------------------------------
-   add_task(task_read_thlt , "read_thlt"  ,  50, 1000);
+   add_task(task_read_thlt , "read_thlt"  ,   0, 1000);
    add_task(task_read_tmlt , "read_tmlt"  , 100, 1000);
-   add_task(task_read_vhlt , "read_vhlt"  , 150, 1000);
-   add_task(task_read_vmlt , "read_vmlt"  , 200, 1000);
-   add_task(task_read_lm35 , "read_lm35"  , 250, 1000);
-   add_task(task_pid_ctrl  , "pid_control", 300, (uint16_t)(pid_pars.ts * 1000));
-   add_task(task_update_std, "update_std" , 350, 1000);
-   add_task(task_alive_led , "alive_pump" , 400,  500);
-   add_task(task_log_file  , "wr_log_file", 450, 5000);
+   add_task(task_read_vhlt , "read_vhlt"  , 200, 1000);
+   add_task(task_read_vmlt , "read_vmlt"  , 300, 1000);
+   add_task(task_read_lm35 , "read_lm35"  , 400, 1000);
+   add_task(task_pid_ctrl  , "pid_control", 500, (uint16_t)(pid_pars.ts * 1000));
+   add_task(task_update_std, "update_std" , 600, 1000);
+   add_task(task_alive_led , "alive_pump" , 650,  500);
+   add_task(task_log_file  , "wr_log_file", 800, 5000);
 
    COM_port_read(s); // Read power-up notice from Ebrew hardware
+   ctmoNew.ReadTotalTimeoutConstant = 20; // Now change Read time-out to 20 msec.
+   SetCommTimeouts(hComm, &ctmoNew);
 
    //----------------------------------
    // We came all the way! Start Timers
@@ -1499,10 +1412,6 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->CB_Pid_out2->Checked = (cb_pid_out & PID_OUT_GAS_MODULATE);
          ptmp->CB_Pid_out1Click(this); // Enable/disable labels/Edit fields in form
          ptmp->CB_Pid_out2Click(this); // Enable/disable labels/Edit fields in form
-         dac_a = Reg->ReadFloat("DAC_A");
-         ptmp->DAC_A_Edit->Text     = AnsiString(dac_a);
-         dac_b = Reg->ReadFloat("DAC_B");
-         ptmp->DAC_B_Edit->Text     = AnsiString(dac_b);
 
          if (time_switch)
          {
@@ -1572,10 +1481,6 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
                cb_pid_out |= PID_OUT_GAS_MODULATE;
             } // if
             Reg->WriteInteger("CB_PID_OUT",cb_pid_out);
-            dac_a = ptmp->DAC_A_Edit->Text.ToDouble();
-            Reg->WriteFloat("DAC_A",dac_a);
-            dac_b = ptmp->DAC_B_Edit->Text.ToDouble();
-            Reg->WriteFloat("DAC_B",dac_b);
 
             time_switch = ptmp->RG2->ItemIndex; // 0 = off, 1 = on
             if (time_switch)
@@ -2434,7 +2339,6 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
 {
    TRegistry *Reg = new TRegistry();
    TMeasurements *ptmp;
-   int vhlt_start_old; // previous value of Vhlt_start;
 
    ptmp = new TMeasurements(this);
 
@@ -2447,127 +2351,71 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          //------------------
          // HLT Temperature
          //------------------
-         ptmp->UD_MA_HLT->Position      = Reg->ReadInteger("MA_THLT");
-         ptmp->Thlt_Offset->Text        = Reg->ReadFloat("THLT_OFFSET");
-         ptmp->Thlt_Slope->Text         = Reg->ReadFloat("THLT_SLOPE");
+         ptmp->Thlt_Offset_Edit->Text   = Reg->ReadFloat("THLT_OFFSET");
+         ptmp->Thlt_Slope_Edit->Text    = Reg->ReadFloat("THLT_SLOPE");
          //------------------
          // MLT Temperature
          //------------------
-         ptmp->UD_MA_MLT->Position      = Reg->ReadInteger("MA_TMLT");
-         ptmp->Tmlt_Offset->Text        = Reg->ReadFloat("TMLT_OFFSET");
-         ptmp->Tmlt_Slope->Text         = Reg->ReadFloat("TMLT_SLOPE");
+         ptmp->Tmlt_Offset_Edit->Text   = Reg->ReadFloat("TMLT_OFFSET");
+         ptmp->Tmlt_Slope_Edit->Text    = Reg->ReadFloat("TMLT_SLOPE");
          //------------------
          // HLT Volume
          //------------------
-         ptmp->UD_MA_VHLT->Position     = Reg->ReadInteger("MA_VHLT");
-         volumes.Vhlt_start             = Reg->ReadInteger("VHLT_START");
-         vhlt_start_old                 = volumes.Vhlt_start; // save value
-         ptmp->Vhlt_init_Edit->Text     = AnsiString(volumes.Vhlt_start);
-         vhlt_src                       = (enum i2c_adc)Reg->ReadInteger("VHLT_SRC");
-         ptmp->Vhlt_src->ItemIndex      = vhlt_src;
-         vhlt_a                         = Reg->ReadFloat("VHLT_A");
-         ptmp->Vhlt_a->Text             = vhlt_a;
-         vhlt_b                         = Reg->ReadFloat("VHLT_B");
-         ptmp->Vhlt_b->Text             = vhlt_b;
-         ptmp->Vhlt_Slope->Text         = Reg->ReadFloat("VHLT_SLOPE");
+         ptmp->Vhlt_Max_Edit->Text      = Reg->ReadFloat("VHLT_MAX");
+         ptmp->Vhlt_Offset_Edit->Text   = Reg->ReadFloat("VHLT_OFFSET");
+         ptmp->Vhlt_Slope_Edit->Text    = Reg->ReadFloat("VHLT_SLOPE");
          //------------------
          // MLT Volume
          //------------------
-         ptmp->UD_MA_VMLT->Position     = Reg->ReadInteger("MA_VMLT");
-         vmlt_src                       = (enum i2c_adc)Reg->ReadInteger("VMLT_SRC");
-         ptmp->Vmlt_src->ItemIndex      = vmlt_src;
-         vmlt_a                         = Reg->ReadFloat("VMLT_A");
-         ptmp->Vmlt_a->Text             = vmlt_a;
-         vmlt_b                         = Reg->ReadFloat("VMLT_B");
-         ptmp->Vmlt_b->Text             = vmlt_b;
-         ptmp->Vmlt_Slope->Text         = Reg->ReadFloat("VMLT_SLOPE");
+         ptmp->Vmlt_Max_Edit->Text      = Reg->ReadFloat("VMLT_MAX");
+         ptmp->Vmlt_Offset_Edit->Text   = Reg->ReadFloat("VMLT_OFFSET");
+         ptmp->Vmlt_Slope_Edit->Text    = Reg->ReadFloat("VMLT_SLOPE");
          //-------------------
          // Boil Kettle Volume
          //-------------------
          volumes.Vboil_simulated        = Reg->ReadBool("VBOIL_SIMULATED");
          ptmp->Vboil_simulated->Checked = volumes.Vboil_simulated;
-         //------------------
-         // Triac Temperature
-         //------------------
-         ttriac_src                     = (enum i2c_adc)Reg->ReadInteger("TTRIAC_SRC");
-         ptmp->Ttriac_src->ItemIndex    = ttriac_src;
-         ttriac_a                       = Reg->ReadFloat("TTRIAC_A");
-         ptmp->Ttriac_a->Text           = ttriac_a;
-         ttriac_b                       = Reg->ReadFloat("TTRIAC_B");
-         ptmp->Ttriac_b->Text           = ttriac_b;
-
-         ptmp->Vhlt_srcChange(this);   // enable/disable fields in form
-         ptmp->Vmlt_srcChange(this);   // enable/disable fields in form
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
             //------------------
             // HLT Temperature
             //------------------
-            init_ma(&str_thlt,ptmp->UD_MA_HLT->Position,thlt); // order of MA filter
-            Reg->WriteInteger("MA_THLT",ptmp->UD_MA_HLT->Position);
-            thlt_offset = ptmp->Thlt_Offset->Text.ToDouble();
+            thlt_offset = ptmp->Thlt_Offset_Edit->Text.ToDouble();
             Reg->WriteFloat("THLT_OFFSET",thlt_offset);
-            thlt_slope = ptmp->Thlt_Slope->Text.ToDouble();
+            thlt_slope = ptmp->Thlt_Slope_Edit->Text.ToDouble();
             Reg->WriteFloat("THLT_SLOPE",thlt_slope);
             //------------------
             // MLT Temperature
             //------------------
-            init_ma(&str_tmlt,ptmp->UD_MA_MLT->Position,tmlt); // order of MA filter
-            Reg->WriteInteger("MA_TMLT",ptmp->UD_MA_MLT->Position);
-            tmlt_offset = ptmp->Tmlt_Offset->Text.ToDouble();
+            tmlt_offset = ptmp->Tmlt_Offset_Edit->Text.ToDouble();
             Reg->WriteFloat("TMLT_OFFSET",tmlt_offset);
-            tmlt_slope = ptmp->Tmlt_Slope->Text.ToDouble();
+            tmlt_slope = ptmp->Tmlt_Slope_Edit->Text.ToDouble();
             Reg->WriteFloat("TMLT_SLOPE",tmlt_slope);
             //------------------
             // HLT Volume
             //------------------
-            init_ma(&str_vhlt,ptmp->UD_MA_VHLT->Position,volumes.Vhlt); // order of MA filter
-            Reg->WriteInteger("MA_VHLT",ptmp->UD_MA_VHLT->Position);
-            volumes.Vhlt_start = ptmp->Vhlt_init_Edit->Text.ToInt();
-            Reg->WriteInteger("VHLT_START",volumes.Vhlt_start);
-            vhlt_src = (enum i2c_adc)ptmp->Vhlt_src->ItemIndex;
-            Reg->WriteInteger("VHLT_SRC",vhlt_src);
-            volumes.Vhlt_simulated = vhlt_src;
-            if ((vhlt_src == 0) && (volumes.Vhlt_start != vhlt_start_old))
-            {  // Update Vhlt if start value has changed and Vhlt is simulated
-               volumes.Vhlt += volumes.Vhlt_start - vhlt_start_old;
-            } // if
-            vhlt_a = ptmp->Vhlt_a->Text.ToDouble();
-            Reg->WriteFloat("VHLT_A",vhlt_a);
-            vhlt_b = ptmp->Vhlt_b->Text.ToDouble();
-            Reg->WriteFloat("VHLT_B",vhlt_b);
-            vhlt_slope = ptmp->Vhlt_Slope->Text.ToDouble();
+            vhlt_max = ptmp->Vhlt_Max_Edit->Text.ToDouble();
+            Reg->WriteFloat("VHLT_MAX",vhlt_max);
+            vhlt_offset = ptmp->Vhlt_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("VHLT_OFFSET",vhlt_offset);
+            vhlt_slope = ptmp->Vhlt_Slope_Edit->Text.ToDouble();
             Reg->WriteFloat("VHLT_SLOPE",vhlt_slope);
             //------------------
             // MLT Volume
             //------------------
-            init_ma(&str_vmlt,ptmp->NMA_edit->Text.ToInt(),volumes.Vmlt); // order of MA filter
-            Reg->WriteInteger("MA_VMLT",ptmp->NMA_edit->Text.ToInt());
-            vmlt_src = (enum i2c_adc)ptmp->Vmlt_src->ItemIndex;
-            Reg->WriteInteger("VMLT_SRC",vmlt_src);
-            vmlt_a = ptmp->Vmlt_a->Text.ToDouble();
-            Reg->WriteFloat("VMLT_A",vmlt_a);
-            vmlt_b = ptmp->Vmlt_b->Text.ToDouble();
-            Reg->WriteFloat("VMLT_B",vmlt_b);
-            vmlt_slope = ptmp->Vmlt_Slope->Text.ToDouble();
+            vmlt_max = ptmp->Vmlt_Max_Edit->Text.ToDouble();
+            Reg->WriteFloat("VMLT_MAX",vmlt_max);
+            vmlt_offset = ptmp->Vmlt_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("VMLT_OFFSET",vmlt_offset);
+            vmlt_slope = ptmp->Vmlt_Slope_Edit->Text.ToDouble();
             Reg->WriteFloat("VMLT_SLOPE",vmlt_slope);
             //-------------------
             // Boil Kettle Volume
             //-------------------
             volumes.Vboil_simulated = ptmp->Vboil_simulated->Checked;
             Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
-            //------------------
-            // Triac Temperature
-            //------------------
-            ttriac_src = (enum i2c_adc)ptmp->Ttriac_src->ItemIndex;
-            Reg->WriteInteger("TTRIAC_SRC",ttriac_src);
-            ttriac_a = ptmp->Ttriac_a->Text.ToDouble();
-            Reg->WriteFloat("TTRIAC_A",ttriac_a);
-            ttriac_b = ptmp->Ttriac_b->Text.ToDouble();
-            Reg->WriteFloat("TTRIAC_B",ttriac_b);
-
-         } // if
+          } // if
          Reg->CloseKey(); // Close the Registry
       } // if
    } // try

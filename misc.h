@@ -6,6 +6,11 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.21  2013/06/22 23:04:19  Emile
+// - Second intermediate version: scheduler added and timer interrupt divided
+//   over a number of tasks.
+// - Version works with Ebrew hardware, task duration needs to be optimised!
+//
 // Revision 1.20  2013/06/16 14:39:19  Emile
 // Intermediate version for new Ebrew 2.0 USB hardware:
 // - Hardware settings Dialog: COM Port + Settings added + LEDx removed
@@ -187,17 +192,6 @@ extern "C" {
 #define LOG_LAST_LINE (3)
 #define COLON         ","
 
-#define ALIVE_TICKS (10) // timer for 0.5 sec. LED
-
-// Bit assignments of IO port for ebrew hardware. The order of PUMPb,
-// HEATERb and ALIVEb bits is the same as in the ebrew hardware
-// to make coding easier.
-//-------------------------------------------------------------------
-#define PUMPb   (0x01)
-#define HEATERb (0x02)
-#define ALIVEb  (0x04)
-#define BURNERb (0x08)
-
 typedef struct _log_struct
 {
    char          brew_date[20];  /* Brew date */
@@ -272,8 +266,6 @@ typedef struct _timer_vars
    int  isrstate;  // State of the Interrupt Service Routine
    int  alive;     // Alive bit (bit 1 of IO port)
    int  alive_tmr; // Toggle to indicate program is still alive
-   int  time_high; // The number of clock-ticks to set the heater on
-   int  time_low;  // The number of clock-ticks to set the heater off
    int  pid_tmr;   // Timer for when to run PID controller
 } timer_vars;
 
@@ -292,12 +284,10 @@ typedef struct _volume_struct
    double Vhlt;       // Volume of HLT in litres
    double Vmlt;       // Volume of MLT in litres
    double Vboil;      // Volume of Boil kettle in litres
-   int    Vhlt_start; // Starting volume of HLT
    double Vhlt_old;   // Prev. value of Vhlt, used in STD
    double Vmlt_old;   // Prev. value of Vmlt, used in STD
    double Vboil_old;  // Prev. value of Vboil, used in STD
    // Assumption is made here that Vmlt is always measured.
-   int    Vhlt_simulated;  // true = Vhlt is not measured, but calculated
    int    Vboil_simulated; // true = Vboil is not measured, but calculated
 } volume_struct;
 

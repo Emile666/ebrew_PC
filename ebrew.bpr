@@ -7,7 +7,7 @@
     <OBJFILES value="O\ebrew.obj O\Unit1.obj O\PID_Settings_Dialog.obj O\FixParamsDialog.obj 
       O\I2CSettingsDialog.obj O\misc.obj O\PID_REG.obj O\EditMashScheme.obj 
       O\ViewMashProgressForm.obj O\Sparge_Settings.obj O\RestoreSettings.obj 
-      O\VersionAwareAbout.obj O\MeasurementsDialog.obj O\scheduler.obj O\tasks.obj"/>
+      O\VersionAwareAbout.obj O\MeasurementsDialog.obj O\scheduler.obj"/>
     <RESFILES value="ebrew.res"/>
     <IDLFILES value=""/>
     <IDLGENFILES value=""/>
@@ -71,7 +71,6 @@
       <FILE FILENAME="VersionAwareAbout.cpp" FORMNAME="VersionAwareAbout" UNITNAME="VersionAwareAbout" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="MeasurementsDialog.cpp" FORMNAME="Measurements" UNITNAME="MeasurementsDialog" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="scheduler.c" FORMNAME="" UNITNAME="scheduler" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
-      <FILE FILENAME="tasks.c" FORMNAME="" UNITNAME="tasks" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
   </FILELIST>
   <BUILDTOOLS>
   </BUILDTOOLS>
