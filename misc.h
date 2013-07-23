@@ -6,6 +6,12 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.22  2013/07/21 22:32:47  Emile
+// - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
+// - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
+// - Registry: several parameters removed + parameters renamed
+// - Ttriac & DAC code & parameters removed
+//
 // Revision 1.21  2013/06/22 23:04:19  Emile
 // - Second intermediate version: scheduler added and timer interrupt divided
 //   over a number of tasks.
@@ -258,16 +264,6 @@ typedef struct _std_struct
    int    timer4;    // Timer for state 'Empty Heat Exchanger'
    int    timer5;    // Timer for boiling time
 } std_struct;
-
-typedef struct _timer_vars
-{
-   int  htimer;    // Timer to count time that heater is on
-   int  ltimer;    // Timer to count time that heater is off
-   int  isrstate;  // State of the Interrupt Service Routine
-   int  alive;     // Alive bit (bit 1 of IO port)
-   int  alive_tmr; // Toggle to indicate program is still alive
-   int  pid_tmr;   // Timer for when to run PID controller
-} timer_vars;
 
 #define MAX_MA (50)
 typedef struct _ma

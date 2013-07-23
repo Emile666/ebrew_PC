@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.62  2013/07/21 22:32:47  Emile
+// - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
+// - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
+// - Registry: several parameters removed + parameters renamed
+// - Ttriac & DAC code & parameters removed
+//
 // Revision 1.61  2013/06/22 23:04:18  Emile
 // - Second intermediate version: scheduler added and timer interrupt divided
 //   over a number of tasks.
@@ -545,14 +551,11 @@ void task_read_lm35(void)
 {
     char   s[MAX_BUF_READ];
 
-    if (MainForm->ttriac_src != NONE) // get real value from Ebrew hardware
-    {
-        MainForm->COM_port_write("A0\n"); // A0 = LM35
-        MainForm->COM_port_read(s);       // Read LM35 Volume from Ebrew hardware
-        if (!strncmp(s,"Lm35=",5)) MainForm->Ttriac_lbl->Font->Color = clLime;
-        else                       MainForm->Ttriac_lbl->Font->Color = clRed;
-        MainForm->ttriac  = atof(&s[5]);
-    } // if
+    MainForm->COM_port_write("A0\n"); // A0 = LM35
+    MainForm->COM_port_read(s);       // Read LM35 Volume from Ebrew hardware
+    if (!strncmp(s,"Lm35=",5)) MainForm->Ttriac_lbl->Font->Color = clLime;
+    else                       MainForm->Ttriac_lbl->Font->Color = clRed;
+    MainForm->ttriac  = atof(&s[5]);
     if (MainForm->swfx.ttriac_sw)
     {  // Switch & Fix
        MainForm->ttriac = MainForm->swfx.ttriac_fx;
@@ -704,7 +707,6 @@ void task_log_file(void)
 {
    FILE   *fd;
    struct time t1;
-   char   s[MAX_BUF_READ];
 
    if ((fd = fopen(LOGFILE,"a")) != NULL)
    {
@@ -860,7 +862,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
    char s[50];
    ebrew_revision   = "$Revision$";
-   //ShowDataGraphs   = new TShowDataGraphs(this);   // create modeless Dialog
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -869,63 +870,67 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
    try
     {
        if (!Reg->KeyExists(REGKEY))
-       {
-          // No entry in Registry, create all keys
+       {  // No entry in Registry, create all keys
           Reg->CreateKey(REGKEY); // Create key if it does not exist yet
           Reg->OpenKey(REGKEY,FALSE);
+
+          //------------------------------------
+          // Ebrew 2.0 Hardware Settings Dialog
+          //------------------------------------
+          Reg->WriteInteger("SYSTEM_MODE",GAS_MODULATING);
           Reg->WriteInteger("USB_COM_PORT",3);   // Virtual USB COM port number
           Reg->WriteString("COM_PORT_SETTINGS","19200,N,8,1"); // COM port settings
-          Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
-          fscl_prescaler = 10;
-          Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler); // set fscl to 20 kHz
+          Reg->WriteBool("CB_DEBUG_COM_PORT",false);
+          Reg->WriteInteger("FSCL_PRESCALER",10); // set fscl to 20 kHz
+          Reg->WriteBool("CB_I2C_ERR_MSG",true);
+
+          Reg->WriteInteger("GAS_NON_MOD_LLIMIT",30);
+          Reg->WriteInteger("GAS_NON_MOD_HLIMIT",35);
+          Reg->WriteInteger("GAS_MOD_PWM_LLIMIT",2);
+          Reg->WriteInteger("GAS_MOD_PWM_HLIMIT",4);
+          Reg->WriteInteger("TTRIAC_LLIM",65);
+          Reg->WriteInteger("TTRIAC_HLIM",75);
+
+          //------------------------------------
           // PID Settings Dialog
+          //------------------------------------
+          Reg->WriteInteger("PID_Model",2);      // Takahashi PID Controller
           Reg->WriteFloat("TS",TS_INIT);         // Set Default sample time
           Reg->WriteFloat("Kc",KC_INIT);         // Controller gain
           Reg->WriteFloat("Ti",TI_INIT);         // Ti constant
           Reg->WriteFloat("Td",TD_INIT);         // Td constant
           Reg->WriteFloat("K_LPF",0);            // LPF filter time-constant
+          Reg->WriteInteger("STC_N",1);          // order N for system identification
+          Reg->WriteInteger("STC_TD",0); // Time-Delay estimate for system identification
           Reg->WriteFloat("TSET_HLT_SLOPE",1.0); // Slope Limit for Tset_HLT
-          Reg->WriteFloat("TOffset",1.0);        // HLT - MLT heat loss
-          Reg->WriteFloat("TOffset2",-0.5);      // offset for early start of mash timers
-          Reg->WriteInteger("PID_Model",2);      // Takahashi PID Controller
-          sys_id_pars.N = 1; // order N for system identification
-          Reg->WriteInteger("STC_N",sys_id_pars.N);   // [1,2,3]
-          sys_id_pars.stc_td  = 0; // Time-Delay estimate for system identification
-          Reg->WriteInteger("STC_TD",sys_id_pars.stc_td);
           sys_id_pars.stc_adf = 0; // true = use Adaptive directional forgetting
           Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
-          Reg->WriteInteger("BURNER_HHYST",35);  // Gas Burner Hysteresis High Limit
-          Reg->WriteInteger("BURNER_LHYST",30);  // Gas Burner Hysteresis Low Limit
-          // Send PID-Output to the various heaters / burners
-          cb_pid_out = 0; // The PID-output is not connected to anything
-          Reg->WriteInteger("CB_PID_OUT",cb_pid_out);
+          cb_pid_dbg       = false; // no PID debug to screen (not a Reg. variable)
+          PID_dbg->Visible = false;
 
-          ttriac_hlim = 70; // Upper limit for triac temp.
-          Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
-          ttriac_llim = 60; // Lower limit for triac temp.
-          Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
-          cb_i2c_err_msg          = true;
-          Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
-          cb_debug_com_port       = false;
-          Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
+          //------------------------------------
+          // Sparge, Mash & STD Settings Dialog
+          //------------------------------------
+          // Sparge Settings
+          Reg->WriteInteger("MASH_VOL",85);    // Total Mash Volume (L)
+          Reg->WriteInteger("SP_VOL",35);      // Total Sparge Volume (L)
+          Reg->WriteInteger("SP_BATCHES",3);   // #Sparge Batches
+          Reg->WriteInteger("SP_TIME",20);     // Time between sparge batches
+          Reg->WriteInteger("BOIL_TIME",120);  // Total Boil Time (min.)
+          // Mash Settings
+          Reg->WriteInteger("ms_idx",MAX_MS);  // init. index in mash scheme
+          Reg->WriteFloat("TOffset",0.5);      // Compensation HLT-MLT heat-loss
+          Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
+          Reg->WriteInteger("PREHEAT_TIME",0); // PREHEAT_TIME [sec]
+          // STD Settings
+          Reg->WriteFloat("VMLT_EMPTY", 8.0);  // Vmlt_EMPTY [L]
+          Reg->WriteInteger("TO_XSEC",1);      // TIMEOUT_xSEC [sec]
+          Reg->WriteInteger("TO3",300);        // TIMEOUT3 [sec]
+          Reg->WriteInteger("TO4",20);         // TIMEOUT4 [sec
 
-          known_hw_devices = DIG_IO_LSB_OK | MAX1238_OK | LM92_1_OK | LM92_2_OK;
-
-          // Init values for mash scheme variables
-          Reg->WriteInteger("ms_idx",MAX_MS);   // init. index in mash scheme
-          // Init values for Sparge Settings
-          Reg->WriteInteger("SP_BATCHES",5);    // #Sparge Batches
-          Reg->WriteInteger("SP_TIME",20);      // Time between sparge batches
-          Reg->WriteInteger("MASH_VOL",30);     // Total Mash Volume (L)
-          Reg->WriteInteger("SP_VOL",50);       // Total Sparge Volume (L)
-          Reg->WriteInteger("BOIL_TIME",120);    // Total Boil Time (min.)
-          // Init values for STD
-          Reg->WriteInteger("PREHEAT_TIME",0);// PREHEAT_TIME [sec]
-          Reg->WriteFloat("VMLT_EMPTY", 3.0); // Vmlt_EMPTY [L]
-          Reg->WriteInteger("TO_XSEC",1);     // TIMEOUT_xSEC [sec]
-          Reg->WriteInteger("TO3",300);       // TIMEOUT3 [sec]
-          Reg->WriteInteger("TO4",20);        // TIMEOUT4 [sec
-          // Measurements
+          //------------------------------------
+          // Measurements Dialog
+          //------------------------------------
           Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
           Reg->WriteFloat("THLT_SLOPE",2.0);   // Slope limit for Thlt °C/sec.
           Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
@@ -938,8 +943,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
           volumes.Vboil_simulated = true;
           Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
-          cb_pid_dbg       = false; // no PID debug to screen
-          PID_dbg->Visible = false;
        } // if
        Reg->CloseKey();
        delete Reg;
@@ -979,8 +982,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
   ------------------------------------------------------------------*/
 {
    TRegistry *Reg = new TRegistry();
-   FILE *fd;   // Log File Descriptor
-   int  i;     // temp. variable
+   FILE *fd;    // Log File Descriptor
+   int  i;      // temp. variable
    char s[255]; // Temp. string
 
    //----------------------------------------
@@ -991,43 +994,54 @@ void __fastcall TMainForm::Main_Initialisation(void)
       if (Reg->KeyExists(REGKEY))
       {
          Reg->OpenKey(REGKEY,FALSE);
-         known_hw_devices = Reg->ReadInteger("KNOWN_HW_DEVICES");
-         pid_pars.ts = Reg->ReadFloat("TS");  // Read TS from registry
-         pid_pars.kc = Reg->ReadFloat("Kc");  // Read Kc from registry
-         pid_pars.ti = Reg->ReadFloat("Ti");  // Read Ti from registry
-         pid_pars.td = Reg->ReadFloat("Td");  // Read Td from registry
-         pid_pars.k_lpf      = Reg->ReadFloat("K_LPF");
-         tset_hlt_slope      = Reg->ReadFloat("TSET_HLT_SLOPE");
+
+         //------------------------------------
+         // Ebrew 2.0 Hardware Settings Dialog
+         //------------------------------------
+         system_mode       = Reg->ReadInteger("SYSTEM_MODE");
+         usb_com_port_nr   = Reg->ReadInteger("USB_COM_PORT");   // Virtual USB COM port number
+         strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
+         cb_debug_com_port = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
+         fscl_prescaler    = Reg->ReadInteger("FSCL_PRESCALER"); // I2C SCL Frequency
+         cb_i2c_err_msg    = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
+
+         gas_non_mod_llimit = Reg->ReadInteger("GAS_NON_MOD_LLIMIT");
+         gas_non_mod_hlimit = Reg->ReadInteger("GAS_NON_MOD_HLIMIT");
+         gas_mod_pwm_llimit = Reg->ReadInteger("GAS_MOD_PWM_LLIMIT");
+         gas_mod_pwm_hlimit = Reg->ReadInteger("GAS_MOD_PWM_HLIMIT");
+         ttriac_llim        = Reg->ReadInteger("TTRIAC_LLIM");
+         ttriac_hlim        = Reg->ReadInteger("TTRIAC_HLIM");
+         tm_triac->SetPoint->Value = ttriac_hlim;  // update object on screen
+
+         //------------------------------------
+         // PID Settings Dialog
+         //------------------------------------
          pid_pars.pid_model  = Reg->ReadInteger("PID_Model"); // [0..3]
+         pid_pars.ts         = Reg->ReadFloat("TS");  // Read TS from registry
+         pid_pars.kc         = Reg->ReadFloat("Kc");  // Read Kc from registry
+         pid_pars.ti         = Reg->ReadFloat("Ti");  // Read Ti from registry
+         pid_pars.td         = Reg->ReadFloat("Td");  // Read Td from registry
+         pid_pars.k_lpf      = Reg->ReadFloat("K_LPF");
          sys_id_pars.N       = Reg->ReadInteger("STC_N");     // [1,2,3]
          sys_id_pars.stc_td  = Reg->ReadInteger("STC_TD");    // [0..100]
+         tset_hlt_slope      = Reg->ReadFloat("TSET_HLT_SLOPE");
          sys_id_pars.stc_adf = Reg->ReadBool("STC_ADF");      // true = use ADF
-         pid_pars.burner_hyst_h = Reg->ReadInteger("BURNER_HHYST");
-         pid_pars.burner_hyst_l = Reg->ReadInteger("BURNER_LHYST");
-         // Send PID-Output to the various heaters / burners
-         cb_pid_out = Reg->ReadInteger("CB_PID_OUT");
 
-         ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM"); // Read high limit
-         tm_triac->SetPoint->Value = ttriac_hlim;       // update object on screen
-         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM"); // Read low limit
+         //------------------------------------
+         // Measurements Dialog
+         //------------------------------------
+         thlt_offset = Reg->ReadFloat("THLT_OFFSET"); // offset calibration
+         thlt_slope  = Reg->ReadFloat("THLT_SLOPE");  // Slope limiter for Thlt
+         tmlt_offset = Reg->ReadFloat("TMLT_OFFSET"); // offset calibration
+         tmlt_slope  = Reg->ReadFloat("TMLT_SLOPE");  // Slope limiter for Tmlt
 
-         volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
-         cb_i2c_err_msg          = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
-         cb_debug_com_port       = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
-         usb_com_port_nr         = Reg->ReadInteger("USB_COM_PORT");   // Virtual USB COM port number
-         strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
-
-         thlt_offset = Reg->ReadFloat("THLT_OFFSET");         // offset calibration
-         thlt_slope  = Reg->ReadFloat("THLT_SLOPE");          // Slope limiter for Thlt
-         tmlt_offset = Reg->ReadFloat("TMLT_OFFSET");         // offset calibration
-         tmlt_slope  = Reg->ReadFloat("TMLT_SLOPE");          // Slope limiter for Tmlt
-
-         vhlt_max    = Reg->ReadFloat("VHLT_MAX");    // Read max. HLT volume
          vhlt_offset = Reg->ReadFloat("VHLT_OFFSET"); // Read Vmlt Offset
+         vhlt_max    = Reg->ReadFloat("VHLT_MAX");    // Read max. HLT volume
          vhlt_slope  = Reg->ReadFloat("VHLT_SLOPE");  // Slope limiter for Vhlt
-         vmlt_max    = Reg->ReadFloat("VMLT_MAX");    // Read max. MLT volume
          vmlt_offset = Reg->ReadFloat("VMLT_OFFSET"); // Read Vmlt Offset
+         vmlt_max    = Reg->ReadFloat("VMLT_MAX");    // Read max. MLT volume
          vmlt_slope  = Reg->ReadFloat("VMLT_SLOPE");  // Slope limiter for Vmlt
+         volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
 
          Reg->SaveKey(REGKEY,"ebrew_reg");
          Reg->CloseKey();      // Close the Registry
@@ -1085,8 +1099,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          Reg->OpenKey(REGKEY,FALSE);
          i = Reg->ReadInteger("ms_idx");
          if ((i < MAX_MS) && (power_up_flag == true))
-         {
-            //--------------------------------------------------------------
+         {  //--------------------------------------------------------------
             // ebrew program was terminated abnormally. Open a dialog box,
             // present entries from the log file and ask to restore settings
             // of a particular log-file entry. If yes, restore settings.
@@ -1106,20 +1119,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
       ShowMessage(E.Message);
    } // catch
 
-   //-------------
-   // Init. timers
-   //-------------
-   tmr.isrstate  = IDLE;              // disable heaters
-   tmr.htimer    = tmr.ltimer   = 0;  // init. low timer
-   tmr.alive     = tmr.alive_tmr = 0; // init. alive timers
-   tmr.pid_tmr   = 1; // init. timer that controls PID controller timing
-
    //--------------------------------------------------------------------------
    // Init. the position of all valves & the Pump to OFF (closed).
    // No Manual Override of valves yet.
    //--------------------------------------------------------------------------
    std_out = 0x0000;
-   lsb_io  = 0x00; // disable ALIVE-led and PUMP
 
    // Init logfile
    if ((fd = fopen(LOGFILE,"a")) == NULL)
@@ -1136,10 +1140,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fprintf(fd,"PID_Model =%2d\n",pid_pars.pid_model);
       strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
       s[4] = '\0';
-      fprintf(fd,"ebrew CVS Rev. %s\n\n",s);
+      fprintf(fd,"ebrew CVS Rev. %s\n",s);
       fprintf(fd,"ms_tot =%2d, fscl_prescaler =%2d\n", std.ms_tot, fscl_prescaler);
       fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
-      fprintf(fd,"Vhlt_max=%7.4f, Vhlt_offset=%7.4f, Vmlt_max=%7.4f, Vmlt_offset=%7.4f\n\n",
+      fprintf(fd,"Vhlt_max=%5.1f, Vhlt_offset=%5.1f, Vmlt_max=%5.1f, Vmlt_offset=%5.1f\n\n",
                  vhlt_max, vhlt_offset, vmlt_max, vmlt_offset);
       fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms STD  Gamma  Vhlt\n");
       fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id       [%]    [L]\n");
@@ -1175,13 +1179,64 @@ void __fastcall TMainForm::Main_Initialisation(void)
 } // Main_Initialisation()
 //---------------------------------------------------------------------------
 
+void __fastcall TMainForm::Init_Sparge_Settings(void)
+/*------------------------------------------------------------------
+  Purpose  : This function Initialises the sparge struct with the
+             values from the Registry. Call this method during power-up
+             and after a change in Sparge Settings parameters.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+  TRegistry *Reg = new TRegistry();
+
+  // Get Sparge  & STD Settings from the Registry
+  try
+  {
+     if (Reg->KeyExists(REGKEY))
+     {
+        Reg->OpenKey(REGKEY,FALSE);
+        // Sparge Settings
+        sp.mash_vol     = Reg->ReadInteger("MASH_VOL");   // Total Mash Volume (L)
+        sp.sp_vol       = Reg->ReadInteger("SP_VOL");     // Total Sparge Volume (L)
+        sp.sp_batches   = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
+        sp.sp_time      = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
+        sp.boil_time    = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
+        sp.sp_vol_batch = ((double)(sp.sp_vol)) / sp.sp_batches;
+        // Mash Settings
+        sp.temp_offset  = Reg->ReadFloat("TOffset");
+        sp.temp_offset2 = Reg->ReadFloat("TOffset2");
+        sp.ph_timer     = Reg->ReadInteger("PREHEAT_TIME");
+        // STD Settings
+        //---------------------------------------------------------------
+        // Now calculate the internal values for the timers. Since the
+        // State Transition Diagram is called every second, every 'tick'
+        // is therefore a second.
+        // SP_TIME [min.], BOIL_TIME [min.]
+        //---------------------------------------------------------------
+        sp.sp_time_ticks   = sp.sp_time * 60;
+        sp.boil_time_ticks = sp.boil_time * 60;
+        sp.vmlt_empty      = Reg->ReadFloat("VMLT_EMPTY");
+        sp.to_xsec         = Reg->ReadInteger("TO_XSEC");
+        sp.to3             = Reg->ReadInteger("TO3");
+        sp.to4             = Reg->ReadInteger("TO4");
+
+        Reg->CloseKey(); // Close the Registry
+        delete Reg;
+     } // if
+  } // try
+  catch (ERegistryException &E)
+  {
+     ShowMessage(E.Message);
+     delete Reg;
+     return;
+  } // catch
+} // TMainForm::Init_Sparge_Settings()
+//---------------------------------------------------------------------------
+
 /*------------------------------------------------------------------
   Purpose  : This is the main Timer function which is called every
-             50 milliseconds. This can be seen as the main control
-             loop of the program. It utilises time-slices to divide
-             computations over time.
-             After 60 seconds (1200 calls) the main control loop
-             starts again
+             50 milliseconds. It is only used for the interrupt part
+             of the task-scheduler.
   Returns  : None
   ------------------------------------------------------------------*/
 void __fastcall TMainForm::T50msecTimer(TObject *Sender)
@@ -1383,7 +1438,6 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
    char tmp[255]; // temp. array
 
    ptmp = new TPID_Settings(this);
-
    // Get PID Controller setting from the Registry
    try
    {
@@ -1391,6 +1445,7 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
       {
          Reg->OpenKey(REGKEY,FALSE);
          // Read parameters from registry
+         ptmp->PID_Model->ItemIndex = Reg->ReadInteger("PID_Model");
          ptmp->TS_edit->Text        = AnsiString(Reg->ReadFloat("TS"));
          ptmp->Kc_Edit->Text        = AnsiString(Reg->ReadFloat("Kc"));
          ptmp->Ti_Edit->Text        = AnsiString(Reg->ReadFloat("Ti"));
@@ -1398,20 +1453,10 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->K_LPF_Edit->Text     = AnsiString(Reg->ReadFloat("K_LPF"));
          ptmp->STC_N_Edit->Text     = AnsiString(Reg->ReadInteger("STC_N"));
          ptmp->STC_TD_Edit->Text    = AnsiString(Reg->ReadInteger("STC_TD"));
-         ptmp->CB_adf->Checked      = Reg->ReadBool("STC_ADF");
          ptmp->Tset_hlt_slope->Text = AnsiString(Reg->ReadFloat("TSET_HLT_SLOPE"));
-         ptmp->PID_Model->ItemIndex = Reg->ReadInteger("PID_Model");
-         ptmp->Burner_On->Text      = AnsiString(Reg->ReadInteger("BURNER_HHYST"));
-         ptmp->Burner_Off->Text     = AnsiString(Reg->ReadInteger("BURNER_LHYST"));
+         ptmp->CB_adf->Checked      = Reg->ReadBool("STC_ADF");
          ptmp->RG2->ItemIndex       = time_switch; // Value of time-switch [off, on]
          ptmp->CB_PID_dbg->Checked  = cb_pid_dbg;   // PID debug info
-         // Send PID-Output to the various heaters / burners
-         cb_pid_out = Reg->ReadInteger("CB_PID_OUT");
-         ptmp->CB_Pid_out0->Checked = (cb_pid_out & PID_OUT_ELECTRIC);
-         ptmp->CB_Pid_out1->Checked = (cb_pid_out & PID_OUT_GAS_NON_MOD);
-         ptmp->CB_Pid_out2->Checked = (cb_pid_out & PID_OUT_GAS_MODULATE);
-         ptmp->CB_Pid_out1Click(this); // Enable/disable labels/Edit fields in form
-         ptmp->CB_Pid_out2Click(this); // Enable/disable labels/Edit fields in form
 
          if (time_switch)
          {
@@ -1423,64 +1468,52 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
-            pid_pars.ts = ptmp->TS_edit->Text.ToDouble();
+            pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
+            Reg->WriteInteger("PID_Model",pid_pars.pid_model);
+            pid_pars.ts        = ptmp->TS_edit->Text.ToDouble();
             Reg->WriteFloat("TS",pid_pars.ts);
-            pid_pars.kc = ptmp->Kc_Edit->Text.ToDouble();
+            pid_pars.kc        = ptmp->Kc_Edit->Text.ToDouble();
             Reg->WriteFloat("Kc",pid_pars.kc);
-            pid_pars.ti = ptmp->Ti_Edit->Text.ToDouble();
+            pid_pars.ti        = ptmp->Ti_Edit->Text.ToDouble();
             Reg->WriteFloat("Ti",pid_pars.ti);
-            pid_pars.td = ptmp->Td_Edit->Text.ToDouble();
+            pid_pars.td        = ptmp->Td_Edit->Text.ToDouble();
             Reg->WriteFloat("Td",pid_pars.td);
-            pid_pars.k_lpf = ptmp->K_LPF_Edit->Text.ToDouble();
+            pid_pars.k_lpf     = ptmp->K_LPF_Edit->Text.ToDouble();
             Reg->WriteFloat("K_LPF",pid_pars.k_lpf);
-            sys_id_pars.N  = ptmp->STC_N_Edit->Text.ToInt();
-            if ((sys_id_pars.N < 1) || (sys_id_pars.N > 3)) sys_id_pars.N = 1;
+            sys_id_pars.N      = ptmp->STC_N_Edit->Text.ToInt();
+            if ((sys_id_pars.N < 1) || (sys_id_pars.N > 3))
+            {
+                sys_id_pars.N = 1;
+            } // if
             Reg->WriteInteger("STC_N",sys_id_pars.N);
             sys_id_pars.stc_td = ptmp->STC_TD_Edit->Text.ToInt();
-            if ((sys_id_pars.stc_td < 0) || (sys_id_pars.stc_td > MAX_MA)) sys_id_pars.stc_td = 0;
+            if ((sys_id_pars.stc_td < 0) || (sys_id_pars.stc_td > MAX_MA))
+            {
+                sys_id_pars.stc_td = 0;
+            } // if
             Reg->WriteInteger("STC_TD",sys_id_pars.stc_td);
+            tset_hlt_slope     = ptmp->Tset_hlt_slope->Text.ToDouble();
+            Reg->WriteFloat("TSET_HLT_SLOPE",tset_hlt_slope);
             if (ptmp->CB_adf->Checked)
                  sys_id_pars.stc_adf = 1; // use adaptive directional forgetting
             else sys_id_pars.stc_adf = 0; // NO ADF
             Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
-            tset_hlt_slope = ptmp->Tset_hlt_slope->Text.ToDouble();
-            Reg->WriteFloat("TSET_HLT_SLOPE",tset_hlt_slope);
-            pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
-            pid_pars.burner_hyst_h = ptmp->Burner_On->Text.ToInt();
-            Reg->WriteInteger("BURNER_HHYST",pid_pars.burner_hyst_h);
-            pid_pars.burner_hyst_l = ptmp->Burner_Off->Text.ToInt();
-            Reg->WriteInteger("BURNER_LHYST",pid_pars.burner_hyst_l);
+            cb_pid_dbg         = ptmp->CB_PID_dbg->Checked; // PID debug info
+            PID_dbg->Visible = cb_pid_dbg;
+
             switch (pid_pars.pid_model)
             {
                case 0 : // Self-Tuning Takahashi, N = 1 .. 3
                         init_pid2(&pid_pars,&sys_id_pars);
                         break;
-               case 1 : init_pid3(&pid_pars);   // Type A with D-filtering controller
+               case 1 : init_pid3(&pid_pars);   // Type A with D-filtering
                         break;
-               case 2 : init_pid4(&pid_pars);   // Takahashi Type C controller
+               case 2 : init_pid4(&pid_pars);   // Takahashi Type C
                         break;
-               default: pid_pars.pid_model = 2; // Takahashi Type C controller
+               default: pid_pars.pid_model = 2; // Takahashi Type C
                         init_pid4(&pid_pars);
                         break;
             } // switch
-            Reg->WriteInteger("PID_Model",pid_pars.pid_model);
-            cb_pid_dbg  = ptmp->CB_PID_dbg->Checked; // PID debug info
-            PID_dbg->Visible = cb_pid_dbg;
-
-            cb_pid_out = 0x00; // value in Registry
-            if (ptmp->CB_Pid_out0->Checked)
-            {  // Electrical Heating Element
-               cb_pid_out |= PID_OUT_ELECTRIC;
-            } // if
-            if (ptmp->CB_Pid_out1->Checked)
-            {  // Non-modulating Gas-Burner
-               cb_pid_out |= PID_OUT_GAS_NON_MOD;
-            } // if
-            if (ptmp->CB_Pid_out2->Checked)
-            {  // Modulating Gas-Burner
-               cb_pid_out |= PID_OUT_GAS_MODULATE;
-            } // if
-            Reg->WriteInteger("CB_PID_OUT",cb_pid_out);
 
             time_switch = ptmp->RG2->ItemIndex; // 0 = off, 1 = on
             if (time_switch)
@@ -1513,47 +1546,38 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
   Returns  : None
   ------------------------------------------------------------------*/
 {
-   int x1;  // temp. variable representing new USB COM Port number
-   char *endp; // temp. pointer for strtol() function
-   char s[80]; // temp. array
-   int  init_needed = false; // temp. flag, TRUE = Main_Initialisation to be called
-
    TRegistry     *Reg = new TRegistry();
    TI2C_Settings *ptmp;
    AnsiString    S;
+   int           x1;  // temp. variable representing new USB COM Port number
+   int           init_needed = false; // TRUE = call Main_Initialisation
 
    ptmp = new TI2C_Settings(this);
-
-   // Get I2C Bus Settings from the Registry
+   // Get Hardware Settings from the Registry
    try
    {
       if (Reg->KeyExists(REGKEY))
       {
          Reg->OpenKey(REGKEY,FALSE);
 
-         usb_com_port_nr = Reg->ReadInteger("USB_COM_PORT"); // Read virtual COM port nr.
-         ptmp->UpDown1->Position = usb_com_port_nr;
+         ptmp->System_Mode->ItemIndex       = Reg->ReadInteger("SYSTEM_MODE");
+         ptmp->UpDown1->Position            = Reg->ReadInteger("USB_COM_PORT");
+         ptmp->COM_Port_Settings_Edit->Text = Reg->ReadString("COM_PORT_SETTINGS");;
+         ptmp->cb_debug_com_port->Checked   = Reg->ReadBool("CB_DEBUG_COM_PORT");
+         ptmp->fscl_combo->ItemIndex        = Reg->ReadInteger("FSCL_PRESCALER");
+         ptmp->cb_i2c_err_msg->Checked      = Reg->ReadBool("CB_I2C_ERR_MSG");
 
-         S = Reg->ReadString("COM_PORT_SETTINGS");
-         ptmp->COM_Port_Settings_Edit->Text = S;
-
-         known_hw_devices            = Reg->ReadInteger("KNOWN_HW_DEVICES");
-         ptmp->Hw_devices_Edit->Text = IntToHex(known_hw_devices,3);
-
-         fscl_prescaler              = Reg->ReadInteger("FSCL_PRESCALER");
-         ptmp->fscl_combo->ItemIndex = fscl_prescaler;
-
-         ttriac_hlim = Reg->ReadInteger("TTRIAC_HLIM");
-         ptmp->Thlim_edit->Text  = AnsiString(ttriac_hlim);
-         ttriac_llim = Reg->ReadInteger("TTRIAC_LLIM");
-         ptmp->Tllim_edit->Text  = AnsiString(ttriac_llim);
-         cb_i2c_err_msg = Reg->ReadBool("CB_I2C_ERR_MSG");
-         ptmp->cb_i2c_err_msg->Checked = cb_i2c_err_msg;
-         cb_debug_com_port = Reg->ReadBool("CB_DEBUG_COM_PORT");
-         ptmp->cb_debug_com_port->Checked = cb_debug_com_port;
+         ptmp->S0L_Edit->Text = AnsiString(Reg->ReadInteger("GAS_MOD_PWM_LLIMIT"));
+         ptmp->S0U_Edit->Text = AnsiString(Reg->ReadInteger("GAS_MOD_PWM_HLIMIT"));
+         ptmp->S1L_Edit->Text = AnsiString(Reg->ReadInteger("GAS_NON_MOD_LLIMIT"));
+         ptmp->S1U_Edit->Text = AnsiString(Reg->ReadInteger("GAS_NON_MOD_HLIMIT"));
+         ptmp->S2L_Edit->Text = AnsiString(Reg->ReadInteger("TTRIAC_LLIM"));
+         ptmp->S2U_Edit->Text = AnsiString(Reg->ReadInteger("TTRIAC_HLIM"));
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
+            system_mode = ptmp->System_Mode->ItemIndex;
+            Reg->WriteInteger("SYSTEM_MODE",system_mode);
             x1 = ptmp->COM_Port_Edit->Text.ToInt();  // Retrieve COM Port Nr.
             if (x1 != usb_com_port_nr)
             {
@@ -1561,35 +1585,35 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                usb_com_port_nr = x1;
                Reg->WriteInteger("USB_COM_PORT",x1); // Save new COM port nr.
             } // if
-
-            strcpy(com_port_settings, ptmp->COM_Port_Settings_Edit->Text.c_str());
+            S = ptmp->COM_Port_Settings_Edit->Text;
             if (strcmp(com_port_settings,S.c_str())) // COM Port Settings
             {
                init_needed = true;
+               strcpy(com_port_settings, S.c_str());
                Reg->WriteString("COM_PORT_SETTINGS",AnsiString(com_port_settings));
             } // if
-
-            strcpy(s,ptmp->Hw_devices_Edit->Text.c_str()); // retrieve hex value
-            known_hw_devices = (int)(strtol(s,&endp,16));  // convert to integer
-            Reg->WriteInteger("KNOWN_HW_DEVICES",known_hw_devices);
-
+            cb_debug_com_port = ptmp->cb_debug_com_port->Checked;
+            Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
             if (fscl_prescaler != ptmp->fscl_combo->ItemIndex)
             {
                fscl_prescaler = ptmp->fscl_combo->ItemIndex;
                Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
             } // if
-
-            ttriac_hlim = ptmp->Thlim_edit->Text.ToInt();
-            Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
-            tm_triac->SetPoint->Value = ttriac_hlim;
-            ttriac_llim = ptmp->Tllim_edit->Text.ToInt();
-            Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
-
             cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
             Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
 
-            cb_debug_com_port = ptmp->cb_debug_com_port->Checked;
-            Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
+            gas_mod_pwm_llimit = ptmp->S0L_Edit->Text.ToInt();
+            Reg->WriteInteger("GAS_MOD_PWM_LLIMIT",gas_mod_pwm_llimit);
+            gas_mod_pwm_hlimit = ptmp->S0U_Edit->Text.ToInt();
+            Reg->WriteInteger("GAS_MOD_PWM_HLIMIT",gas_mod_pwm_hlimit);
+            gas_non_mod_llimit = ptmp->S1L_Edit->Text.ToInt();
+            Reg->WriteInteger("GAS_NON_MOD_LLIMIT",gas_non_mod_llimit);
+            gas_non_mod_hlimit = ptmp->S1U_Edit->Text.ToInt();
+            Reg->WriteInteger("GAS_NON_MOD_HLIMIT",gas_non_mod_hlimit);
+            ttriac_llim = ptmp->S2L_Edit->Text.ToInt();
+            Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
+            ttriac_hlim = ptmp->S2U_Edit->Text.ToInt();
+            Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
 
             if (init_needed)
             {  //--------------------------------------------------------
@@ -1615,6 +1639,176 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
    delete ptmp;
    ptmp = 0; // NULL the pointer
 } // TMainForm::MenuOptionsI2CSettingsClick()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
+/*------------------------------------------------------------------
+  Purpose  : This is the function which is called whenever the user
+             presses 'Options | Sparge, Mash & STD Settings'.
+             Is assumes the Init_Sparge_Settings() has been called
+             during Initialisation and that the struct sp is filled.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+  TSpargeSettings *ptmp;
+  ptmp = new TSpargeSettings(this);
+  TRegistry *Reg = new TRegistry();
+
+  // Get Sparge Settings from the Registry
+  try
+  {
+     if (Reg->KeyExists(REGKEY))
+     {
+        Reg->OpenKey(REGKEY,FALSE);
+        // Sparge Settings
+        ptmp->EMVol->Text     = AnsiString(sp.mash_vol);   // Total Mash Volume (L)
+        ptmp->ESVol->Text     = AnsiString(sp.sp_vol);     // Total Sparge Volume (L)
+        ptmp->EBatches->Text  = AnsiString(sp.sp_batches); // Number of Sparge Batches
+        ptmp->EBTime->Text    = AnsiString(sp.sp_time);    // Time between two Sparge Batches
+        ptmp->EBoilTime->Text = AnsiString(sp.boil_time);  // Total Boil Time (min.)
+        // Mash Settings
+        ptmp->Offs_Edit->Text  = AnsiString(sp.temp_offset);
+        ptmp->Offs2_Edit->Text = AnsiString(sp.temp_offset2);
+        ptmp->Eph_time->Text   = AnsiString(sp.ph_timer);  // PREHEAT_TIME [sec]
+        // STD Settings
+        ptmp->Evmlt_empty->Text = AnsiString(sp.vmlt_empty);  // Vmlt_EMPTY [L]
+        ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);     // TIMEOUT_xSEC [sec]
+        ptmp->Eto3->Text        = AnsiString(sp.to3);         // TIMEOUT3 [sec]
+        ptmp->Eto4->Text        = AnsiString(sp.to4);         // TIMEOUT4 [sec]
+
+        if (ptmp->ShowModal() == 0x1) // mrOK
+        {
+           // Sparge Settings
+           Reg->WriteInteger("MASH_VOL",    ptmp->EMVol->Text.ToInt());
+           Reg->WriteInteger("SP_VOL",      ptmp->ESVol->Text.ToInt());
+           Reg->WriteInteger("SP_BATCHES",  ptmp->EBatches->Text.ToInt());
+           Reg->WriteInteger("SP_TIME",     ptmp->EBTime->Text.ToInt());
+           Reg->WriteInteger("BOIL_TIME",   ptmp->EBoilTime->Text.ToInt());
+           // Mash Settings
+           Reg->WriteFloat("TOffset",       ptmp->Offs_Edit->Text.ToDouble());
+           Reg->WriteFloat("TOffset2",      ptmp->Offs2_Edit->Text.ToDouble());
+           Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());
+           // STD Settings
+           Reg->WriteFloat("VMLT_EMPTY",    ptmp->Evmlt_empty->Text.ToDouble());
+           Reg->WriteInteger("TO_XSEC",     ptmp->Eto_xsec->Text.ToInt());
+           Reg->WriteInteger("TO3",         ptmp->Eto3->Text.ToInt());
+           Reg->WriteInteger("TO4",         ptmp->Eto4->Text.ToInt());
+
+           Init_Sparge_Settings(); // Init. struct with new sparge settings
+        } // if
+        delete ptmp;
+        ptmp = 0; // NULL the pointer
+        Reg->CloseKey(); // Close the Registry
+        delete Reg;
+     } // if
+  } // try
+  catch (ERegistryException &E)
+  {
+     ShowMessage(E.Message);
+     delete Reg;
+     return;
+  } // catch
+} // TMainForm::SpargeSettings1Click()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
+/*------------------------------------------------------------------
+  Purpose  : This is the function which is called whenever the user
+             presses 'Options | Measurements'.
+  Returns  : None
+  ------------------------------------------------------------------*/
+{
+   TRegistry *Reg = new TRegistry();
+   TMeasurements *ptmp;
+
+   ptmp = new TMeasurements(this);
+
+   // Get Measurements Settings from the Registry
+   try
+   {
+      if (Reg->KeyExists(REGKEY))
+      {
+         Reg->OpenKey(REGKEY,FALSE);
+         //------------------
+         // HLT Temperature
+         //------------------
+         ptmp->Thlt_Offset_Edit->Text   = Reg->ReadFloat("THLT_OFFSET");
+         ptmp->Thlt_Slope_Edit->Text    = Reg->ReadFloat("THLT_SLOPE");
+         //------------------
+         // MLT Temperature
+         //------------------
+         ptmp->Tmlt_Offset_Edit->Text   = Reg->ReadFloat("TMLT_OFFSET");
+         ptmp->Tmlt_Slope_Edit->Text    = Reg->ReadFloat("TMLT_SLOPE");
+         //------------------
+         // HLT Volume
+         //------------------
+         ptmp->Vhlt_Max_Edit->Text      = Reg->ReadFloat("VHLT_MAX");
+         ptmp->Vhlt_Offset_Edit->Text   = Reg->ReadFloat("VHLT_OFFSET");
+         ptmp->Vhlt_Slope_Edit->Text    = Reg->ReadFloat("VHLT_SLOPE");
+         //------------------
+         // MLT Volume
+         //------------------
+         ptmp->Vmlt_Max_Edit->Text      = Reg->ReadFloat("VMLT_MAX");
+         ptmp->Vmlt_Offset_Edit->Text   = Reg->ReadFloat("VMLT_OFFSET");
+         ptmp->Vmlt_Slope_Edit->Text    = Reg->ReadFloat("VMLT_SLOPE");
+         //-------------------
+         // Boil Kettle Volume
+         //-------------------
+         volumes.Vboil_simulated        = Reg->ReadBool("VBOIL_SIMULATED");
+         ptmp->Vboil_simulated->Checked = volumes.Vboil_simulated;
+
+         if (ptmp->ShowModal() == 0x1) // mrOK
+         {
+            //------------------
+            // HLT Temperature
+            //------------------
+            thlt_offset = ptmp->Thlt_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("THLT_OFFSET",thlt_offset);
+            thlt_slope = ptmp->Thlt_Slope_Edit->Text.ToDouble();
+            Reg->WriteFloat("THLT_SLOPE",thlt_slope);
+            //------------------
+            // MLT Temperature
+            //------------------
+            tmlt_offset = ptmp->Tmlt_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("TMLT_OFFSET",tmlt_offset);
+            tmlt_slope = ptmp->Tmlt_Slope_Edit->Text.ToDouble();
+            Reg->WriteFloat("TMLT_SLOPE",tmlt_slope);
+            //------------------
+            // HLT Volume
+            //------------------
+            vhlt_max = ptmp->Vhlt_Max_Edit->Text.ToDouble();
+            Reg->WriteFloat("VHLT_MAX",vhlt_max);
+            vhlt_offset = ptmp->Vhlt_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("VHLT_OFFSET",vhlt_offset);
+            vhlt_slope = ptmp->Vhlt_Slope_Edit->Text.ToDouble();
+            Reg->WriteFloat("VHLT_SLOPE",vhlt_slope);
+            //------------------
+            // MLT Volume
+            //------------------
+            vmlt_max = ptmp->Vmlt_Max_Edit->Text.ToDouble();
+            Reg->WriteFloat("VMLT_MAX",vmlt_max);
+            vmlt_offset = ptmp->Vmlt_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("VMLT_OFFSET",vmlt_offset);
+            vmlt_slope = ptmp->Vmlt_Slope_Edit->Text.ToDouble();
+            Reg->WriteFloat("VMLT_SLOPE",vmlt_slope);
+            //-------------------
+            // Boil Kettle Volume
+            //-------------------
+            volumes.Vboil_simulated = ptmp->Vboil_simulated->Checked;
+            Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
+          } // if
+         Reg->CloseKey(); // Close the Registry
+      } // if
+   } // try
+   catch (ERegistryException &E)
+   {
+      ShowMessage(E.Message);
+   } // catch
+   // Clean up
+   delete Reg;
+   delete ptmp;
+   ptmp = 0; // NULL the pointer
+} // TMainForm::MeasurementsClick()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::MenuFileExitClick(TObject *Sender)
@@ -1796,133 +1990,6 @@ void __fastcall TMainForm::MenuViewMash_progressClick(TObject *Sender)
 {
    ViewMashProgress->Show(); // Show modeless Dialog
 } // TMainForm::MenuViewMash_progressClick()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::Init_Sparge_Settings(void)
-/*------------------------------------------------------------------
-  Purpose  : This function Initialises the sparge struct with the
-             values from the Registry. Call this method during power-up
-             and after a change in Sparge Settings parameters.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-  TRegistry *Reg = new TRegistry();
-  int i;
-
-  // Get Sparge  & STD Settings from the Registry
-  try
-  {
-     if (Reg->KeyExists(REGKEY))
-     {
-        Reg->OpenKey(REGKEY,FALSE);
-        // Mash Settings
-        sp.temp_offset  = Reg->ReadFloat("TOffset");
-        sp.temp_offset2 = Reg->ReadFloat("TOffset2");
-        sp.ph_timer     = Reg->ReadInteger("PREHEAT_TIME");
-        // Sparge Settings
-        sp.sp_batches   = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
-        sp.sp_time      = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
-        sp.mash_vol     = Reg->ReadInteger("MASH_VOL");   // Total Mash Volume (L)
-        sp.sp_vol       = Reg->ReadInteger("SP_VOL");     // Total Sparge Volume (L)
-        sp.boil_time    = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
-        sp.sp_vol_batch = ((double)(sp.sp_vol)) / sp.sp_batches;
-        //---------------------------------------------------------------
-        // Now calculate the internal values for the timers. Since the
-        // State Transition Diagram is called every second, every 'tick'
-        // is therefore a second.
-        // SP_TIME [min.], BOIL_TIME [min.]
-        //---------------------------------------------------------------
-        sp.sp_time_ticks   = sp.sp_time * 60;
-        sp.boil_time_ticks = sp.boil_time * 60;
-        // STD Settings
-        sp.vmlt_empty   = Reg->ReadFloat("VMLT_EMPTY");
-        sp.to_xsec      = Reg->ReadInteger("TO_XSEC");
-        sp.to3          = Reg->ReadInteger("TO3");
-        sp.to4          = Reg->ReadInteger("TO4");
-        Reg->CloseKey(); // Close the Registry
-        delete Reg;
-     } // if
-  } // try
-  catch (ERegistryException &E)
-  {
-     ShowMessage(E.Message);
-     delete Reg;
-     return;
-  } // catch
-} // TMainForm::Init_Sparge_Settings()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
-/*------------------------------------------------------------------
-  Purpose  : This is the function which is called whenever the user
-             presses 'Options | Sparge Settings'.
-             Is assumes the Init_Sparge_Settings() has been called
-             during Initialisation and that the struct sp is f
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-  TSpargeSettings *ptmp;
-  ptmp = new TSpargeSettings(this);
-  TRegistry *Reg = new TRegistry();
-
-  // Get Sparge Settings from the Registry
-  try
-  {
-     if (Reg->KeyExists(REGKEY))
-     {
-        Reg->OpenKey(REGKEY,FALSE);
-        /*---------------*/
-        /* Mash Settings */
-        /*---------------*/
-        ptmp->Offs_Edit->Text  = AnsiString(sp.temp_offset);
-        ptmp->Offs2_Edit->Text = AnsiString(sp.temp_offset2);
-        ptmp->Eph_time->Text   = AnsiString(sp.ph_timer);  // PREHEAT_TIME [sec]
-        /*-----------------*/
-        /* Sparge Settings */
-        /*-----------------*/
-        ptmp->EBatches->Text  = AnsiString(sp.sp_batches); // Number of Sparge Batches
-        ptmp->EBTime->Text    = AnsiString(sp.sp_time);    // Time between two Sparge Batches
-        ptmp->EMVol->Text     = AnsiString(sp.mash_vol);   // Total Mash Volume (L)
-        ptmp->ESVol->Text     = AnsiString(sp.sp_vol);     // Total Sparge Volume (L)
-        ptmp->EBoilTime->Text = AnsiString(sp.boil_time);  // Total Boil Time (min.)
-        /*--------------*/
-        /* STD Settings */
-        /*--------------*/
-        ptmp->Evmlt_empty->Text = AnsiString(sp.vmlt_empty);  // Vmlt_EMPTY [L]
-        ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);     // TIMEOUT_xSEC [sec]
-        ptmp->Eto3->Text        = AnsiString(sp.to3);         // TIMEOUT3 [sec]
-        ptmp->Eto4->Text        = AnsiString(sp.to4);         // TIMEOUT4 [sec]
-
-        if (ptmp->ShowModal() == 0x1) // mrOK
-        {
-           Reg->WriteFloat("TOffset"       ,ptmp->Offs_Edit->Text.ToDouble());
-           Reg->WriteFloat("TOffset2"      ,ptmp->Offs2_Edit->Text.ToDouble());
-           Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());    // PREHEAT_TIME [sec]
-           Reg->WriteInteger("SP_BATCHES",ptmp->EBatches->Text.ToInt());  // Number of Sparge Batches
-           Reg->WriteInteger("SP_TIME",   ptmp->EBTime->Text.ToInt());    // Time (min.) between two Sparge Batches
-           Reg->WriteInteger("MASH_VOL",  ptmp->EMVol->Text.ToInt());     // Total Mash Volume (L)
-           Reg->WriteInteger("SP_VOL",    ptmp->ESVol->Text.ToInt());     // Total Sparge Volume (L)
-           Reg->WriteInteger("BOIL_TIME", ptmp->EBoilTime->Text.ToInt()); // Total Boil Time (min.)
-
-           Reg->WriteFloat("VMLT_EMPTY",    ptmp->Evmlt_empty->Text.ToDouble()); // Vmlt_EMPTY [L]
-           Reg->WriteInteger("TO_XSEC",     ptmp->Eto_xsec->Text.ToInt());    // TIMEOUT_xSEC [sec]
-           Reg->WriteInteger("TO3",         ptmp->Eto3->Text.ToInt());        // TIMEOUT3 [sec]
-           Reg->WriteInteger("TO4",         ptmp->Eto4->Text.ToInt());        // TIMEOUT4 [sec]
-           Init_Sparge_Settings(); // Init. struct with sparge settings with new values
-        } // if
-        delete ptmp;
-        ptmp = 0; // NULL the pointer
-        Reg->CloseKey(); // Close the Registry
-        delete Reg;
-     } // if
-  } // try
-  catch (ERegistryException &E)
-  {
-     ShowMessage(E.Message);
-     delete Reg;
-     return;
-  } // catch
-} // TMainForm::SpargeSettings1Click()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Auto1Click(TObject *Sender)
@@ -2267,31 +2334,16 @@ void __fastcall TMainForm::Update_GUI(void)
    //-------------------------------------------
    // Update the various panels of the Statusbar
    //-------------------------------------------
-   i = 0; // number of burners
-   if (cb_pid_out & PID_OUT_ELECTRIC)
+   switch (system_mode)
    {
-      sprintf(tmp_str,"Electric");
-      i++;
-   }
-   else sprintf(tmp_str,"");
-   if (cb_pid_out & PID_OUT_GAS_NON_MOD)
-   {
-      if (++i > 1)
-      {
-         strcat(tmp_str," + ");
-      }
-      strcat(tmp_str,"Non-Mod.");
-   } // if
-   if (cb_pid_out & PID_OUT_GAS_MODULATE)
-   {
-      if (++i > 1)
-      {
-         strcat(tmp_str," + ");
-      }
-      strcat(tmp_str,"Modulating");
-   } // if
-   StatusBar->Panels->Items[PANEL_TCPIP]->Text = AnsiString(tmp_str);
-
+        case 0: strcpy(tmp_str,"Modulating Gas-Burner");
+                break;
+        case 1: strcpy(tmp_str,"Non-Modulating Gas-Burner");
+                break;
+        case 2: strcpy(tmp_str,"Electrical Heating");
+                break;
+   } // switch
+   StatusBar->Panels->Items[PANEL_SYS_MODE]->Text = AnsiString(tmp_str);
    sprintf(tmp_str,"ms_idx = %d",std.ms_idx);
    StatusBar->Panels->Items[PANEL_MSIDX]->Text = AnsiString(tmp_str);
    sprintf(tmp_str,"sp_idx = %d",std.sp_idx);
@@ -2328,106 +2380,6 @@ void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
    //---------------------------------------------------------------------------
    i2c_hw_scan_req = true;
 } // MenuView_I2C_HW_DevicesClick()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
-/*------------------------------------------------------------------
-  Purpose  : This is the function which is called whenever the user
-             presses 'Options | Measurements'.
-  Returns  : None
-  ------------------------------------------------------------------*/
-{
-   TRegistry *Reg = new TRegistry();
-   TMeasurements *ptmp;
-
-   ptmp = new TMeasurements(this);
-
-   // Get Measurements Settings from the Registry
-   try
-   {
-      if (Reg->KeyExists(REGKEY))
-      {
-         Reg->OpenKey(REGKEY,FALSE);
-         //------------------
-         // HLT Temperature
-         //------------------
-         ptmp->Thlt_Offset_Edit->Text   = Reg->ReadFloat("THLT_OFFSET");
-         ptmp->Thlt_Slope_Edit->Text    = Reg->ReadFloat("THLT_SLOPE");
-         //------------------
-         // MLT Temperature
-         //------------------
-         ptmp->Tmlt_Offset_Edit->Text   = Reg->ReadFloat("TMLT_OFFSET");
-         ptmp->Tmlt_Slope_Edit->Text    = Reg->ReadFloat("TMLT_SLOPE");
-         //------------------
-         // HLT Volume
-         //------------------
-         ptmp->Vhlt_Max_Edit->Text      = Reg->ReadFloat("VHLT_MAX");
-         ptmp->Vhlt_Offset_Edit->Text   = Reg->ReadFloat("VHLT_OFFSET");
-         ptmp->Vhlt_Slope_Edit->Text    = Reg->ReadFloat("VHLT_SLOPE");
-         //------------------
-         // MLT Volume
-         //------------------
-         ptmp->Vmlt_Max_Edit->Text      = Reg->ReadFloat("VMLT_MAX");
-         ptmp->Vmlt_Offset_Edit->Text   = Reg->ReadFloat("VMLT_OFFSET");
-         ptmp->Vmlt_Slope_Edit->Text    = Reg->ReadFloat("VMLT_SLOPE");
-         //-------------------
-         // Boil Kettle Volume
-         //-------------------
-         volumes.Vboil_simulated        = Reg->ReadBool("VBOIL_SIMULATED");
-         ptmp->Vboil_simulated->Checked = volumes.Vboil_simulated;
-
-         if (ptmp->ShowModal() == 0x1) // mrOK
-         {
-            //------------------
-            // HLT Temperature
-            //------------------
-            thlt_offset = ptmp->Thlt_Offset_Edit->Text.ToDouble();
-            Reg->WriteFloat("THLT_OFFSET",thlt_offset);
-            thlt_slope = ptmp->Thlt_Slope_Edit->Text.ToDouble();
-            Reg->WriteFloat("THLT_SLOPE",thlt_slope);
-            //------------------
-            // MLT Temperature
-            //------------------
-            tmlt_offset = ptmp->Tmlt_Offset_Edit->Text.ToDouble();
-            Reg->WriteFloat("TMLT_OFFSET",tmlt_offset);
-            tmlt_slope = ptmp->Tmlt_Slope_Edit->Text.ToDouble();
-            Reg->WriteFloat("TMLT_SLOPE",tmlt_slope);
-            //------------------
-            // HLT Volume
-            //------------------
-            vhlt_max = ptmp->Vhlt_Max_Edit->Text.ToDouble();
-            Reg->WriteFloat("VHLT_MAX",vhlt_max);
-            vhlt_offset = ptmp->Vhlt_Offset_Edit->Text.ToDouble();
-            Reg->WriteFloat("VHLT_OFFSET",vhlt_offset);
-            vhlt_slope = ptmp->Vhlt_Slope_Edit->Text.ToDouble();
-            Reg->WriteFloat("VHLT_SLOPE",vhlt_slope);
-            //------------------
-            // MLT Volume
-            //------------------
-            vmlt_max = ptmp->Vmlt_Max_Edit->Text.ToDouble();
-            Reg->WriteFloat("VMLT_MAX",vmlt_max);
-            vmlt_offset = ptmp->Vmlt_Offset_Edit->Text.ToDouble();
-            Reg->WriteFloat("VMLT_OFFSET",vmlt_offset);
-            vmlt_slope = ptmp->Vmlt_Slope_Edit->Text.ToDouble();
-            Reg->WriteFloat("VMLT_SLOPE",vmlt_slope);
-            //-------------------
-            // Boil Kettle Volume
-            //-------------------
-            volumes.Vboil_simulated = ptmp->Vboil_simulated->Checked;
-            Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
-          } // if
-         Reg->CloseKey(); // Close the Registry
-      } // if
-   } // try
-   catch (ERegistryException &E)
-   {
-      ShowMessage(E.Message);
-   } // catch
-   // Clean up
-   delete Reg;
-   delete ptmp;
-   ptmp = 0; // NULL the pointer
-} // TMainForm::MeasurementsClick()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Contents1Click(TObject *Sender)
@@ -2469,6 +2421,9 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
    }
 } // FormKeyPress()
 //---------------------------------------------------------------------------
+
+
+
 
 
 

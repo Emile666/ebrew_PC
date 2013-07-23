@@ -5,6 +5,13 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2007/07/06 22:23:01  Emile
+// - The real time between two lines from a log-file is now used instead of a
+//   fixed 5 sec. time when reading a log-file.
+// - Leading-zero bug solved in Mash Progress screen
+// - i2c_stop() only called with PT_CLOSE in case of exit of program
+// - System Identification library functions added (but not used yet).
+//
 // Revision 1.9  2007/02/24 19:14:37  Emile
 // Additional space added in Mash Progress screen.
 //
@@ -109,7 +116,6 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
    int    i;
    char   s[120];
    double x;
-   char   time_stamp[50];
    maisch_schedule *p; // pointer naar maisch_schedule structure
    int    ltr;
 

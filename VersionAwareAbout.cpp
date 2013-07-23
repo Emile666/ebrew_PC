@@ -4,6 +4,15 @@
 // Purpose     : Provides the code for the About... Screen.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.2  2013/06/16 14:39:19  Emile
+// Intermediate version for new Ebrew 2.0 USB hardware:
+// - Hardware settings Dialog: COM Port + Settings added + LEDx removed
+// - PortTalk + i2c_dll + Start_i2c_communication + Reset_I2C_Bus removed
+// - New routines for COM-Port added
+// - Generate_IO_Signals() now uses COM_port_write to address all hardware
+// - This version works with new hardware: PUMP on/off + LEDs are working
+// - HEATER led and PWM output do not work yet + TODO: add scheduler.
+//
 // Revision 1.1  2004/03/26 10:22:55  emile
 // - Several files added to CVS repository, where not included yet
 // - Help file extended with many help items. First real help file version.
@@ -76,14 +85,13 @@ void __fastcall TVersionAwareAbout::FormCreate(TObject *Sender)
      if(buf[0] !='\0')
      {
         char tmp_str[40];  // Temp. string for ebrew revision
-        char tmp_str2[40]; // temp. string for i2c_dll revision
         // Extract the revision number from the ebrew cvs revision string
         strncpy(tmp_str, &(MainForm->ebrew_revision[11]),4);
         tmp_str[4] = '\0';
 
         reVersionInfo->Lines->Add("Version: " + AnsiString(buf) + " (CVS Rev. "
                                               + AnsiString(tmp_str) + ")");
-     }
+     } // if
 
     tmp =BaseString +"\\CompanyName";
     VerQueryValue(VerInfo,
@@ -106,5 +114,6 @@ void __fastcall TVersionAwareAbout::FormCreate(TObject *Sender)
   }
 }
 //---------------------------------------------------------------------------
+
 
 

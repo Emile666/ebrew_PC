@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.39  2013/07/21 22:32:47  Emile
+// - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
+// - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
+// - Registry: several parameters removed + parameters renamed
+// - Ttriac & DAC code & parameters removed
+//
 // Revision 1.38  2013/06/22 23:04:18  Emile
 // - Second intermediate version: scheduler added and timer interrupt divided
 //   over a number of tasks.
@@ -323,7 +329,7 @@
 #define KC_INIT   (69.0)
 #define TI_INIT  (520.0)
 #define TD_INIT  (130.0)
-#define LOGFILE "ebrewlog.txt"
+#define LOGFILE   "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
 #define REGKEY    "Software\\ebrew"
 
@@ -333,23 +339,19 @@
 //------------------------------
 // Defines for StatusBar object
 //------------------------------
-#define PANEL_TCPIP (0)
-#define PANEL_MASHS (1)
-#define PANEL_MSIDX (2)
-#define PANEL_SPIDX (3)
-#define PANEL_VALVE (4)
-#define PANEL_REVIS (5)
+#define PANEL_SYS_MODE (0)
+#define PANEL_MASHS    (1)
+#define PANEL_MSIDX    (2)
+#define PANEL_SPIDX    (3)
+#define PANEL_VALVE    (4)
+#define PANEL_REVIS    (5)
 
-//----------------------------------------------------------------------
-// Defines for cb_pid_out. This is an indicator where the output of the
-// PID-Controller [%] is sent to. There are three possibilities:
-// ELECTRIC    : the output is sent to an electric heating element
-// GAS_NON_MOD : the output is sent to a non-modulating gas-burner
-// GAS_MODULATE: the output is sent to a modulating gas-burner
-//----------------------------------------------------------------------
-#define PID_OUT_ELECTRIC     (0x01)
-#define PID_OUT_GAS_NON_MOD  (0x02)
-#define PID_OUT_GAS_MODULATE (0x04)
+//-----------------------------
+// E-brew System Mode
+//-----------------------------
+#define GAS_MODULATING     (0)
+#define GAS_NON_MODULATING (1)
+#define ELECTRICAL_HEATING (2)
 
 #define IDLE        (0)
 #define EL_HTR_OFF  (1)
@@ -479,44 +481,43 @@ private:	// User declarations
         void __fastcall exit_ebrew(void);
         void __fastcall Update_GUI(void);
 
-        int             usb_com_port_nr;  // Number of virtual USB COM port
-        char            com_port_settings[20]; // Virtual COM Port Settings
-        int             known_hw_devices; // list of known I2C hardware devices
-        int             fscl_prescaler;   // index into I2C SCL Frequency values
-
-        bool            cb_pid_dbg;        // true = Show PID Debug label
-        byte            cb_pid_out;        // [ELECTRIC, GAS_NON_MOD, GAS_MODULATE]
-        bool            cb_i2c_err_msg;    // true = give error message on successful I2C reset
-        bool            cb_debug_com_port; // true = file-logging for COM port communication
-        bool            power_up_flag;     // true = power-up
-        bool            need_to_read;      // true = read response from COM port
-        int             lsb_io;            // init. byte to write to ebrew hardware
-
 public:		// User declarations
-        double          thlt;         // HLT actual temperature
-        double          thlt_offset;  // calibration offset to add to Thlt measurement
-        double          thlt_slope;   // Slope limiter for Thlt temperature
+        int    system_mode;        // P00: Ebrew system mode
+        int    gas_non_mod_llimit; // P01: Lower-limit for switching gas-burner
+        int    gas_non_mod_hlimit; // P02: Upper-limit for switching gas-burner
+        int    gas_mod_pwm_llimit; // P03: Lower-limit for switching gas-burner
+        int    gas_mod_pwm_hlimit; // P04: Upper-limit for switching gas-burner
+        double ttriac;             // LM35 (Triac) actual temperature
+        int    ttriac_llim;        // P05: Lower-limit for Triac Temp. Protection
+        int    ttriac_hlim;        // P06: Upper-limit for Triac Temp. Protection
+        bool   triac_too_hot;      // true = Triac is overheated
 
-        double          tmlt;         // MLT actual temperature
-        double          tmlt_offset;  // calibration offset to add to Tmlt measurement
-        double          tmlt_slope;   // Slope limiter for Tmlt temperature
+        double vhlt_offset;   // P07: Offset to add to Vhlt measurement
+        double vhlt_max;      // P08: Max. Volume for Vhlt
+        double vhlt_slope;    // P09: Slope limiter for Vhlt volume
 
-        double          vhlt_offset;  // Offset to add to Vhlt measurement
-        double          vhlt_max;     // Max. Volume for Vhlt
-        double          vhlt_slope;   // Slope limiter for Vhlt volume
+        double vmlt_offset;   // P10: Offset to add to Vmlt measurement
+        double vmlt_max;      // P11: Max. Volume for Vmlt
+        double vmlt_slope;    // P12: Slope limiter for Vmlt volume
 
-        double          vmlt_offset;  // Offset to add to Vmlt measurement
-        double          vmlt_max;     // Max. Volume for Vmlt
-        double          vmlt_slope;   // Slope limiter for Vmlt volume
+        double thlt;          // HLT actual temperature
+        double thlt_offset;   // P13: offset to add to Thlt measurement
+        double thlt_slope;    // P14: Slope limiter for Thlt temperature
 
-        double          ttriac;       // Triac electronics actual temperature
-        enum i2c_adc    ttriac_src;   // Ttriac source AD channel
-        double          ttriac_a;     // a-coefficient for y=a.x+b
-        double          ttriac_b;     // b-coefficient for y=a.x+b
-        int             ttriac_hlim;   // High limit for Triac Temp. Protection
-        int             ttriac_llim;   // Low  limit for Triac Temp. Protection
-        bool            triac_too_hot; // true = Triac is overheated
-        bool            toggle_led;    // Status of Alive LED
+        double tmlt;          // MLT actual temperature
+        double tmlt_offset;   // P15: offset to add to Tmlt measurement
+        double tmlt_slope;    // P16: Slope limiter for Tmlt temperature
+
+        int    usb_com_port_nr;       // Number of virtual USB COM port
+        char   com_port_settings[20]; // Virtual COM Port Settings
+        bool   com_port_is_open;      // true = COM-port is open for Read/Write
+        bool   i2c_hw_scan_req;       // true = check I2C HW devices
+        int    fscl_prescaler;        // P17: index into I2C SCL Frequency values
+        bool   cb_i2c_err_msg;        // true = give error message on successful I2C reset
+        bool   cb_debug_com_port;     // true = file-logging for COM port communication
+        bool   cb_pid_dbg;            // true = Show PID Debug label
+        bool   toggle_led;            // Status of Alive LED
+        bool   power_up_flag;         // true = power-up in progress
 
         volume_struct   volumes;       // Struct for Volumes
         swfx_struct     swfx;          // Switch & Fix settings for tset and gamma
@@ -530,15 +531,11 @@ public:		// User declarations
         double          tset_hlt;       // HLT reference temperature
         double          tset_hlt_slope; // Slope limiter for Tset_hlt reference
         double          tset_mlt;       // MLT reference temperature
-        int             hw_status;  // I2C HW status, see i2c_dll.h for bit settings
         unsigned int    std_out;    // position of valves
                                     // Bit 0 = Pump, Bit 1..7 = V1..V7
                                     // Bit 8..15: 0 = Auto, 1 = Manual Override
-        timer_vars      tmr;        // struct with timer variables
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
         TDateTime       dt_time_switch;   // object holding date and time
-        bool            com_port_is_open; // true = COM-port is open for Read/Write
-        bool            i2c_hw_scan_req;  // true = check I2C HW devices
         char            *ebrew_revision;  // contains CVS revision number
 
         void __fastcall COM_port_open(void);           // Init. COM Port

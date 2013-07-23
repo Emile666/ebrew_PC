@@ -5,6 +5,15 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2013/06/16 14:39:19  Emile
+// Intermediate version for new Ebrew 2.0 USB hardware:
+// - Hardware settings Dialog: COM Port + Settings added + LEDx removed
+// - PortTalk + i2c_dll + Start_i2c_communication + Reset_I2C_Bus removed
+// - New routines for COM-Port added
+// - Generate_IO_Signals() now uses COM_port_write to address all hardware
+// - This version works with new hardware: PUMP on/off + LEDs are working
+// - HEATER led and PWM output do not work yet + TODO: add scheduler.
+//
 // Revision 1.9  2004/05/05 15:44:15  emile
 // - Main Screen picture update
 // - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
@@ -95,25 +104,43 @@ __published:	// IDE-managed Components
         TLabel *COM_Port_Nr_lbl;
         TEdit *COM_Port_Edit;
         TUpDown *UpDown1;
-        TEdit *Thlim_edit;
-        TLabel *Label6;
-        TEdit *Tllim_edit;
-        TLabel *Label7;
+        TEdit *S2L_Edit;
+        TLabel *S2L_L1a;
+        TEdit *S2U_Edit;
+        TLabel *S2U_L1a;
         TCheckBox *cb_i2c_err_msg;
-        TLabel *Label9;
-        TLabel *Label10;
-        TEdit *Hw_devices_Edit;
         TComboBox *fscl_combo;
         TLabel *Label11;
-        TLabel *Label2;
-        TLabel *Label3;
+        TLabel *S2L_L1b;
+        TLabel *S2U_L1b;
         TLabel *COM_Port_Settings_lbl;
         TEdit *COM_Port_Settings_Edit;
         TCheckBox *cb_debug_com_port;
+        TRadioGroup *System_Mode;
+        TLabel *Label5;
+        TLabel *Label1;
+        TLabel *Label4;
+        TLabel *S1L_L1a;
+        TLabel *S1U_L1a;
+        TLabel *S1L_L1b;
+        TLabel *S1U_L1b;
+        TEdit *S1L_Edit;
+        TEdit *S1U_Edit;
+        TLabel *S0L_L1a;
+        TLabel *S0U_L1a;
+        TLabel *S0L_L1b;
+        TLabel *S0U_L1b;
+        TEdit *S0L_Edit;
+        TEdit *S0U_Edit;
+        TLabel *S0_Lbl;
+        TLabel *S1_Lbl;
+        TLabel *S2_Lbl;
         void __fastcall Help_ButtonClick(TObject *Sender);
+        void __fastcall System_ModeExit(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TI2C_Settings(TComponent* Owner);
+        void __fastcall update_i2c_gui(void);
 };
 //---------------------------------------------------------------------------
 extern PACKAGE TI2C_Settings *I2C_Settings;

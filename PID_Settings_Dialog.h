@@ -5,6 +5,12 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.13  2013/07/21 22:32:47  Emile
+// - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
+// - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
+// - Registry: several parameters removed + parameters renamed
+// - Ttriac & DAC code & parameters removed
+//
 // Revision 1.12  2011/05/29 20:56:26  Emile
 // - New Registry variables added: STC_N, STC_TD and STC_ADF
 // - PID Settings Dialog screen extended with new parameters for self-tuning
@@ -151,16 +157,6 @@ __published:
         TLabel *Label9;
         TEdit *K_LPF_Edit;
         TCheckBox *CB_PID_dbg;
-        TLabel *Label10;
-        TLabel *Label11;
-        TLabel *Label12;
-        TLabel *Label13;
-        TEdit *Burner_On;
-        TEdit *Burner_Off;
-        TGroupBox *PID_Out;
-        TCheckBox *CB_Pid_out0;
-        TCheckBox *CB_Pid_out1;
-        TCheckBox *CB_Pid_out2;
         TLabel *Label15;
         TLabel *Label17;
         TEdit *Tset_hlt_slope;
@@ -173,8 +169,6 @@ __published:
         TCheckBox *CB_adf;
         void __fastcall RG2Click(TObject *Sender);
         void __fastcall Button3Click(TObject *Sender);
-        void __fastcall CB_Pid_out1Click(TObject *Sender);
-        void __fastcall CB_Pid_out2Click(TObject *Sender);
         void __fastcall PID_ModelExit(TObject *Sender);
 private:
 public:

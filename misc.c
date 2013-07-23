@@ -6,6 +6,12 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.22  2013/07/21 22:32:47  Emile
+  - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
+  - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
+  - Registry: several parameters removed + parameters renamed
+  - Ttriac & DAC code & parameters removed
+
   Revision 1.21  2013/06/22 23:04:19  Emile
   - Second intermediate version: scheduler added and timer interrupt divided
     over a number of tasks.
@@ -218,9 +224,6 @@ double diff_seconds(char *s1, char *s2)
   ------------------------------------------------------------------*/
 {
    char tmp[50];
-   char hour[10];
-   char min[10];
-   char sec[10];
    unsigned int hi1,mi1,si1;
    unsigned int hi2,mi2,si2;
    char *p;
@@ -503,9 +506,6 @@ void add_seconds(char *s, int seconds)
   ------------------------------------------------------------------*/
 {
    char tmp[50];
-   char hour[10];
-   char min[10];
-   char sec[10];
    unsigned int hi,mi,si;
    char *p;
 

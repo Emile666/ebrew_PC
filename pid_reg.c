@@ -15,6 +15,17 @@
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
   $Log$
+  Revision 1.10  2011/05/29 20:56:26  Emile
+  - New Registry variables added: STC_N, STC_TD and STC_ADF
+  - PID Settings Dialog screen extended with new parameters for self-tuning
+    controller: possibility to set the system order N, an estimate for the
+    time-delay and a boolean whether or not to use adaptive dir. forgetting.
+  - PID Settings Dialog screen: parameters enabled/disabled when a
+    specific PID controller is chosen.
+  - New functions time_delay() and init_time_delay() added
+  - Changes made in init_pid2() function header.
+  - Unit-test cases updated and extended with tests for new functions.
+
   Revision 1.9  2011/05/14 14:02:19  Emile
   - Unit test set updates, test-case 16 added
   - Self-Tuning controller N=1 and N=2 added to PID dialog screen
@@ -72,11 +83,11 @@
 #include <math.h>
 
 static double ek_1;  // e[k-1]  = SP[k-1] - PV[k-1] = Tset_hlt[k-1] - Thlt[k-1]
-static double ek_2;  // e[k-2]  = SP[k-2] - PV[k-2] = Tset_hlt[k-2] - Thlt[k-2]
+//static double ek_2;  // e[k-2]  = SP[k-2] - PV[k-2] = Tset_hlt[k-2] - Thlt[k-2]
 static double xk_1;  // PV[k-1] = Thlt[k-1]
 static double xk_2;  // PV[k-2] = Thlt[k-1]
-static double yk_1;  // y[k-1]  = Gamma[k-1]
-static double yk_2;  // y[k-2]  = Gamma[k-1]
+//static double yk_1;  // y[k-1]  = Gamma[k-1]
+//static double yk_2;  // y[k-2]  = Gamma[k-1]
 static double lpf_1; // lpf[k-1] = LPF output[k-1]
 static double lpf_2; // lpf[k-2] = LPF output[k-2]
 
@@ -853,5 +864,7 @@ void vav2v(vector *vec1, vector vec2, int N)
       (*vec1)[i] += vec2[i];
    } // for i
 } // vav2v()
+
+
 
 
