@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.40  2013/07/23 09:42:46  Emile
+// - Fourth intermediate version: several Registry Settings added / removed.
+// - Dialog Screens updated: better lay-out and matches new Registry Settings
+// - Source-code improved for readability
+//
 // Revision 1.39  2013/07/21 22:32:47  Emile
 // - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
 // - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
@@ -316,7 +321,6 @@
 #include "misc.h"
 #include "pid_reg.h"
 #include "AnimTimer.h"
-#include "i2c_dll.h"
 #include <Graphics.hpp>
 #include "VrControls.hpp"
 #include "VrTank.hpp"
@@ -362,9 +366,12 @@
 #define max(a, b)  (((a) > (b)) ? (a) : (b))
 
 // BUFFER SIZE FOR COM PORT READ
-#define MAX_BUF_WRITE (255)
-#define MAX_BUF_READ (255)
-#define COM_PORT_DEBUG_FNAME "com_port_dbg.txt"
+#define MAX_BUF_WRITE        (255)
+#define MAX_BUF_READ         (255)
+#define COM_PORT_DEBUG_FNAME "_com_port_dbg.txt"
+
+#define EBREW_HW_ID          "E-Brew"
+#define MAX_PARS             (18)
 
 //------------------------------------------------------------------------------
 // The text I2C_STOP_ERR_TXT is printed whenever i2c_stop() was not successful
@@ -482,6 +489,7 @@ private:	// User declarations
         void __fastcall Update_GUI(void);
 
 public:		// User declarations
+        bool   pars_changed[MAX_PARS]; // Array with list of changed parameters
         int    system_mode;        // P00: Ebrew system mode
         int    gas_non_mod_llimit; // P01: Lower-limit for switching gas-burner
         int    gas_non_mod_hlimit; // P02: Upper-limit for switching gas-burner
@@ -518,7 +526,8 @@ public:		// User declarations
         bool   cb_pid_dbg;            // true = Show PID Debug label
         bool   toggle_led;            // Status of Alive LED
         bool   power_up_flag;         // true = power-up in progress
-
+        bool   hw_debug_logging;      // true = write HW debug info to log-file
+        
         volume_struct   volumes;       // Struct for Volumes
         swfx_struct     swfx;          // Switch & Fix settings for tset and gamma
         pid_params      pid_pars;      // struct containing PID parameters
@@ -542,6 +551,7 @@ public:		// User declarations
         void __fastcall COM_port_close(void);          // Close COM Port
         void __fastcall COM_port_write(const char *s); // Write COM Port
         void __fastcall COM_port_read(char *s);        // Read  COM Port
+        void __fastcall COM_port_set_read_timeout(DWORD msec);
         __fastcall TMainForm(TComponent* Owner);
 };
 //---------------------------------------------------------------------------

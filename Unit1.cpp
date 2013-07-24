@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.63  2013/07/23 09:42:46  Emile
+// - Fourth intermediate version: several Registry Settings added / removed.
+// - Dialog Screens updated: better lay-out and matches new Registry Settings
+// - Source-code improved for readability
+//
 // Revision 1.62  2013/07/21 22:32:47  Emile
 // - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
 // - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
@@ -726,8 +731,130 @@ void task_log_file(void)
                  MainForm->volumes.Vhlt);
       fclose(fd);
    } // if
-   list_all_tasks();
 } // task_log_file()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 10: Write all changed parameters to the Ebrew hardware
+  Period-Time: 1 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_write_pars(void)
+{
+   int i;
+   char s[100], s1[10];
+
+   s[0] = '\0';
+   for (i = 0 ; i < MAX_PARS; i++)
+   {
+     if (MainForm->pars_changed[i])
+     {
+       MainForm->pars_changed[i] = false; // reset flag
+       sprintf(s1,"N%d ",i); // Compose command
+       strcat(s,s1);         // add to previous commands
+       switch (i)
+       {
+         case  0: sprintf(s1,"%d\n",MainForm->system_mode)        ; break;
+         case  1: sprintf(s1,"%d\n",MainForm->gas_non_mod_llimit) ; break;
+         case  2: sprintf(s1,"%d\n",MainForm->gas_non_mod_hlimit) ; break;
+         case  3: sprintf(s1,"%d\n",MainForm->gas_mod_pwm_llimit) ; break;
+         case  4: sprintf(s1,"%d\n",MainForm->gas_mod_pwm_hlimit) ; break;
+         case  5: sprintf(s1,"%d\n",MainForm->ttriac_llim * 100)  ; break;
+         case  6: sprintf(s1,"%d\n",MainForm->ttriac_hlim * 100)  ; break;
+         case  7: sprintf(s1,"%2.0f\n",MainForm->vhlt_offset * 10); break;
+         case  8: sprintf(s1,"%2.0f\n",MainForm->vhlt_max    * 10); break;
+         case  9: sprintf(s1,"%2.0f\n",MainForm->vhlt_slope  * 10); break;
+         case 10: sprintf(s1,"%2.0f\n",MainForm->vmlt_offset * 10); break;
+         case 11: sprintf(s1,"%2.0f\n",MainForm->vmlt_max    * 10); break;
+         case 12: sprintf(s1,"%2.0f\n",MainForm->vmlt_slope  * 10); break;
+         case 13: sprintf(s1,"%2.0f\n",MainForm->thlt_offset * 16); break;
+         case 14: sprintf(s1,"%2.0f\n",MainForm->thlt_slope  * 16); break;
+         case 15: sprintf(s1,"%2.0f\n",MainForm->tmlt_offset * 16); break;
+         case 16: sprintf(s1,"%2.0f\n",MainForm->tmlt_slope  * 16); break;
+         case 17: sprintf(s1,"%d\n"   ,MainForm->fscl_prescaler)  ; break;
+       } // switch
+       strcat(s,s1); // add to existing commands
+     } // if
+   } // for
+   if (strlen(s) > 0)
+   {
+      MainForm->COM_port_write(s); // Send command to ebrew hardware
+      MainForm->COM_port_read(s);  // read back the response
+   } // if
+} // task_write_pars()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 11: Write HW debug info to a log-file
+  Period-Time: 5 seconds
+  Variables  : hw_debug_logging: true = write info to log-file
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_hw_debug(void)
+{
+   FILE *fd;
+   struct time t1;
+   char   s1[255];
+   static time_slice = 0;
+
+   if (MainForm->hw_debug_logging)
+   {
+      //---------------------------------------------------------------
+      // At 19200 Baud ; 1 char. takes approx. 0.52 msec.
+      // 255 characters takse 133 msec.; 220 char. take 115 msec.
+      // Max. time to use for this task before disturbing other tasks
+      // is approx. 300 msec. So stay below this!
+      //---------------------------------------------------------------
+      MainForm->COM_port_set_read_timeout(115);
+      s1[0] = '\0';
+      if ((fd = fopen("_debug_ebrew_hw.txt","a")) != NULL)
+      {
+        switch (time_slice)
+        {
+          case 0: MainForm->COM_port_write("S1\n"); // List all parameters
+                  gettime(&t1);
+                  fprintf(fd,"%02d:%02d:%02d\n",t1.ti_hour,t1.ti_min,t1.ti_sec);
+                  list_all_tasks(fd); // print SW tasks (PC program)
+                  MainForm->COM_port_read(s1);
+                  fprintf(fd,"\n%s\n",s1);
+                  time_slice = 1; // goto next time-slice
+                  break;
+          case 1: MainForm->COM_port_write("S2\n"); // List all I2C devices
+                  MainForm->COM_port_read(s1);      // takes approx. 115 msec.
+                  fprintf(fd,"%s",s1);
+                  MainForm->COM_port_read(s1);      // total time: 230 msec.
+                  fprintf(fd,"%s\n",s1);
+                  time_slice = 2;
+                  break;
+          case 2: MainForm->COM_port_write("S3\n"); // List all tasks
+                  MainForm->COM_port_read(s1);      // takes approx. 115 msec.
+                  fprintf(fd,"%s",s1);
+                  MainForm->COM_port_read(s1);      // total time: 230 msec.
+                  fprintf(fd,"%s\n",s1);
+                  time_slice = 0;
+                  MainForm->hw_debug_logging = false; // disable flag
+                  break;
+        } // time_slice
+        fclose(fd); // close file again
+      } // if
+      MainForm->COM_port_set_read_timeout(20); // back to 20 msec. again
+   } // if
+} // task_hw_debug()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : Set the COM Port Read Time-out value
+  Variables  : msec: the number of millisec. to wait for a read
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void __fastcall TMainForm::COM_port_set_read_timeout(DWORD msec)
+{
+     // Set the Communication Timeouts
+     GetCommTimeouts(hComm,&ctmoOld);
+     ctmoNew.ReadTotalTimeoutConstant    = msec;
+     ctmoNew.ReadTotalTimeoutMultiplier  =   0;
+     ctmoNew.WriteTotalTimeoutMultiplier =   0;
+     ctmoNew.WriteTotalTimeoutConstant   =   0;
+     SetCommTimeouts(hComm, &ctmoNew);
+} // COM_port_set_read_timeout()
 
 /*-----------------------------------------------------------------------------
   Purpose    : Open Virtual COM Port (Virtual: COM Port emulated via USB)
@@ -751,13 +878,8 @@ void __fastcall TMainForm::COM_port_open(void)
        com_port_is_open = false;
    } // if
    else
-   {  // Set the Communication Timeouts
-     GetCommTimeouts(hComm,&ctmoOld);
-     ctmoNew.ReadTotalTimeoutConstant    = 100;
-     ctmoNew.ReadTotalTimeoutMultiplier  =   0;
-     ctmoNew.WriteTotalTimeoutMultiplier =   0;
-     ctmoNew.WriteTotalTimeoutConstant   =   0;
-     SetCommTimeouts(hComm, &ctmoNew);
+   {
+     COM_port_set_read_timeout(100); // Set the Communication Timeouts
 
      // Set Baud-rate, Parity, wordsize and stop-bits.
      // There are other ways of doing these setting, but this is the easiest way.
@@ -771,10 +893,15 @@ void __fastcall TMainForm::COM_port_open(void)
      if ((fdbg_com = fopen(COM_PORT_DEBUG_FNAME,"a")) == NULL)
      {  // Open COM-port debugging file
         MessageBox(NULL,"Could not open COM-port debug log-file","Error during Initialisation",MB_OK);
-     } /* if */
-     else fprintf(fdbg_com,"File opened\n");
+     } // if
+     else if (cb_debug_com_port)
+     {
+        struct time t1;
+        gettime(&t1);
+        fprintf(fdbg_com,"File opened (%02d:%02d:%02d)\n",t1.ti_hour,t1.ti_min,t1.ti_sec);
+     } // else if
      com_port_is_open = true;
-   } // if
+   } // else
 } // COM_port_open()
 
 /*-----------------------------------------------------------------------------
@@ -788,7 +915,7 @@ void __fastcall TMainForm::COM_port_close(void)
    PurgeComm(hComm, PURGE_RXABORT);
    SetCommTimeouts(hComm, &ctmoOld);
    CloseHandle(hComm); // close Virtual USB COM-port
-   fprintf(fdbg_com,"File closed\n");
+   if (cb_debug_com_port) fprintf(fdbg_com,"File closed\n\n");
    fclose(fdbg_com);   // close COM-port debugging file
    com_port_is_open = false; // set flag to 'not open'
 } // COM_port_close()
@@ -800,22 +927,28 @@ void __fastcall TMainForm::COM_port_close(void)
   ---------------------------------------------------------------------------*/
 void __fastcall TMainForm::COM_port_read(char *s)
 {
-   DWORD i, dwBytesRead;
+   char rbuf[MAX_BUF_READ]; // contains string read from RS232 port
+   DWORD i, j, dwBytesRead;
 
    if (com_port_is_open)
    {
      ReadFile(hComm, s, MAX_BUF_READ-1, &dwBytesRead, NULL);
      if(dwBytesRead)
      {
-        s[dwBytesRead] = 0; // Null-Terminate the string
+        s[dwBytesRead] = '\0'; // Null-Terminate the string
      } // if
      if (cb_debug_com_port)
      {
-          for (i = 0; i < dwBytesRead; i++)
-          {
-             if ((s[i] == '\n') || (s[i] == '\r')) s[i] = '_';
-          }
-          fprintf(fdbg_com,"r[%s]\n",s);
+          for (i = j = 0; i < dwBytesRead; i++)
+          {  
+             if (s[i] != '\r')
+             {
+                if (s[i] == '\n') rbuf[j++] = '_';
+                else              rbuf[j++] = s[i];
+             } // if
+          } // if
+          rbuf[j] = '\0';
+          fprintf(fdbg_com,"r[%s]\n",rbuf);
      } // if
    } // if
 } // COM_port_read()
@@ -860,12 +993,12 @@ void __fastcall TMainForm::COM_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   char s[50];
    ebrew_revision   = "$Revision$";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
    com_port_is_open = false; // indicate that COM-port is closed at power-up
+   hw_debug_logging = false; // Keypress 'D' to enable this (task hw_debug)
 
    try
     {
@@ -953,13 +1086,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
        delete Reg;
        return;
     } // catch
-    //-------------------------------------
-    // Set rev. number in Tstatusbar panel
-    //-------------------------------------
-    strcpy(s,"ebrew revision ");
-    strncat(s,&ebrew_revision[11],4); // extract the CVS revision number
-    s[19] = '\0';
-    StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(s);
 
     Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
     //----------------------------------------
@@ -968,10 +1094,11 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
     if (volumes.Vboil_simulated)
     {  // Vboil is not measured but calculated from Vmlt
        volumes.Vboil  = VBOIL_START;
-    }
+    } // if
     power_up_flag = false; // power-up is finished
 } // TMainForm::TMainForm()
 //---------------------------------------------------------------------------
+
 
 void __fastcall TMainForm::Main_Initialisation(void)
 /*------------------------------------------------------------------
@@ -981,10 +1108,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
   Returns  : None
   ------------------------------------------------------------------*/
 {
-   TRegistry *Reg = new TRegistry();
-   FILE *fd;    // Log File Descriptor
-   int  i;      // temp. variable
-   char s[255]; // Temp. string
+   TRegistry *Reg   = new TRegistry();
+   FILE *fd;             // Log File Descriptor
+   int  i;               // temp. variable
+   char s[MAX_BUF_READ]; // Temp. string
+   char srev[50];        // Temp. string for building revision numbers
 
    //----------------------------------------
    // Initialise all variables from Registry
@@ -1004,6 +1132,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
          cb_debug_com_port = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
          fscl_prescaler    = Reg->ReadInteger("FSCL_PRESCALER"); // I2C SCL Frequency
          cb_i2c_err_msg    = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
+
+         COM_port_open(); // Start Communication with Ebrew Hardware
+         COM_port_write("S0\n");
 
          gas_non_mod_llimit = Reg->ReadInteger("GAS_NON_MOD_LLIMIT");
          gas_non_mod_hlimit = Reg->ReadInteger("GAS_NON_MOD_HLIMIT");
@@ -1065,12 +1196,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    {
       ShowMessage(E.Message);
    } // catch
-
-   //----------------------------------------------------------------------
-   // Start Communication with ebrew Hardware and print a list of all
-   // devices found if it does not match known devices.
-   //----------------------------------------------------------------------
-   COM_port_open(); // Open USB Virtual COM port
 
    //--------------------------------------------------------------------------
    // Read Mash Scheme for maisch.sch file
@@ -1151,22 +1276,55 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fclose(fd);
    } // else
 
+   // Reset all flags for sending parameters to hardware (task write_pars)
+   for (i = 0 ; i < MAX_PARS; i++)
+   {
+     MainForm->pars_changed[i] = false; // reset flag
+   } // for
+
    //-----------------------------------------
    // Now add all the tasks for the scheduler
    //-----------------------------------------
    add_task(task_read_thlt , "read_thlt"  ,   0, 1000);
-   add_task(task_read_tmlt , "read_tmlt"  , 100, 1000);
-   add_task(task_read_vhlt , "read_vhlt"  , 200, 1000);
-   add_task(task_read_vmlt , "read_vmlt"  , 300, 1000);
-   add_task(task_read_lm35 , "read_lm35"  , 400, 1000);
-   add_task(task_pid_ctrl  , "pid_control", 500, (uint16_t)(pid_pars.ts * 1000));
-   add_task(task_update_std, "update_std" , 600, 1000);
-   add_task(task_alive_led , "alive_pump" , 650,  500);
-   add_task(task_log_file  , "wr_log_file", 800, 5000);
+   add_task(task_read_tmlt , "read_tmlt"  ,  50, 1000);
+   add_task(task_read_vhlt , "read_vhlt"  , 100, 1000);
+   add_task(task_read_vmlt , "read_vmlt"  , 150, 1000);
+   add_task(task_read_lm35 , "read_lm35"  , 200, 1000);
+   add_task(task_pid_ctrl  , "pid_control", 250, (uint16_t)(pid_pars.ts * 1000));
+   add_task(task_update_std, "update_std" , 350, 1000);
+   add_task(task_alive_led , "alive_pump" , 400,  500);
+   add_task(task_log_file  , "wr_log_file", 450, 5000);
+   add_task(task_write_pars, "write_pars" , 500, 5000);
+   add_task(task_hw_debug  , "hw_debug"   , 550, 1000);
 
-   COM_port_read(s); // Read power-up notice from Ebrew hardware
-   ctmoNew.ReadTotalTimeoutConstant = 20; // Now change Read time-out to 20 msec.
-   SetCommTimeouts(hComm, &ctmoNew);
+   //-----------------------------------------------
+   // Set HW and SW rev. numbers in Tstatusbar panel
+   //-----------------------------------------------
+   Sleep(500);  // Give file-system a bit of time for init.
+   strcpy(srev,"SW_R");
+   strncat(srev,&ebrew_revision[11],4); // extract the CVS revision number
+   srev[9] = '\0';
+   strcat(srev," HW_R");
+   bool s0_response = false;
+   int  count = 10;
+   while (!s0_response && (--count > 0))
+   {
+        COM_port_read(s);
+        if (strtok(s,"\n"))
+        {
+           s0_response = !strncmp(s,EBREW_HW_ID,strlen(EBREW_HW_ID));
+           while (!s0_response && strtok(NULL,"\n"))
+           { // another line was found in the buffer
+             s0_response = !strncmp(s,EBREW_HW_ID,strlen(EBREW_HW_ID));
+           } // while
+        } // if
+        Sleep(100);
+   } // while
+   if (count > 0) strncat(srev,&s[16],strlen(s)-18);
+   else           strcat(srev,"?.?");
+   StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(srev);
+
+   COM_port_set_read_timeout(20); // Now change Read time-out to 20 msec.
 
    //----------------------------------
    // We came all the way! Start Timers
@@ -1539,6 +1697,14 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
 } // TMainForm::MenuOptionsPIDSettingsClick()
 //---------------------------------------------------------------------------
 
+#define CH_I_PAR(nr, par, par_gui, reg) \
+        if (par != par_gui)             \
+        {                               \
+           par = par_gui;               \
+           pars_changed[nr] = true;     \
+           Reg->WriteInteger(reg, par); \
+        }
+
 void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
 /*------------------------------------------------------------------
   Purpose  : This is the function which is called whenever the user
@@ -1550,7 +1716,7 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
    TI2C_Settings *ptmp;
    AnsiString    S;
    int           x1;  // temp. variable representing new USB COM Port number
-   int           init_needed = false; // TRUE = call Main_Initialisation
+   int           init_needed = false; // TRUE = Re-Init. Communication with HW
 
    ptmp = new TI2C_Settings(this);
    // Get Hardware Settings from the Registry
@@ -1576,8 +1742,6 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
-            system_mode = ptmp->System_Mode->ItemIndex;
-            Reg->WriteInteger("SYSTEM_MODE",system_mode);
             x1 = ptmp->COM_Port_Edit->Text.ToInt();  // Retrieve COM Port Nr.
             if (x1 != usb_com_port_nr)
             {
@@ -1594,26 +1758,19 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
             } // if
             cb_debug_com_port = ptmp->cb_debug_com_port->Checked;
             Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
-            if (fscl_prescaler != ptmp->fscl_combo->ItemIndex)
-            {
-               fscl_prescaler = ptmp->fscl_combo->ItemIndex;
-               Reg->WriteInteger("FSCL_PRESCALER",fscl_prescaler);
-            } // if
+
+
             cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
             Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
 
-            gas_mod_pwm_llimit = ptmp->S0L_Edit->Text.ToInt();
-            Reg->WriteInteger("GAS_MOD_PWM_LLIMIT",gas_mod_pwm_llimit);
-            gas_mod_pwm_hlimit = ptmp->S0U_Edit->Text.ToInt();
-            Reg->WriteInteger("GAS_MOD_PWM_HLIMIT",gas_mod_pwm_hlimit);
-            gas_non_mod_llimit = ptmp->S1L_Edit->Text.ToInt();
-            Reg->WriteInteger("GAS_NON_MOD_LLIMIT",gas_non_mod_llimit);
-            gas_non_mod_hlimit = ptmp->S1U_Edit->Text.ToInt();
-            Reg->WriteInteger("GAS_NON_MOD_HLIMIT",gas_non_mod_hlimit);
-            ttriac_llim = ptmp->S2L_Edit->Text.ToInt();
-            Reg->WriteInteger("TTRIAC_LLIM",ttriac_llim);
-            ttriac_hlim = ptmp->S2U_Edit->Text.ToInt();
-            Reg->WriteInteger("TTRIAC_HLIM",ttriac_hlim);
+            CH_I_PAR( 0,system_mode       ,ptmp->System_Mode->ItemIndex,"SYSTEM_MODE");
+            CH_I_PAR(17,fscl_prescaler    ,ptmp->fscl_combo->ItemIndex ,"FSCL_PRESCALER");
+            CH_I_PAR( 3,gas_mod_pwm_llimit,ptmp->S0L_Edit->Text.ToInt(),"GAS_MOD_PWM_LLIMIT");
+            CH_I_PAR( 4,gas_mod_pwm_hlimit,ptmp->S0U_Edit->Text.ToInt(),"GAS_MOD_PWM_HLIMIT");
+            CH_I_PAR( 1,gas_non_mod_llimit,ptmp->S1L_Edit->Text.ToInt(),"GAS_NON_MOD_LLIMIT");
+            CH_I_PAR( 2,gas_non_mod_hlimit,ptmp->S1U_Edit->Text.ToInt(),"GAS_NON_MOD_HLIMIT");
+            CH_I_PAR( 5,ttriac_llim       ,ptmp->S2L_Edit->Text.ToInt(),"TTRIAC_LLIM");
+            CH_I_PAR( 6,ttriac_hlim       ,ptmp->S2U_Edit->Text.ToInt(),"TTRIAC_HLIM");
 
             if (init_needed)
             {  //--------------------------------------------------------
@@ -1661,20 +1818,20 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
      {
         Reg->OpenKey(REGKEY,FALSE);
         // Sparge Settings
-        ptmp->EMVol->Text     = AnsiString(sp.mash_vol);   // Total Mash Volume (L)
-        ptmp->ESVol->Text     = AnsiString(sp.sp_vol);     // Total Sparge Volume (L)
-        ptmp->EBatches->Text  = AnsiString(sp.sp_batches); // Number of Sparge Batches
-        ptmp->EBTime->Text    = AnsiString(sp.sp_time);    // Time between two Sparge Batches
-        ptmp->EBoilTime->Text = AnsiString(sp.boil_time);  // Total Boil Time (min.)
+        ptmp->EMVol->Text       = AnsiString(sp.mash_vol);   // Total Mash Volume (L)
+        ptmp->ESVol->Text       = AnsiString(sp.sp_vol);     // Total Sparge Volume (L)
+        ptmp->EBatches->Text    = AnsiString(sp.sp_batches); // Number of Sparge Batches
+        ptmp->EBTime->Text      = AnsiString(sp.sp_time);    // Time between two Sparge Batches
+        ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);  // Total Boil Time (min.)
         // Mash Settings
-        ptmp->Offs_Edit->Text  = AnsiString(sp.temp_offset);
-        ptmp->Offs2_Edit->Text = AnsiString(sp.temp_offset2);
-        ptmp->Eph_time->Text   = AnsiString(sp.ph_timer);  // PREHEAT_TIME [sec]
+        ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
+        ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
+        ptmp->Eph_time->Text    = AnsiString(sp.ph_timer);   // PREHEAT_TIME [sec]
         // STD Settings
-        ptmp->Evmlt_empty->Text = AnsiString(sp.vmlt_empty);  // Vmlt_EMPTY [L]
-        ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);     // TIMEOUT_xSEC [sec]
-        ptmp->Eto3->Text        = AnsiString(sp.to3);         // TIMEOUT3 [sec]
-        ptmp->Eto4->Text        = AnsiString(sp.to4);         // TIMEOUT4 [sec]
+        ptmp->Evmlt_empty->Text = AnsiString(sp.vmlt_empty); // Vmlt_EMPTY [L]
+        ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);    // TIMEOUT_xSEC [sec]
+        ptmp->Eto3->Text        = AnsiString(sp.to3);        // TIMEOUT3 [sec]
+        ptmp->Eto4->Text        = AnsiString(sp.to4);        // TIMEOUT4 [sec]
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
@@ -1710,6 +1867,14 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
   } // catch
 } // TMainForm::SpargeSettings1Click()
 //---------------------------------------------------------------------------
+
+#define CH_F_PAR(nr, par, par_gui, reg)      \
+        if (!SameValue(par, par_gui, 0.001)) \
+        {                                    \
+           par = par_gui;                    \
+           pars_changed[nr] = true;          \
+           Reg->WriteFloat(reg, par);        \
+        }
 
 void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
 /*------------------------------------------------------------------
@@ -1762,35 +1927,25 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             //------------------
             // HLT Temperature
             //------------------
-            thlt_offset = ptmp->Thlt_Offset_Edit->Text.ToDouble();
-            Reg->WriteFloat("THLT_OFFSET",thlt_offset);
-            thlt_slope = ptmp->Thlt_Slope_Edit->Text.ToDouble();
-            Reg->WriteFloat("THLT_SLOPE",thlt_slope);
+            CH_F_PAR(13,thlt_offset,ptmp->Thlt_Offset_Edit->Text.ToDouble(),"THLT_OFFSET");
+            CH_F_PAR(14,thlt_slope ,ptmp->Thlt_Slope_Edit->Text.ToDouble() ,"THLT_SLOPE");
             //------------------
             // MLT Temperature
             //------------------
-            tmlt_offset = ptmp->Tmlt_Offset_Edit->Text.ToDouble();
-            Reg->WriteFloat("TMLT_OFFSET",tmlt_offset);
-            tmlt_slope = ptmp->Tmlt_Slope_Edit->Text.ToDouble();
-            Reg->WriteFloat("TMLT_SLOPE",tmlt_slope);
+            CH_F_PAR(15,tmlt_offset,ptmp->Tmlt_Offset_Edit->Text.ToDouble(),"TMLT_OFFSET");
+            CH_F_PAR(16,tmlt_slope ,ptmp->Tmlt_Slope_Edit->Text.ToDouble() ,"TMLT_SLOPE");
             //------------------
             // HLT Volume
             //------------------
-            vhlt_max = ptmp->Vhlt_Max_Edit->Text.ToDouble();
-            Reg->WriteFloat("VHLT_MAX",vhlt_max);
-            vhlt_offset = ptmp->Vhlt_Offset_Edit->Text.ToDouble();
-            Reg->WriteFloat("VHLT_OFFSET",vhlt_offset);
-            vhlt_slope = ptmp->Vhlt_Slope_Edit->Text.ToDouble();
-            Reg->WriteFloat("VHLT_SLOPE",vhlt_slope);
+            CH_F_PAR( 7,vhlt_offset,ptmp->Vhlt_Offset_Edit->Text.ToDouble(),"VHLT_OFFSET");
+            CH_F_PAR( 8,vhlt_max   ,ptmp->Vhlt_Max_Edit->Text.ToDouble()   ,"VHLT_MAX");
+            CH_F_PAR( 9,vhlt_slope ,ptmp->Vhlt_Slope_Edit->Text.ToDouble() ,"VHLT_SLOPE");
             //------------------
             // MLT Volume
             //------------------
-            vmlt_max = ptmp->Vmlt_Max_Edit->Text.ToDouble();
-            Reg->WriteFloat("VMLT_MAX",vmlt_max);
-            vmlt_offset = ptmp->Vmlt_Offset_Edit->Text.ToDouble();
-            Reg->WriteFloat("VMLT_OFFSET",vmlt_offset);
-            vmlt_slope = ptmp->Vmlt_Slope_Edit->Text.ToDouble();
-            Reg->WriteFloat("VMLT_SLOPE",vmlt_slope);
+            CH_F_PAR(10,vmlt_offset,ptmp->Vmlt_Offset_Edit->Text.ToDouble(),"VMLT_OFFSET");
+            CH_F_PAR(11,vmlt_max   ,ptmp->Vmlt_Max_Edit->Text.ToDouble()   ,"VMLT_MAX");
+            CH_F_PAR(12,vmlt_slope ,ptmp->Vmlt_Slope_Edit->Text.ToDouble() ,"VMLT_SLOPE");
             //-------------------
             // Boil Kettle Volume
             //-------------------
@@ -2396,11 +2551,15 @@ void __fastcall TMainForm::HowtoUseHelp1Click(TObject *Sender)
 
 void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
 {
-   if (UpCase(Key) == 'P')
+   if ((UpCase(Key) == 'D') && !hw_debug_logging)
+   {  // Ebrew Hardware Debug Command
+      hw_debug_logging = true;
+   } // if
+   else if (UpCase(Key) == 'P')
    {
       std_out |= P0M; // Set Pump Manual bit
       std_out ^= P0b; // Toggle Pump On/Off
-   } // if
+   } // else if
    else if (UpCase(Key) == 'H')
    {
       swfx.gamma_sw = true; // Set switch for gamma
@@ -2412,13 +2571,13 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
       {
          swfx.gamma_fx = 100.0; // fix gamma to 100 %
       } // else
-   } // else
+   } // else if
    else if ((Key >= '1') && (Key <= '7'))
    {
       // This code only works if V7 is the MSB and V1 is the LSB!! (see misc.h)
       std_out |= (V1M << (Key - '1')); // set corresponding V1M..V7M bit
       std_out ^= (V1b << (Key - '1')); // set corresponding V1b..V7b bit
-   }
+   } // else if
 } // FormKeyPress()
 //---------------------------------------------------------------------------
 

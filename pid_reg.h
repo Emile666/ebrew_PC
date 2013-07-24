@@ -5,6 +5,17 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.12  2011/05/29 20:56:26  Emile
+  - New Registry variables added: STC_N, STC_TD and STC_ADF
+  - PID Settings Dialog screen extended with new parameters for self-tuning
+    controller: possibility to set the system order N, an estimate for the
+    time-delay and a boolean whether or not to use adaptive dir. forgetting.
+  - PID Settings Dialog screen: parameters enabled/disabled when a
+    specific PID controller is chosen.
+  - New functions time_delay() and init_time_delay() added
+  - Changes made in init_pid2() function header.
+  - Unit-test cases updated and extended with tests for new functions.
+
   Revision 1.11  2011/05/14 14:02:19  Emile
   - Unit test set updates, test-case 16 added
   - Self-Tuning controller N=1 and N=2 added to PID dialog screen
@@ -125,8 +136,6 @@ typedef struct _pid_params
    double lpf2; // value for LPF filter
    int    ts_ticks;  // ticks for timer
    int    pid_model; // PID Controller type [0..3]
-   int    burner_hyst_h; // Upper hysteresis limit for gas burner
-   int    burner_hyst_l; // Lower hysteresis limit for gas burner
    double pp; // debug
    double pi; // debug
    double pd; // debug
