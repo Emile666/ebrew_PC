@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.64  2013/07/24 14:00:00  Emile
+// - Version ready for Integration Testing with Ebrew HW R1.07!
+// - Writing parameters to Ebrew HW now works with new task writing_pars
+// - HW Revision is now displayed in statusbar if comm. is established
+// - Task hw_debug added to display S1, S2 & S3 command info from Ebrew HW.
+// - Key-press 'D' now initiates hw_debug task
+//
 // Revision 1.63  2013/07/23 09:42:46  Emile
 // - Fourth intermediate version: several Registry Settings added / removed.
 // - Dialog Screens updated: better lay-out and matches new Registry Settings
@@ -1301,10 +1308,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
    // Set HW and SW rev. numbers in Tstatusbar panel
    //-----------------------------------------------
    Sleep(500);  // Give file-system a bit of time for init.
-   strcpy(srev,"SW_R");
+   strcpy(srev,"SW r");
    strncat(srev,&ebrew_revision[11],4); // extract the CVS revision number
    srev[9] = '\0';
-   strcat(srev," HW_R");
+   strcat(srev," HW r");
    bool s0_response = false;
    int  count = 10;
    while (!s0_response && (--count > 0))
@@ -1320,7 +1327,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
         } // if
         Sleep(100);
    } // while
-   if (count > 0) strncat(srev,&s[16],strlen(s)-18);
+   if (count > 0) strncat(srev,&s[16],strlen(s)-16);
    else           strcat(srev,"?.?");
    StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(srev);
 
