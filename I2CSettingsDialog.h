@@ -5,6 +5,11 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2013/07/23 09:42:46  Emile
+// - Fourth intermediate version: several Registry Settings added / removed.
+// - Dialog Screens updated: better lay-out and matches new Registry Settings
+// - Source-code improved for readability
+//
 // Revision 1.10  2013/06/16 14:39:19  Emile
 // Intermediate version for new Ebrew 2.0 USB hardware:
 // - Hardware settings Dialog: COM Port + Settings added + LEDx removed
@@ -101,9 +106,6 @@ __published:	// IDE-managed Components
         TButton *Button1;
         TButton *Button2;
         TButton *Help_Button;
-        TLabel *COM_Port_Nr_lbl;
-        TEdit *COM_Port_Edit;
-        TUpDown *UpDown1;
         TEdit *S2L_Edit;
         TLabel *S2L_L1a;
         TEdit *S2U_Edit;
@@ -135,12 +137,18 @@ __published:	// IDE-managed Components
         TLabel *S0_Lbl;
         TLabel *S1_Lbl;
         TLabel *S2_Lbl;
+        TEdit *UDP_Settings;
+        TLabel *UDP_Settings_lbl;
+        TComboBox *Comm_Setting;
+        TLabel *Comm_Setting_lbl;
         void __fastcall Help_ButtonClick(TObject *Sender);
         void __fastcall System_ModeExit(TObject *Sender);
+        void __fastcall Comm_SettingChange(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TI2C_Settings(TComponent* Owner);
         void __fastcall update_i2c_gui(void);
+        void __fastcall update_comm_gui(void);
 };
 //---------------------------------------------------------------------------
 extern PACKAGE TI2C_Settings *I2C_Settings;

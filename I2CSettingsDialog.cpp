@@ -5,6 +5,11 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2013/07/23 09:42:46  Emile
+// - Fourth intermediate version: several Registry Settings added / removed.
+// - Dialog Screens updated: better lay-out and matches new Registry Settings
+// - Source-code improved for readability
+//
 // Revision 1.5  2013/06/16 14:39:19  Emile
 // Intermediate version for new Ebrew 2.0 USB hardware:
 // - Hardware settings Dialog: COM Port + Settings added + LEDx removed
@@ -47,6 +52,7 @@
 #pragma hdrstop
 
 #include "I2CSettingsDialog.h"
+
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 #pragma resource "*.dfm"
@@ -56,7 +62,8 @@ __fastcall TI2C_Settings::TI2C_Settings(TComponent* Owner)
         : TForm(Owner)
 {
    update_i2c_gui();
-}
+   update_comm_gui();
+} // TI2C_Settings()
 //---------------------------------------------------------------------------
 
 #define IDH_HARDWARESETTINGS (0x10090)
@@ -114,10 +121,34 @@ void __fastcall TI2C_Settings::update_i2c_gui(void)
    } // switch
 } // update_i2c_gui()
 
+void __fastcall TI2C_Settings::update_comm_gui(void)
+{
+   if (Comm_Setting->ItemIndex == 0)
+   {
+        COM_Port_Settings_Edit->Enabled = false;
+        COM_Port_Settings_lbl->Enabled  = false;
+        UDP_Settings->Enabled = true;
+        UDP_Settings_lbl->Enabled = true;
+   }
+   else if (Comm_Setting->ItemIndex == 1)
+   {
+        COM_Port_Settings_Edit->Enabled = true;
+        COM_Port_Settings_lbl->Enabled  = true;
+        UDP_Settings->Enabled = false;
+        UDP_Settings_lbl->Enabled = false;
+   } // else
+} // TI2C_Settings::update_comm_gui()
+
 //---------------------------------------------------------------------------
 void __fastcall TI2C_Settings::System_ModeExit(TObject *Sender)
 {
    update_i2c_gui();
 } // System_ModeExit()
+//---------------------------------------------------------------------------
+
+void __fastcall TI2C_Settings::Comm_SettingChange(TObject *Sender)
+{
+   update_comm_gui();
+} // Comm_SettingChange()
 //---------------------------------------------------------------------------
 

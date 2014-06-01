@@ -17,8 +17,9 @@
       Sparge_Settings.dfm RestoreSettings.dfm VersionAwareAbout.dfm 
       MeasurementsDialog.dfm"/>
     <LIBFILES value=""/>
-    <LIBRARIES value="Vcwb6.lib AnimTimer.lib"/>
-    <SPARELIBS value="rtl.lib vcl.lib vcljpg.lib AnimTimer.lib bcbsmp.lib vclx.lib Vcwb6.lib"/>
+    <LIBRARIES value="inet.lib indy.lib Vcwb6.lib AnimTimer.lib"/>
+    <SPARELIBS value="rtl.lib vcl.lib vcljpg.lib AnimTimer.lib bcbsmp.lib vclx.lib Vcwb6.lib 
+      indy.lib inet.lib nmfast.lib"/>
     <PACKAGES value="rtl.bpi vcl.bpi vclx.bpi vcljpg.bpi bcbsmp.bpi qrpt.bpi dbrtl.bpi 
       vcldb.bpi bdertl.bpi ibsmp.bpi vcldbx.bpi teeui.bpi teedb.bpi tee.bpi 
       nmfast.bpi dclocx.bpi"/>

@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.41  2013/07/24 14:00:00  Emile
+// - Version ready for Integration Testing with Ebrew HW R1.07!
+// - Writing parameters to Ebrew HW now works with new task writing_pars
+// - HW Revision is now displayed in statusbar if comm. is established
+// - Task hw_debug added to display S1, S2 & S3 command info from Ebrew HW.
+// - Key-press 'D' now initiates hw_debug task
+//
 // Revision 1.40  2013/07/23 09:42:46  Emile
 // - Fourth intermediate version: several Registry Settings added / removed.
 // - Dialog Screens updated: better lay-out and matches new Registry Settings
@@ -326,8 +333,19 @@
 #include "VrTank.hpp"
 #include "VrThermoMeter.hpp"
 #include "VrPowerMeter.hpp"
-#include <ScktComp.hpp>
+//#include <ScktComp.hpp>
 #include "VrLeds.hpp"
+//#include <IdBaseComponent.hpp>
+//#include <IdComponent.hpp>
+//#include <IdUDPBase.hpp>
+//#include <IdUDPClient.hpp>
+//#include <IdUDPServer.hpp>
+//#include <Sockets.hpp>
+#include <IdBaseComponent.hpp>
+#include <IdComponent.hpp>
+#include <IdUDPBase.hpp>
+#include <IdUDPClient.hpp>
+#include <IdUDPServer.hpp>
 
 #define TS_INIT    (5.0)
 #define KC_INIT   (69.0)
@@ -458,6 +476,8 @@ __published:	// IDE-managed Components
         TStaticText *StaticText1;
         TStaticText *StaticText2;
         TStaticText *StaticText3;
+        TIdUDPClient *UDP_Client;
+        TIdUDPServer *UDP_Server;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -479,6 +499,8 @@ __published:	// IDE-managed Components
         void __fastcall Contents1Click(TObject *Sender);
         void __fastcall HowtoUseHelp1Click(TObject *Sender);
         void __fastcall FormKeyPress(TObject *Sender, char &Key);
+        void __fastcall UDP_ServerUDPRead(TObject *Sender, TStream *AData,
+          TIdSocketHandle *ABinding);
 private:	// User declarations
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall print_mash_scheme_to_statusbar(void);
@@ -516,8 +538,9 @@ public:		// User declarations
         double tmlt_offset;   // P15: offset to add to Tmlt measurement
         double tmlt_slope;    // P16: Slope limiter for Tmlt temperature
 
-        int    usb_com_port_nr;       // Number of virtual USB COM port
+        int    comm_channel_nr;       // Communication channel number
         char   com_port_settings[20]; // Virtual COM Port Settings
+        char   udp_ip_port[30];       // UDP IP Port Number
         bool   com_port_is_open;      // true = COM-port is open for Read/Write
         bool   i2c_hw_scan_req;       // true = check I2C HW devices
         int    fscl_prescaler;        // P17: index into I2C SCL Frequency values
@@ -546,12 +569,13 @@ public:		// User declarations
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
         TDateTime       dt_time_switch;   // object holding date and time
         char            *ebrew_revision;  // contains CVS revision number
+        char            udp_read[MAX_BUF_READ]; // contains bytes read from UDP
 
-        void __fastcall COM_port_open(void);           // Init. COM Port
-        void __fastcall COM_port_close(void);          // Close COM Port
-        void __fastcall COM_port_write(const char *s); // Write COM Port
-        void __fastcall COM_port_read(char *s);        // Read  COM Port
-        void __fastcall COM_port_set_read_timeout(DWORD msec);
+        void __fastcall comm_port_open(void);           // Init. Comm. Port
+        void __fastcall comm_port_close(void);          // Close Comm. Port
+        void __fastcall comm_port_write(const char *s); // Write Comm. Port
+        void __fastcall comm_port_read(char *s);        // Read  Comm. Port
+        void __fastcall comm_port_set_read_timeout(DWORD msec);
         __fastcall TMainForm(TComponent* Owner);
 };
 //---------------------------------------------------------------------------

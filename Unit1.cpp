@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.65  2013/07/24 14:08:57  Emile
+// - Bug-fix version numbering in statusbar.
+//
 // Revision 1.64  2013/07/24 14:00:00  Emile
 // - Version ready for Integration Testing with Ebrew HW R1.07!
 // - Writing parameters to Ebrew HW now works with new task writing_pars
@@ -477,8 +480,8 @@ void task_read_thlt(void)
 {
     char   s[MAX_BUF_READ];
 
-    MainForm->COM_port_write("A3\n"); // A3 = THLT
-    MainForm->COM_port_read(s);       // Read HLT temp. from LM92 device
+    MainForm->comm_port_write("A3\n"); // A3 = THLT
+    MainForm->comm_port_read(s);       // Read HLT temp. from LM92 device
     if (!strncmp(s,"Thlt=",5)) MainForm->Val_Thlt->Font->Color = clLime;
     else                       MainForm->Val_Thlt->Font->Color = clRed;
     MainForm->thlt = atof(&s[5]);
@@ -498,8 +501,8 @@ void task_read_tmlt(void)
 {
     char   s[MAX_BUF_READ];
 
-    MainForm->COM_port_write("A4\n"); // A4 = TMLT
-    MainForm->COM_port_read(s);       // Read MLT temp. from LM92 device
+    MainForm->comm_port_write("A4\n"); // A4 = TMLT
+    MainForm->comm_port_read(s);       // Read MLT temp. from LM92 device
     if (!strncmp(s,"Tmlt=",5)) MainForm->Val_Tmlt->Font->Color = clLime;
     else                       MainForm->Val_Tmlt->Font->Color = clRed;
     MainForm->tmlt = atof(&s[5]);
@@ -519,8 +522,8 @@ void task_read_vhlt(void)
 {
     char   s[MAX_BUF_READ];
 
-    MainForm->COM_port_write("A1\n"); // A1 = VHLT
-    MainForm->COM_port_read(s);       // Read HLT Volume from pressure sensor
+    MainForm->comm_port_write("A1\n"); // A1 = VHLT
+    MainForm->comm_port_read(s);       // Read HLT Volume from pressure sensor
     if (!strncmp(s,"Vhlt=",5)) MainForm->Vol_HLT->Font->Color = clLime;
     else                       MainForm->Vol_HLT->Font->Color = clRed;
     MainForm->volumes.Vhlt  = atof(&s[5]);
@@ -540,8 +543,8 @@ void task_read_vmlt(void)
 {
     char   s[MAX_BUF_READ];
 
-    MainForm->COM_port_write("A2\n"); // A2 = VMLT
-    MainForm->COM_port_read(s);       // Read MLT Volume from pressure sensor
+    MainForm->comm_port_write("A2\n"); // A2 = VMLT
+    MainForm->comm_port_read(s);       // Read MLT Volume from pressure sensor
     if (!strncmp(s,"Vmlt=",5)) MainForm->Vol_MLT->Font->Color = clLime;
     else                       MainForm->Vol_MLT->Font->Color = clRed;
     MainForm->volumes.Vmlt  = atof(&s[5]);
@@ -563,8 +566,8 @@ void task_read_lm35(void)
 {
     char   s[MAX_BUF_READ];
 
-    MainForm->COM_port_write("A0\n"); // A0 = LM35
-    MainForm->COM_port_read(s);       // Read LM35 Volume from Ebrew hardware
+    MainForm->comm_port_write("A0\n"); // A0 = LM35
+    MainForm->comm_port_read(s);       // Read LM35 Volume from Ebrew hardware
     if (!strncmp(s,"Lm35=",5)) MainForm->Ttriac_lbl->Font->Color = clLime;
     else                       MainForm->Ttriac_lbl->Font->Color = clRed;
     MainForm->ttriac  = atof(&s[5]);
@@ -637,8 +640,8 @@ void task_pid_ctrl(void)
     // This is relevant only when the Modulating Gas-Burner is selected.
     //--------------------------------------------------------------------
     sprintf(s,"W%0d\n", MainForm->gamma); // PID-Output Gamma [0%..100%]
-    MainForm->COM_port_write(s); // output to Ebrew hardware
-    MainForm->COM_port_read(s);  // read response from Ebrew hardware
+    MainForm->comm_port_write(s); // output to Ebrew hardware
+    //MainForm->comm_port_read(s);  // read response from Ebrew hardware
 } // task_pid_ctrl()
 
 /*-----------------------------------------------------------------------------
@@ -673,7 +676,7 @@ void task_update_std(void)
     // NOTE: The pump bit is sent using the P0/P1 command
     //-----------------------------------------------------------------
     //sprintf(s,"V%02x\n",std_out & 0x00FE); // Output valves except Pump (bit 0)
-    //MainForm->COM_port_write(s); // output to Ebrew hardware
+    //MainForm->comm_port_write(s); // output to Ebrew hardware
 } // task_update_std()
 
 /*-----------------------------------------------------------------------------
@@ -705,8 +708,8 @@ void task_alive_led(void)
    {    // New PUMP bit should be 0
         strcat(s,"P0\n");
    } // else
-   MainForm->COM_port_write(s); // Send command to ebrew hardware
-   MainForm->COM_port_read(s);
+   MainForm->comm_port_write(s); // Send command to ebrew hardware
+   //MainForm->comm_port_read(s);
 } // task_alive_led()
 
 /*-----------------------------------------------------------------------------
@@ -785,8 +788,8 @@ void task_write_pars(void)
    } // for
    if (strlen(s) > 0)
    {
-      MainForm->COM_port_write(s); // Send command to ebrew hardware
-      MainForm->COM_port_read(s);  // read back the response
+      MainForm->comm_port_write(s); // Send command to ebrew hardware
+      //MainForm->comm_port_read(s);  // read back the response
    } // if
 } // task_write_pars()
 
@@ -811,31 +814,31 @@ void task_hw_debug(void)
       // Max. time to use for this task before disturbing other tasks
       // is approx. 300 msec. So stay below this!
       //---------------------------------------------------------------
-      MainForm->COM_port_set_read_timeout(115);
+      MainForm->comm_port_set_read_timeout(115);
       s1[0] = '\0';
       if ((fd = fopen("_debug_ebrew_hw.txt","a")) != NULL)
       {
         switch (time_slice)
         {
-          case 0: MainForm->COM_port_write("S1\n"); // List all parameters
+          case 0: MainForm->comm_port_write("S1\n"); // List all parameters
                   gettime(&t1);
                   fprintf(fd,"%02d:%02d:%02d\n",t1.ti_hour,t1.ti_min,t1.ti_sec);
                   list_all_tasks(fd); // print SW tasks (PC program)
-                  MainForm->COM_port_read(s1);
+                  MainForm->comm_port_read(s1);
                   fprintf(fd,"\n%s\n",s1);
                   time_slice = 1; // goto next time-slice
                   break;
-          case 1: MainForm->COM_port_write("S2\n"); // List all I2C devices
-                  MainForm->COM_port_read(s1);      // takes approx. 115 msec.
+          case 1: MainForm->comm_port_write("S2\n"); // List all I2C devices
+                  MainForm->comm_port_read(s1);      // takes approx. 115 msec.
                   fprintf(fd,"%s",s1);
-                  MainForm->COM_port_read(s1);      // total time: 230 msec.
+                  MainForm->comm_port_read(s1);      // total time: 230 msec.
                   fprintf(fd,"%s\n",s1);
                   time_slice = 2;
                   break;
-          case 2: MainForm->COM_port_write("S3\n"); // List all tasks
-                  MainForm->COM_port_read(s1);      // takes approx. 115 msec.
+          case 2: MainForm->comm_port_write("S3\n"); // List all tasks
+                  MainForm->comm_port_read(s1);      // takes approx. 115 msec.
                   fprintf(fd,"%s",s1);
-                  MainForm->COM_port_read(s1);      // total time: 230 msec.
+                  MainForm->comm_port_read(s1);      // total time: 230 msec.
                   fprintf(fd,"%s\n",s1);
                   time_slice = 0;
                   MainForm->hw_debug_logging = false; // disable flag
@@ -843,7 +846,7 @@ void task_hw_debug(void)
         } // time_slice
         fclose(fd); // close file again
       } // if
-      MainForm->COM_port_set_read_timeout(20); // back to 20 msec. again
+      MainForm->comm_port_set_read_timeout(20); // back to 20 msec. again
    } // if
 } // task_hw_debug()
 
@@ -852,15 +855,22 @@ void task_hw_debug(void)
   Variables  : msec: the number of millisec. to wait for a read
   Returns    : -
   ---------------------------------------------------------------------------*/
-void __fastcall TMainForm::COM_port_set_read_timeout(DWORD msec)
+void __fastcall TMainForm::comm_port_set_read_timeout(DWORD msec)
 {
-     // Set the Communication Timeouts
-     GetCommTimeouts(hComm,&ctmoOld);
-     ctmoNew.ReadTotalTimeoutConstant    = msec;
-     ctmoNew.ReadTotalTimeoutMultiplier  =   0;
-     ctmoNew.WriteTotalTimeoutMultiplier =   0;
-     ctmoNew.WriteTotalTimeoutConstant   =   0;
-     SetCommTimeouts(hComm, &ctmoNew);
+     if (comm_channel_nr == 0) // Ethernet UDP
+     {
+        //UDP_Server->ReceiveTimeout = msec;
+     } // if
+     else
+     {
+        // Set the Communication Timeouts
+        GetCommTimeouts(hComm,&ctmoOld);
+        ctmoNew.ReadTotalTimeoutConstant    = msec;
+        ctmoNew.ReadTotalTimeoutMultiplier  =   0;
+        ctmoNew.WriteTotalTimeoutMultiplier =   0;
+        ctmoNew.WriteTotalTimeoutConstant   =   0;
+        SetCommTimeouts(hComm, &ctmoNew);
+     } // else
 } // COM_port_set_read_timeout()
 
 /*-----------------------------------------------------------------------------
@@ -868,48 +878,57 @@ void __fastcall TMainForm::COM_port_set_read_timeout(DWORD msec)
   Variables  : -
   Returns    : -
   ---------------------------------------------------------------------------*/
-void __fastcall TMainForm::COM_port_open(void)
+void __fastcall TMainForm::comm_port_open(void)
 {
    DCB  dcbCommPort;
    char s[50];
 
-   // OPEN THE COM PORT.
-   sprintf(s,"COM%d",usb_com_port_nr); // USB COM Port Number
-   hComm = CreateFile(s,GENERIC_READ | GENERIC_WRITE,0,0,OPEN_EXISTING,0,0);
-
-   // IF THE PORT CANNOT BE OPENED, BAIL OUT.
-   if(hComm == INVALID_HANDLE_VALUE)
+   if (comm_channel_nr > 0) // Any of the Virtual USB COM ports
    {
-       strcat(s," could not be opened. Please check COM Port Settings.");
-       MessageBox(NULL,s,"ERROR Opening Virtual USB COM Port",MB_OK);
-       com_port_is_open = false;
+        // OPEN THE COM PORT.
+        sprintf(s,"COM%d",comm_channel_nr); // communication channel
+        hComm = CreateFile(s,GENERIC_READ | GENERIC_WRITE,0,0,OPEN_EXISTING,0,0);
+
+        // IF THE PORT CANNOT BE OPENED, BAIL OUT.
+        if(hComm == INVALID_HANDLE_VALUE)
+        {
+           strcat(s," could not be opened. Please check COM Port Settings.");
+           MessageBox(NULL,s,"ERROR Opening Virtual USB COM Port",MB_OK);
+           com_port_is_open = false;
+        } // if
+        else
+        {
+           comm_port_set_read_timeout(100); // Set the Communication Timeouts
+
+           // Set Baud-rate, Parity, wordsize and stop-bits.
+           // There are other ways of doing these setting, but this is the easiest way.
+           // If you want to add code for other baud-rates, remember that the argument
+           // for BuildCommDCB must be a pointer to a string. Also note that
+           // BuildCommDCB() defaults to NO Handshaking.
+           dcbCommPort.DCBlength = sizeof(DCB);
+           GetCommState(hComm, &dcbCommPort);
+           BuildCommDCB(com_port_settings, &dcbCommPort); // "19200,N,8,1"
+           SetCommState(hComm, &dcbCommPort);
+           com_port_is_open = true;
+        } // else
    } // if
    else
    {
-     COM_port_set_read_timeout(100); // Set the Communication Timeouts
-
-     // Set Baud-rate, Parity, wordsize and stop-bits.
-     // There are other ways of doing these setting, but this is the easiest way.
-     // If you want to add code for other baud-rates, remember that the argument
-     // for BuildCommDCB must be a pointer to a string. Also note that
-     // BuildCommDCB() defaults to NO Handshaking.
-     dcbCommPort.DCBlength = sizeof(DCB);
-     GetCommState(hComm, &dcbCommPort);
-     BuildCommDCB(com_port_settings, &dcbCommPort); // "19200,N,8,1"
-     SetCommState(hComm, &dcbCommPort);
-     if ((fdbg_com = fopen(COM_PORT_DEBUG_FNAME,"a")) == NULL)
-     {  // Open COM-port debugging file
-        MessageBox(NULL,"Could not open COM-port debug log-file","Error during Initialisation",MB_OK);
-     } // if
-     else if (cb_debug_com_port)
-     {
-        struct time t1;
-        gettime(&t1);
-        fprintf(fdbg_com,"File opened (%02d:%02d:%02d)\n",t1.ti_hour,t1.ti_min,t1.ti_sec);
-     } // else if
-     com_port_is_open = true;
+        udp_read[0] = '\0';
+        UDP_Server->Active = true;
+        com_port_is_open   = true;
    } // else
-} // COM_port_open()
+   if ((fdbg_com = fopen(COM_PORT_DEBUG_FNAME,"a")) == NULL)
+   {  // Open COM-port debugging file
+      MessageBox(NULL,"Could not open COM-port debug log-file","Error during Initialisation",MB_OK);
+   } // if
+   else if (cb_debug_com_port)
+   {
+      struct time t1;
+      gettime(&t1);
+      fprintf(fdbg_com,"\nFile opened (%02d:%02d:%02d)\n",t1.ti_hour,t1.ti_min,t1.ti_sec);
+   } // else if
+} // comm_port_open()
 
 /*-----------------------------------------------------------------------------
   Purpose    : Close Virtual COM Port (Virtual: COM Port emulated via USB)
@@ -917,64 +936,90 @@ void __fastcall TMainForm::COM_port_open(void)
   Variables  : -
   Returns    : -
   ---------------------------------------------------------------------------*/
-void __fastcall TMainForm::COM_port_close(void)
+void __fastcall TMainForm::comm_port_close(void)
 {
-   PurgeComm(hComm, PURGE_RXABORT);
-   SetCommTimeouts(hComm, &ctmoOld);
-   CloseHandle(hComm); // close Virtual USB COM-port
-   if (cb_debug_com_port) fprintf(fdbg_com,"File closed\n\n");
+   if (comm_channel_nr > 0) // any of the USB Virtual COM ports
+   {
+      PurgeComm(hComm, PURGE_RXABORT);
+      SetCommTimeouts(hComm, &ctmoOld);
+      CloseHandle(hComm); // close Virtual USB COM-port
+   } // if
+   if (cb_debug_com_port) fprintf(fdbg_com,"\nFile closed\n\n");
    fclose(fdbg_com);   // close COM-port debugging file
-   com_port_is_open = false; // set flag to 'not open'
-} // COM_port_close()
+   UDP_Server->Active = false;
+   com_port_is_open   = false; // set flag to 'not open'
+} // comm_port_close()
 
 /*-----------------------------------------------------------------------------
   Purpose    : Read a string from the Virtual COM Port opened by COM_port_open()
   Variables  : s: contains the null-terminated string that is read
   Returns    : -
   ---------------------------------------------------------------------------*/
-void __fastcall TMainForm::COM_port_read(char *s)
+void __fastcall TMainForm::comm_port_read(char *s)
 {
    char rbuf[MAX_BUF_READ]; // contains string read from RS232 port
-   DWORD i, j, dwBytesRead;
+   DWORD i, j, dwBytesRead = 0;
 
-   if (com_port_is_open)
+   if (comm_channel_nr == 0) // Use Ethernet UDP as communication channel
+   {
+        // UDP data is read by the UDPRead() method of UDP_Server
+        // If data is available, it is stored in the array udp_read[]
+        // This function is normally called after a comm_port_write(),
+        // so introduce a little delay here, to give the uC time to respond
+        ::Sleep(20); // give system time to react and send response
+        dwBytesRead = strlen(udp_read);
+        if (dwBytesRead > 0)
+        {
+           strcpy(s, udp_read); // copy string
+           udp_read[0] = '\0';  // clear string
+        } // if
+   } // if
+   else if (com_port_is_open)
    {
      ReadFile(hComm, s, MAX_BUF_READ-1, &dwBytesRead, NULL);
      if(dwBytesRead)
      {
         s[dwBytesRead] = '\0'; // Null-Terminate the string
      } // if
-     if (cb_debug_com_port)
-     {
-          for (i = j = 0; i < dwBytesRead; i++)
-          {  
-             if (s[i] != '\r')
-             {
-                if (s[i] == '\n') rbuf[j++] = '_';
-                else              rbuf[j++] = s[i];
-             } // if
-          } // if
-          rbuf[j] = '\0';
-          fprintf(fdbg_com,"r[%s]\n",rbuf);
-     } // if
+   } // else if
+   if (cb_debug_com_port)
+   {
+      for (i = j = 0; i < dwBytesRead; i++)
+      {
+         if (s[i] != '\r')
+         {
+            if (s[i] == '\n')
+            {
+                rbuf[j++] = '\\';
+                rbuf[j++] = 'n';
+            }
+            else rbuf[j++] = s[i];
+         } // if
+      } // if
+      rbuf[j] = '\0';
+      fprintf(fdbg_com,"r[%s]",rbuf);
    } // if
-} // COM_port_read()
+} // comm_port_read()
 
 /*-----------------------------------------------------------------------------
   Purpose    : Write a string to the Virtual COM Port opened by COM_port_open()
   Variables  : s: contains the null-terminated string to write to the COM port.
   Returns    : -
   ---------------------------------------------------------------------------*/
-void __fastcall TMainForm::COM_port_write(const char *s)
+void __fastcall TMainForm::comm_port_write(const char *s)
 {
    char send_buffer[MAX_BUF_WRITE]; // contains string to send to RS232 port
    int  bytes_to_send = 0;          // Number of bytes to send
    int  i, bytes_sent = 0;          // Number of bytes sent to COM port
 
-   if (com_port_is_open)
+   strcpy(send_buffer,s);    // copy command to send into send_buffer
+   bytes_to_send = strlen(send_buffer);
+   if (comm_channel_nr == 0) // Use Ethernet UDP as communication channel
    {
-     strcpy(send_buffer,s);    // copy command to send into send_buffer
-     bytes_to_send = strlen(send_buffer);
+        UDP_Client->Send(s);
+   } // if
+   else if (com_port_is_open)
+   {
      bytes_sent    = 0;
      while (bytes_sent < bytes_to_send)
      {
@@ -983,14 +1028,14 @@ void __fastcall TMainForm::COM_port_write(const char *s)
            MessageBox(NULL,"TransmitCommChar() Error","COM_port_write()",MB_OK);
         } // if
      } // while()
-     if (cb_debug_com_port)
-     {
-          for (i = 0; i < bytes_to_send; i++)
-          {
-             if (send_buffer[i] == '\n') send_buffer[i] = '_';
-          }
-          fprintf(fdbg_com,"w[%s]",send_buffer);
-     } // if
+   } // else if
+   if (cb_debug_com_port)
+   {
+      for (i = 0; i < bytes_to_send; i++)
+      {
+         if (send_buffer[i] == '\n') send_buffer[i] = '_';
+      }
+      fprintf(fdbg_com,"\nw[%s]",send_buffer);
    } // if
 } // COM_port_write()
 
@@ -1018,8 +1063,9 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           // Ebrew 2.0 Hardware Settings Dialog
           //------------------------------------
           Reg->WriteInteger("SYSTEM_MODE",GAS_MODULATING);
-          Reg->WriteInteger("USB_COM_PORT",3);   // Virtual USB COM port number
+          Reg->WriteInteger("COMM_CHANNEL",0);   // Select Ethernet as Comm. Channel
           Reg->WriteString("COM_PORT_SETTINGS","19200,N,8,1"); // COM port settings
+          Reg->WriteString("UDP_IP_PORT","192.168.1.177:8888"); // IP & Port number
           Reg->WriteBool("CB_DEBUG_COM_PORT",false);
           Reg->WriteInteger("FSCL_PRESCALER",10); // set fscl to 20 kHz
           Reg->WriteBool("CB_I2C_ERR_MSG",true);
@@ -1106,7 +1152,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 } // TMainForm::TMainForm()
 //---------------------------------------------------------------------------
 
-
 void __fastcall TMainForm::Main_Initialisation(void)
 /*------------------------------------------------------------------
   Purpose  : This function Initialises all I2C Hardware and checks if
@@ -1120,6 +1165,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    int  i;               // temp. variable
    char s[MAX_BUF_READ]; // Temp. string
    char srev[50];        // Temp. string for building revision numbers
+   char *result;
 
    //----------------------------------------
    // Initialise all variables from Registry
@@ -1134,14 +1180,15 @@ void __fastcall TMainForm::Main_Initialisation(void)
          // Ebrew 2.0 Hardware Settings Dialog
          //------------------------------------
          system_mode       = Reg->ReadInteger("SYSTEM_MODE");
-         usb_com_port_nr   = Reg->ReadInteger("USB_COM_PORT");   // Virtual USB COM port number
+         comm_channel_nr   = Reg->ReadInteger("COMM_CHANNEL");   // Communication Channel
          strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
+         strcpy(udp_ip_port,Reg->ReadString("UDP_IP_PORT").c_str()); // UDP IP & Port number settings
          cb_debug_com_port = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
          fscl_prescaler    = Reg->ReadInteger("FSCL_PRESCALER"); // I2C SCL Frequency
          cb_i2c_err_msg    = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
 
-         COM_port_open(); // Start Communication with Ebrew Hardware
-         COM_port_write("S0\n");
+         comm_port_open(); // Start Communication with Ebrew Hardware
+         comm_port_write("S0\n");
 
          gas_non_mod_llimit = Reg->ReadInteger("GAS_NON_MOD_LLIMIT");
          gas_non_mod_hlimit = Reg->ReadInteger("GAS_NON_MOD_HLIMIT");
@@ -1307,31 +1354,35 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-----------------------------------------------
    // Set HW and SW rev. numbers in Tstatusbar panel
    //-----------------------------------------------
-   Sleep(500);  // Give file-system a bit of time for init.
+   ::Sleep(100);  // Give file-system a bit of time for init.
    strcpy(srev,"SW r");
    strncat(srev,&ebrew_revision[11],4); // extract the CVS revision number
    srev[9] = '\0';
    strcat(srev," HW r");
    bool s0_response = false;
-   int  count = 10;
-   while (!s0_response && (--count > 0))
+   int  len, count = 6;
+   struct time t1;
+   while (!s0_response && (count-- > 0))
    {
-        COM_port_read(s);
-        if (strtok(s,"\n"))
+        comm_port_write("S0\n");
+        s[0] = '\0';
+        comm_port_read(s);
+        result = strtok(s,"\n");
+        if (result != NULL)
         {
-           s0_response = !strncmp(s,EBREW_HW_ID,strlen(EBREW_HW_ID));
-           while (!s0_response && strtok(NULL,"\n"))
+           s0_response = !strncmp(result,EBREW_HW_ID,strlen(EBREW_HW_ID));
+           while (!s0_response && (result = strtok(NULL,"\n")) != NULL)
            { // another line was found in the buffer
-             s0_response = !strncmp(s,EBREW_HW_ID,strlen(EBREW_HW_ID));
+             s0_response = !strncmp(result,EBREW_HW_ID,strlen(EBREW_HW_ID));
            } // while
         } // if
-        Sleep(100);
+        ::Sleep(100);
    } // while
    if (count > 0) strncat(srev,&s[16],strlen(s)-16);
    else           strcat(srev,"?.?");
    StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(srev);
 
-   COM_port_set_read_timeout(20); // Now change Read time-out to 20 msec.
+   comm_port_set_read_timeout(20); // Now change Read time-out to 20 msec.
 
    //----------------------------------
    // We came all the way! Start Timers
@@ -1734,8 +1785,11 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          Reg->OpenKey(REGKEY,FALSE);
 
          ptmp->System_Mode->ItemIndex       = Reg->ReadInteger("SYSTEM_MODE");
-         ptmp->UpDown1->Position            = Reg->ReadInteger("USB_COM_PORT");
-         ptmp->COM_Port_Settings_Edit->Text = Reg->ReadString("COM_PORT_SETTINGS");;
+         ptmp->update_i2c_gui();  // Start with correct labels enabled
+         ptmp->Comm_Setting->ItemIndex      = Reg->ReadInteger("COMM_CHANNEL");
+         ptmp->update_comm_gui(); // Start with correct labels enabled
+         ptmp->COM_Port_Settings_Edit->Text = Reg->ReadString("COM_PORT_SETTINGS");
+         ptmp->UDP_Settings->Text           = Reg->ReadString("UDP_IP_PORT");
          ptmp->cb_debug_com_port->Checked   = Reg->ReadBool("CB_DEBUG_COM_PORT");
          ptmp->fscl_combo->ItemIndex        = Reg->ReadInteger("FSCL_PRESCALER");
          ptmp->cb_i2c_err_msg->Checked      = Reg->ReadBool("CB_I2C_ERR_MSG");
@@ -1749,12 +1803,12 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
-            x1 = ptmp->COM_Port_Edit->Text.ToInt();  // Retrieve COM Port Nr.
-            if (x1 != usb_com_port_nr)
+            x1 = ptmp->Comm_Setting->ItemIndex;  // Retrieve Comm. Channel Nr.
+            if (x1 != comm_channel_nr)
             {
                init_needed     = true;
-               usb_com_port_nr = x1;
-               Reg->WriteInteger("USB_COM_PORT",x1); // Save new COM port nr.
+               comm_channel_nr = x1;
+               Reg->WriteInteger("COMM_CHANNEL",x1); // Save new COM port nr.
             } // if
             S = ptmp->COM_Port_Settings_Edit->Text;
             if (strcmp(com_port_settings,S.c_str())) // COM Port Settings
@@ -1763,9 +1817,16 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                strcpy(com_port_settings, S.c_str());
                Reg->WriteString("COM_PORT_SETTINGS",AnsiString(com_port_settings));
             } // if
+            S = ptmp->UDP_Settings->Text;
+            if (strcmp(udp_ip_port,S.c_str())) // UDP IP & Port Number
+            {
+               init_needed = true;
+               strcpy(udp_ip_port, S.c_str());
+               Reg->WriteString("UDP_IP_PORT",AnsiString(udp_ip_port));
+            } // if
+
             cb_debug_com_port = ptmp->cb_debug_com_port->Checked;
             Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
-
 
             cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
             Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
@@ -1781,14 +1842,14 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
 
             if (init_needed)
             {  //--------------------------------------------------------
-               // COM-port settings were changed. Close COM-port if
+               // Comm. settings were changed. Close COM-port if
                // still open and re-open with new settings.
                //--------------------------------------------------------
                if (com_port_is_open)
                {
-                  COM_port_close();
+                  comm_port_close();
                } // if
-               COM_port_open(); // Open COM-port with new settings
+               comm_port_open(); // Open COM-port with new settings
             } // if
          } // if
          Reg->CloseKey(); // Close the Registry
@@ -1998,16 +2059,17 @@ void __fastcall TMainForm::exit_ebrew(void)
    {
       ViewMashProgress->UpdateTimer->Enabled = false; // Stop Mash Progress Update timer
    }
-   Sleep(51);                // Make sure that Timer is disabled
+   ::Sleep(51);                // Make sure that Timer is disabled
    if (ViewMashProgress)
    {
       delete ViewMashProgress;  // close modeless dialog
       ViewMashProgress = 0;     // null the pointer
    }
+   // Disable Gas-Burner PWM, Heater and Alive LEDs
+   comm_port_write("l0\nw0\np0\n");
    if (com_port_is_open)
-   {    // Disable Gas-Burner PWM, Heater and Alive LEDs
-        COM_port_write("l0\nw0\np0\n");
-        COM_port_close();
+   {
+        comm_port_close();
    } // if
 
    try
@@ -2588,9 +2650,19 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
 } // FormKeyPress()
 //---------------------------------------------------------------------------
 
-
-
-
-
-
+void __fastcall TMainForm::UDP_ServerUDPRead(TObject *Sender,
+      TStream *AData, TIdSocketHandle *ABinding)
+{
+    try
+    {
+        int BufSize = AData->Size;
+        if (BufSize > 0)
+        {
+                AData->Read(udp_read,BufSize);
+                udp_read[BufSize] = '\0';
+        }
+    }
+    catch(const Exception &) { ; }
+} // UDP_ServerUDPRead()
+//---------------------------------------------------------------------------
 
