@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.66  2014/06/01 13:59:16  Emile
+// - Ethernet UDP Communication added.
+// - New Registry variable UDP_IP_PORT and USB_COM_PORT renamed in COMM_CHANNEL
+// - This version works with Ebrew HW R1.9
+//
 // Revision 1.65  2013/07/24 14:08:57  Emile
 // - Bug-fix version numbering in statusbar.
 //
@@ -479,12 +484,17 @@ FILE         *fdbg_com; // COM-port debug file-descriptor
 void task_read_thlt(void)
 {
     char   s[MAX_BUF_READ];
+    double temp;
 
     MainForm->comm_port_write("A3\n"); // A3 = THLT
     MainForm->comm_port_read(s);       // Read HLT temp. from LM92 device
-    if (!strncmp(s,"Thlt=",5)) MainForm->Val_Thlt->Font->Color = clLime;
-    else                       MainForm->Val_Thlt->Font->Color = clRed;
-    MainForm->thlt = atof(&s[5]);
+    temp = atof(&s[5]);                // Equals 99.99 in case of i2c HW error
+    if ((!strncmp(s,"Thlt=",5)) && (temp < 99.9))
+    {
+         MainForm->Val_Thlt->Font->Color = clLime;
+         MainForm->thlt = temp; // update THLT with new value
+    } // if
+    else MainForm->Val_Thlt->Font->Color = clRed; // + do NOT update THLT
     if (MainForm->swfx.thlt_sw)
     {  // Switch & Fix
        MainForm->thlt = (double)(MainForm->swfx.thlt_fx);
@@ -500,12 +510,17 @@ void task_read_thlt(void)
 void task_read_tmlt(void)
 {
     char   s[MAX_BUF_READ];
+    double temp;
 
     MainForm->comm_port_write("A4\n"); // A4 = TMLT
     MainForm->comm_port_read(s);       // Read MLT temp. from LM92 device
-    if (!strncmp(s,"Tmlt=",5)) MainForm->Val_Tmlt->Font->Color = clLime;
-    else                       MainForm->Val_Tmlt->Font->Color = clRed;
-    MainForm->tmlt = atof(&s[5]);
+    temp = atof(&s[5]);                // Equals 99.99 in case of i2c HW error
+    if ((!strncmp(s,"Tmlt=",5)) && (temp < 99.9))
+    {
+         MainForm->Val_Tmlt->Font->Color = clLime;
+         MainForm->tmlt = temp; // update TMLT with new value
+    }
+    else MainForm->Val_Tmlt->Font->Color = clRed;
     if (MainForm->swfx.tmlt_sw)
     {  // Switch & Fix
        MainForm->tmlt = (double)(MainForm->swfx.tmlt_fx);
