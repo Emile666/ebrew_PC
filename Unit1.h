@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.42  2014/06/01 13:59:16  Emile
+// - Ethernet UDP Communication added.
+// - New Registry variable UDP_IP_PORT and USB_COM_PORT renamed in COMM_CHANNEL
+// - This version works with Ebrew HW R1.9
+//
 // Revision 1.41  2013/07/24 14:00:00  Emile
 // - Version ready for Integration Testing with Ebrew HW R1.07!
 // - Writing parameters to Ebrew HW now works with new task writing_pars
@@ -478,6 +483,8 @@ __published:	// IDE-managed Components
         TStaticText *StaticText3;
         TIdUDPClient *UDP_Client;
         TIdUDPServer *UDP_Server;
+        TLabel *Flow1_hlt_mlt;
+        TLabel *Flow2_mlt_boil;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -550,7 +557,8 @@ public:		// User declarations
         bool   toggle_led;            // Status of Alive LED
         bool   power_up_flag;         // true = power-up in progress
         bool   hw_debug_logging;      // true = write HW debug info to log-file
-        
+        bool   use_flowsensors;       // true = use flowsensors instead of pressure transducers
+
         volume_struct   volumes;       // Struct for Volumes
         swfx_struct     swfx;          // Switch & Fix settings for tset and gamma
         pid_params      pid_pars;      // struct containing PID parameters

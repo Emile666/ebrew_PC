@@ -6,6 +6,11 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.23  2013/07/23 09:42:46  Emile
+  - Fourth intermediate version: several Registry Settings added / removed.
+  - Dialog Screens updated: better lay-out and matches new Registry Settings
+  - Source-code improved for readability
+
   Revision 1.22  2013/07/21 22:32:47  Emile
   - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
   - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
@@ -923,12 +928,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // - The goto S08_DELAY_xSEC
       //---------------------------------------------------------------------------
       case S06_PUMP_FROM_MLT_TO_BOIL:
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
-           if (vol->Vboil_simulated)
-           {
-              vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
-           }
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = *tset_mlt + sps->temp_offset; // Single offset
+           vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            if (vol->Vmlt <= vol->Vmlt_old - sps->sp_vol_batch)
            {
               std->timer2    = 0;          // init. 1 sec. timer
@@ -971,12 +973,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // S09_EMPTY_MLT: Sparging is finished, pump all wort to the boil kettle
       //---------------------------------------------------------------------------
       case S09_EMPTY_MLT:
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
-           if (vol->Vboil_simulated)
-           {
-              vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
-           }
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = *tset_mlt + sps->temp_offset; // Single offset
+           vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            if (vol->Vmlt < sps->vmlt_empty)
            {
               std->timer3    = 0; // init. timer for transition to 'Empty Heat Exchanger'

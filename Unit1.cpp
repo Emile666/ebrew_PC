@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.67  2014/10/26 12:50:12  Emile
+// - In case of an I2C HW error, the font-colour for Thlt and Tmlt will be red
+//   and the old temperature is displayed. With this, sensors can be hot-swapped!
+// - This version works with Ebrew HW R1.11.
+//
 // Revision 1.66  2014/06/01 13:59:16  Emile
 // - Ethernet UDP Communication added.
 // - New Registry variable UDP_IP_PORT and USB_COM_PORT renamed in COMM_CHANNEL
@@ -529,6 +534,7 @@ void task_read_tmlt(void)
 
 /*-----------------------------------------------------------------------------
   Purpose    : TASK 03: Read VHLT (HLT Volume) from Ebrew hardware
+               This task is only active when USE_FLOWSENSORS is false.
   Period-Time: 1 second
   Variables  : -
   Returns    : -
@@ -550,6 +556,7 @@ void task_read_vhlt(void)
 
 /*-----------------------------------------------------------------------------
   Purpose    : TASK 04: Read VMLT (MLT Volume) from Ebrew hardware
+               This task is only active when USE_FLOWSENSORS is false.
   Period-Time: 1 second
   Variables  : -
   Returns    : -
@@ -568,6 +575,55 @@ void task_read_vmlt(void)
        MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
     } // if
 } // task_read_vmlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 03F: Read flowsensor between HLT and MLT from Ebrew hardware
+               This task is only active when USE_FLOWSENSORS is true.
+  Period-Time: 1 second
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_vhlt_mlt(void)
+{
+    char   s[MAX_BUF_READ];
+
+    MainForm->comm_port_write("A5\n"); // A5 = Flowsensor between HLT and MLT
+    MainForm->comm_port_read(s);       // Read flowsensor
+    if (!strncmp(s,"Flow1=",6)) MainForm->Flow1_hlt_mlt->Font->Color = clLime;
+    else                        MainForm->Flow1_hlt_mlt->Font->Color = clRed;
+    MainForm->volumes.Flow_hlt_mlt = atof(&s[6]);
+    MainForm->volumes.Vhlt         = VHLT_START - MainForm->volumes.Flow_hlt_mlt;
+    if (MainForm->swfx.vhlt_sw)
+    {  // Switch & Fix
+       MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
+    } // if
+} // task_read_vhlt_mlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK 04F: Read flowsensor between MLT and Boil-kettle from
+               Ebrew hardware. This task is only active when USE_FLOWSENSORS
+               is true.
+  Period-Time: 1 second
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_vmlt_boil(void)
+{
+    char   s[MAX_BUF_READ];
+
+    MainForm->comm_port_write("A6\n"); // A6 = Flowsensor between MLT and Boil kettle
+    MainForm->comm_port_read(s);       // Read flowsensor
+    if (!strncmp(s,"Flow2=",6)) MainForm->Flow2_mlt_boil->Font->Color = clLime;
+    else                        MainForm->Flow2_mlt_boil->Font->Color = clRed;
+    MainForm->volumes.Flow_mlt_boil = atof(&s[6]);
+    MainForm->volumes.Vmlt          = MainForm->volumes.Flow_hlt_mlt -
+                                      MainForm->volumes.Flow_mlt_boil;
+    MainForm->volumes.Vboil         = MainForm->volumes.Flow_mlt_boil;
+    if (MainForm->swfx.vmlt_sw)
+    {  // Switch & Fix
+       MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
+    } // if
+} // task_read_vmlt_boil()
 
 /*-----------------------------------------------------------------------------
   Purpose    : TASK 05: Read LM35 temperature from Ebrew hardware. Typically
@@ -690,7 +746,7 @@ void task_update_std(void)
     // Now output all valve bits to Ebrew hardware (NOT implemented yet).
     // NOTE: The pump bit is sent using the P0/P1 command
     //-----------------------------------------------------------------
-    //sprintf(s,"V%02x\n",std_out & 0x00FE); // Output valves except Pump (bit 0)
+    //sprintf(s,"V%3d\n",(std_out & 0x00FE)>>1); // Output valves except Pump (bit 0)
     //MainForm->comm_port_write(s); // output to Ebrew hardware
 } // task_update_std()
 
@@ -1142,8 +1198,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("VMLT_OFFSET",0.0);  // Offset for Vmlt
           Reg->WriteFloat("VMLT_MAX",110.1);   // Max. MLT volume
           Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
-          volumes.Vboil_simulated = true;
-          Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
+          Reg->WriteBool("USE_FLOWSENSORS",0); // Use Pressure transducers
        } // if
        Reg->CloseKey();
        delete Reg;
@@ -1159,10 +1214,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
     //----------------------------------------
     // Init. volumes. Should be done only once
     //----------------------------------------
-    if (volumes.Vboil_simulated)
-    {  // Vboil is not measured but calculated from Vmlt
-       volumes.Vboil  = VBOIL_START;
-    } // if
+    volumes.Vboil = VBOIL_START;
     power_up_flag = false; // power-up is finished
 } // TMainForm::TMainForm()
 //---------------------------------------------------------------------------
@@ -1241,7 +1293,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          vmlt_offset = Reg->ReadFloat("VMLT_OFFSET"); // Read Vmlt Offset
          vmlt_max    = Reg->ReadFloat("VMLT_MAX");    // Read max. MLT volume
          vmlt_slope  = Reg->ReadFloat("VMLT_SLOPE");  // Slope limiter for Vmlt
-         volumes.Vboil_simulated = Reg->ReadBool("VBOIL_SIMULATED");
+         use_flowsensors = Reg->ReadBool("USE_FLOWSENSORS");
 
          Reg->SaveKey(REGKEY,"ebrew_reg");
          Reg->CloseKey();      // Close the Registry
@@ -1354,17 +1406,30 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-----------------------------------------
    // Now add all the tasks for the scheduler
    //-----------------------------------------
-   add_task(task_read_thlt , "read_thlt"  ,   0, 1000);
-   add_task(task_read_tmlt , "read_tmlt"  ,  50, 1000);
-   add_task(task_read_vhlt , "read_vhlt"  , 100, 1000);
-   add_task(task_read_vmlt , "read_vmlt"  , 150, 1000);
-   add_task(task_read_lm35 , "read_lm35"  , 200, 1000);
-   add_task(task_pid_ctrl  , "pid_control", 250, (uint16_t)(pid_pars.ts * 1000));
-   add_task(task_update_std, "update_std" , 350, 1000);
-   add_task(task_alive_led , "alive_pump" , 400,  500);
-   add_task(task_log_file  , "wr_log_file", 450, 5000);
-   add_task(task_write_pars, "write_pars" , 500, 5000);
-   add_task(task_hw_debug  , "hw_debug"   , 550, 1000);
+   add_task(task_read_thlt     , "read_thlt"    ,   0, 1000); /* task 01 */
+   add_task(task_read_tmlt     , "read_tmlt"    ,  50, 1000); /* task 02 */
+   add_task(task_read_vhlt     , "read_vhlt"    , 100, 1000); /* task 03 */
+   add_task(task_read_vmlt     , "read_vmlt"    , 150, 1000); /* task 04 */
+   add_task(task_read_vhlt_mlt , "flow_hlt_mlt" , 100, 1000); /* task 03F */
+   add_task(task_read_vmlt_boil, "flow_mlt_boil", 150, 1000); /* task 04F */
+   add_task(task_read_lm35     , "read_lm35"    , 200, 1000);
+   add_task(task_pid_ctrl      , "pid_control"  , 250, (uint16_t)(pid_pars.ts * 1000));
+   add_task(task_update_std    , "update_std"   , 350, 1000);
+   add_task(task_alive_led     , "alive_pump"   , 400,  500);
+   add_task(task_log_file      , "wr_log_file"  , 450, 5000);
+   add_task(task_write_pars    , "write_pars"   , 500, 5000);
+   add_task(task_hw_debug      , "hw_debug"     , 550, 1000);
+
+   if (use_flowsensors)
+   { // use flowsensors between HLT-MLT and between MLT-BOIL
+     disable_task("read_vhlt");
+     disable_task("read_vmlt");
+   }
+   else
+   { // use pressure transducers in HLT and MLT for volume measurement
+        disable_task("flow_hlt_mlt");
+        disable_task("flow_mlt_boil");
+   } // else
 
    //-----------------------------------------------
    // Set HW and SW rev. numbers in Tstatusbar panel
@@ -2002,8 +2067,7 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          //-------------------
          // Boil Kettle Volume
          //-------------------
-         volumes.Vboil_simulated        = Reg->ReadBool("VBOIL_SIMULATED");
-         ptmp->Vboil_simulated->Checked = volumes.Vboil_simulated;
+         ptmp->Use_Flowsensors->Checked = use_flowsensors;
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
@@ -2030,11 +2094,29 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             CH_F_PAR(11,vmlt_max   ,ptmp->Vmlt_Max_Edit->Text.ToDouble()   ,"VMLT_MAX");
             CH_F_PAR(12,vmlt_slope ,ptmp->Vmlt_Slope_Edit->Text.ToDouble() ,"VMLT_SLOPE");
             //-------------------
-            // Boil Kettle Volume
+            // Volume Measurement
             //-------------------
-            volumes.Vboil_simulated = ptmp->Vboil_simulated->Checked;
-            Reg->WriteBool("VBOIL_SIMULATED",volumes.Vboil_simulated);
-          } // if
+            use_flowsensors = ptmp->Use_Flowsensors->Checked;
+            Reg->WriteBool("USE_FLOWSENSORS",use_flowsensors);
+            if (use_flowsensors)
+            { // use flowsensors between HLT-MLT and between MLT-BOIL
+              enable_task("flow_hlt_mlt");
+              enable_task("flow_mlt_boil");
+              disable_task("read_vhlt");
+              disable_task("read_vmlt");
+              MainForm->Vol_MLT->Font->Color = clRed;
+              MainForm->Vol_HLT->Font->Color = clRed;
+            }
+            else
+            { // use pressure transducers in HLT and MLT for volume measurement
+              enable_task("read_vhlt");
+              enable_task("read_vmlt");
+              disable_task("flow_hlt_mlt");
+              disable_task("flow_mlt_boil");
+              MainForm->Flow1_hlt_mlt->Font->Color  = clRed;
+              MainForm->Flow2_mlt_boil->Font->Color = clRed;
+            } // else
+         } // if
          Reg->CloseKey(); // Close the Registry
       } // if
    } // try
@@ -2472,6 +2554,12 @@ void __fastcall TMainForm::Update_GUI(void)
    Tank_Boil->Position = volumes.Vboil;
    sprintf(tmp_str,"%4.1f",volumes.Vboil);
    Vol_Boil->Caption = tmp_str;
+
+   sprintf(tmp_str,"%4.1f",volumes.Flow_hlt_mlt); // Display flow from HLT -> MLT
+   Flow1_hlt_mlt->Caption = tmp_str;
+
+   sprintf(tmp_str,"%4.1f",volumes.Flow_mlt_boil); // Display flow from MLT -> Boil
+   Flow2_mlt_boil->Caption = tmp_str;
 
    //--------------------------------------------------------------------------
    // Update the Captions for all valves (they might have

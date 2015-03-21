@@ -6,6 +6,11 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.23  2013/07/23 09:42:46  Emile
+// - Fourth intermediate version: several Registry Settings added / removed.
+// - Dialog Screens updated: better lay-out and matches new Registry Settings
+// - Source-code improved for readability
+//
 // Revision 1.22  2013/07/21 22:32:47  Emile
 // - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
 // - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
@@ -274,7 +279,8 @@ typedef struct _ma
    double sum;       // The running sum of the MA filter
 } ma;
 
-#define VBOIL_START (0.0)
+#define VHLT_START  (140.0)
+#define VBOIL_START   (0.0)
 typedef struct _volume_struct
 {
    double Vhlt;       // Volume of HLT in litres
@@ -283,8 +289,10 @@ typedef struct _volume_struct
    double Vhlt_old;   // Prev. value of Vhlt, used in STD
    double Vmlt_old;   // Prev. value of Vmlt, used in STD
    double Vboil_old;  // Prev. value of Vboil, used in STD
-   // Assumption is made here that Vmlt is always measured.
-   int    Vboil_simulated; // true = Vboil is not measured, but calculated
+   double Flow_hlt_mlt;
+   double Flow_mlt_boil;
+   double Flow_hlt_mlt_old;
+   double Flow_mlt_boil_old;
 } volume_struct;
 
 //------------------------------

@@ -5,6 +5,12 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2013/07/21 22:32:47  Emile
+// - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
+// - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
+// - Registry: several parameters removed + parameters renamed
+// - Ttriac & DAC code & parameters removed
+//
 // Revision 1.4  2007/08/26 22:23:20  Emile
 // - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
 // - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
@@ -72,7 +78,7 @@ __published:	// IDE-managed Components
         TButton *Button1;
         TButton *Button2;
         TButton *Help_Button;
-        TCheckBox *Vboil_simulated;
+        TCheckBox *Use_Flowsensors;
         TLabel *Label8;
         TEdit *Vhlt_Max_Edit;
         TLabel *Label1;
@@ -98,6 +104,7 @@ __published:	// IDE-managed Components
         TEdit *Vhlt_Slope_Edit;
         TLabel *Label24;
         TEdit *Vmlt_Slope_Edit;
+        TLabel *Label3;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
