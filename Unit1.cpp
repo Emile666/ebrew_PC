@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.68  2015/03/21 09:27:21  Emile
+// - Vboil_simulated removed, VHLT_START added
+// - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
+// - task_read_vhlt_vmlt() with command A5 added
+// - Flow1_hlt_mlt and Flow2_mlt_boil objects added to main-screen
+// - New Registry var USE_FLOWSENSORS. Switches between tasks 03/04 and 03F/04F
+//
 // Revision 1.67  2014/10/26 12:50:12  Emile
 // - In case of an I2C HW error, the font-colour for Thlt and Tmlt will be red
 //   and the old temperature is displayed. With this, sensors can be hot-swapped!
@@ -710,7 +717,7 @@ void task_pid_ctrl(void)
     // Now write PID-output (Gamma) as a PWM signal to the Ebrew hardware.
     // This is relevant only when the Modulating Gas-Burner is selected.
     //--------------------------------------------------------------------
-    sprintf(s,"W%0d\n", MainForm->gamma); // PID-Output Gamma [0%..100%]
+    sprintf(s,"W%d\n", (int)(MainForm->gamma)); // PID-Output Gamma [0%..100%]
     MainForm->comm_port_write(s); // output to Ebrew hardware
     //MainForm->comm_port_read(s);  // read response from Ebrew hardware
 } // task_pid_ctrl()
@@ -746,8 +753,8 @@ void task_update_std(void)
     // Now output all valve bits to Ebrew hardware (NOT implemented yet).
     // NOTE: The pump bit is sent using the P0/P1 command
     //-----------------------------------------------------------------
-    //sprintf(s,"V%3d\n",(std_out & 0x00FE)>>1); // Output valves except Pump (bit 0)
-    //MainForm->comm_port_write(s); // output to Ebrew hardware
+    sprintf(s,"V%d\n",(MainForm->std_out & 0x00FE)>>1); // Output valves except Pump (bit 0)
+    MainForm->comm_port_write(s); // output to Ebrew hardware
 } // task_update_std()
 
 /*-----------------------------------------------------------------------------
