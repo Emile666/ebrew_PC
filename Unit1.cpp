@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.69  2015/03/21 11:12:51  Emile
+// - Bugfix W command (PWM output), W0 was always sent
+// - V command enabled (Valves output)
+// - scheduler.h and scheduler.c added to CVS library
+//
 // Revision 1.68  2015/03/21 09:27:21  Emile
 // - Vboil_simulated removed, VHLT_START added
 // - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
@@ -719,7 +724,6 @@ void task_pid_ctrl(void)
     //--------------------------------------------------------------------
     sprintf(s,"W%d\n", (int)(MainForm->gamma)); // PID-Output Gamma [0%..100%]
     MainForm->comm_port_write(s); // output to Ebrew hardware
-    //MainForm->comm_port_read(s);  // read response from Ebrew hardware
 } // task_pid_ctrl()
 
 /*-----------------------------------------------------------------------------
@@ -739,7 +743,7 @@ void task_update_std(void)
     {
        std_tmp = MainForm->swfx.std_fx;
     }
-    old_tset_hlt = MainForm->tset_hlt; // Previous value of HLT temp. reference
+    old_tset_hlt       = MainForm->tset_hlt; // Previous value of HLT temp. reference
     update_std(&MainForm->volumes ,  MainForm->tmlt    ,  MainForm->thlt,
                &MainForm->tset_mlt, &MainForm->tset_hlt, &MainForm->std_out,
                 MainForm->ms      , &MainForm->sp      , &MainForm->std,
@@ -750,11 +754,24 @@ void task_update_std(void)
     } // if
     slope_limiter(MainForm->tset_hlt_slope, old_tset_hlt, &MainForm->tset_hlt);
     //-----------------------------------------------------------------
-    // Now output all valve bits to Ebrew hardware (NOT implemented yet).
+    // Now output all valve bits to Ebrew hardware.
     // NOTE: The pump bit is sent using the P0/P1 command
     //-----------------------------------------------------------------
     sprintf(s,"V%d\n",(MainForm->std_out & 0x00FE)>>1); // Output valves except Pump (bit 0)
     MainForm->comm_port_write(s); // output to Ebrew hardware
+
+    //--------------------------------------------
+    // Send Pump On/Off signal to ebrew hardware.
+    //--------------------------------------------
+    if (MainForm->std_out & P0b)
+    {    // New PUMP bit should be 1
+         strcpy(s,"P1\n");
+    } // if
+    else
+    {    // New PUMP bit should be 0
+         strcpy(s,"P0\n");
+    } // else
+    MainForm->comm_port_write(s); // Send command to ebrew hardware
 } // task_update_std()
 
 /*-----------------------------------------------------------------------------
@@ -774,20 +791,7 @@ void task_alive_led(void)
         strcpy(s,"L1\n");
    else strcpy(s,"L0\n");
    MainForm->toggle_led = !(MainForm->toggle_led);
-
-   //--------------------------------------------
-   // Send Pump On/Off signal to ebrew hardware.
-   //--------------------------------------------
-   if (MainForm->std_out & P0b)
-   {    // New PUMP bit should be 1
-        strcat(s,"P1\n");
-   } // if
-   else
-   {    // New PUMP bit should be 0
-        strcat(s,"P0\n");
-   } // else
    MainForm->comm_port_write(s); // Send command to ebrew hardware
-   //MainForm->comm_port_read(s);
 } // task_alive_led()
 
 /*-----------------------------------------------------------------------------
@@ -867,7 +871,6 @@ void task_write_pars(void)
    if (strlen(s) > 0)
    {
       MainForm->comm_port_write(s); // Send command to ebrew hardware
-      //MainForm->comm_port_read(s);  // read back the response
    } // if
 } // task_write_pars()
 
@@ -907,9 +910,11 @@ void task_hw_debug(void)
                   time_slice = 1; // goto next time-slice
                   break;
           case 1: MainForm->comm_port_write("S2\n"); // List all I2C devices
-                  MainForm->comm_port_read(s1);      // takes approx. 115 msec.
+                  ::Sleep(250); // Give Arduino time for I2C-scan
+                  MainForm->comm_port_read(s1);
                   fprintf(fd,"%s",s1);
-                  MainForm->comm_port_read(s1);      // total time: 230 msec.
+                  ::Sleep(200); // Give Arduino time for I2C-scan
+                  MainForm->comm_port_read(s1);     
                   fprintf(fd,"%s\n",s1);
                   time_slice = 2;
                   break;
@@ -1037,6 +1042,7 @@ void __fastcall TMainForm::comm_port_read(char *s)
 {
    char rbuf[MAX_BUF_READ]; // contains string read from RS232 port
    DWORD i, j, dwBytesRead = 0;
+   struct time t1;
 
    if (comm_channel_nr == 0) // Use Ethernet UDP as communication channel
    {
@@ -1062,6 +1068,7 @@ void __fastcall TMainForm::comm_port_read(char *s)
    } // else if
    if (cb_debug_com_port)
    {
+      gettime(&t1);
       for (i = j = 0; i < dwBytesRead; i++)
       {
          if (s[i] != '\r')
@@ -1075,7 +1082,7 @@ void __fastcall TMainForm::comm_port_read(char *s)
          } // if
       } // if
       rbuf[j] = '\0';
-      fprintf(fdbg_com,"r[%s]",rbuf);
+      fprintf(fdbg_com,"R%02d.%03d[%s]",t1.ti_sec,t1.ti_hund,rbuf);
    } // if
 } // comm_port_read()
 
@@ -1087,8 +1094,10 @@ void __fastcall TMainForm::comm_port_read(char *s)
 void __fastcall TMainForm::comm_port_write(const char *s)
 {
    char send_buffer[MAX_BUF_WRITE]; // contains string to send to RS232 port
+   char s2[MAX_BUF_WRITE];          // contains string for debugging
    int  bytes_to_send = 0;          // Number of bytes to send
-   int  i, bytes_sent = 0;          // Number of bytes sent to COM port
+   int  i, j, bytes_sent = 0;       // Number of bytes sent to COM port
+   struct time t1;
 
    strcpy(send_buffer,s);    // copy command to send into send_buffer
    bytes_to_send = strlen(send_buffer);
@@ -1109,12 +1118,24 @@ void __fastcall TMainForm::comm_port_write(const char *s)
    } // else if
    if (cb_debug_com_port)
    {
+      gettime(&t1);
+      j = 0;
       for (i = 0; i < bytes_to_send; i++)
       {
-         if (send_buffer[i] == '\n') send_buffer[i] = '_';
-      }
-      fprintf(fdbg_com,"\nw[%s]",send_buffer);
+         if (send_buffer[i] == '\n')
+         {
+            s2[j++] = '\\';
+            s2[j++] = 'n';
+         }
+         else
+         {
+            s2[j++] = send_buffer[i];
+         } // else
+         s2[j] = '\0'; // terminate string
+      } // for i
+      fprintf(fdbg_com,"\nW%02d.%03d[%s]",t1.ti_sec,t1.ti_hund,s2);
    } // if
+   ::Sleep(5);  // Give Arduino HW a bit of time for command processing
 } // COM_port_write()
 
 /*------------------------------------------------------------------
@@ -1262,7 +1283,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
          cb_i2c_err_msg    = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
 
          comm_port_open(); // Start Communication with Ebrew Hardware
-         comm_port_write("S0\n");
 
          gas_non_mod_llimit = Reg->ReadInteger("GAS_NON_MOD_LLIMIT");
          gas_non_mod_hlimit = Reg->ReadInteger("GAS_NON_MOD_HLIMIT");
@@ -1441,7 +1461,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-----------------------------------------------
    // Set HW and SW rev. numbers in Tstatusbar panel
    //-----------------------------------------------
-   ::Sleep(100);  // Give file-system a bit of time for init.
+   ::Sleep(1000);  // Give E-brew HW (Arduino) time to power up
    strcpy(srev,"SW r");
    strncat(srev,&ebrew_revision[11],4); // extract the CVS revision number
    srev[9] = '\0';
@@ -2170,7 +2190,9 @@ void __fastcall TMainForm::exit_ebrew(void)
       ViewMashProgress = 0;     // null the pointer
    }
    // Disable Gas-Burner PWM, Heater and Alive LEDs
-   comm_port_write("l0\nw0\np0\n");
+   comm_port_write("L0\n");
+   comm_port_write("W0\n");
+   comm_port_write("P0\n");
    if (com_port_is_open)
    {
         comm_port_close();
