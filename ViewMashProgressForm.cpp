@@ -5,6 +5,11 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2013/07/23 09:42:46  Emile
+// - Fourth intermediate version: several Registry Settings added / removed.
+// - Dialog Screens updated: better lay-out and matches new Registry Settings
+// - Source-code improved for readability
+//
 // Revision 1.10  2007/07/06 22:23:01  Emile
 // - The real time between two lines from a log-file is now used instead of a
 //   fixed 5 sec. time when reading a log-file.
@@ -202,13 +207,11 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       ViewMashProgress->Memo1->Lines->Add(s);
       ViewMashProgress->Memo1->Lines->Add(" ");
 
-      sprintf(s,"Timer2 (state 08->07) = %d/%d sec.",MainForm->std.timer2,MainForm->sp.to_xsec);
+      sprintf(s,"Timer3 (state 'Pump Prefill'): %d/%d sec.",MainForm->std.timer3,TMR_PREFILL_PUMP);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer3 (state 10->11) = %d/%d sec.",MainForm->std.timer3,MainForm->sp.to3);
+      sprintf(s,"Timer2 (state 'Delay_xSEC')  : %d/%d sec.",MainForm->std.timer2,TMR_DELAY_xSEC);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer4 (state 11->10) = %d/%d sec.",MainForm->std.timer4,MainForm->sp.to4);
-      ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer5 (state 10->12) = %d/%d sec.",MainForm->std.timer5,MainForm->sp.boil_time_ticks);
+      sprintf(s,"Timer5 (state 'Now Boiling') : %d/%d sec.",MainForm->std.timer5,MainForm->sp.boil_time_ticks);
       ViewMashProgress->Memo1->Lines->Add(s);
    } // if
 } // TViewMashProgress::UpdateTimerTimer()

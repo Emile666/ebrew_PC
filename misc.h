@@ -6,6 +6,13 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.24  2015/03/21 09:27:22  Emile
+// - Vboil_simulated removed, VHLT_START added
+// - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
+// - task_read_vhlt_vmlt() with command A5 added
+// - Flow1_hlt_mlt and Flow2_mlt_boil objects added to main-screen
+// - New Registry var USE_FLOWSENSORS. Switches between tasks 03/04 and 03F/04F
+//
 // Revision 1.23  2013/07/23 09:42:46  Emile
 // - Fourth intermediate version: several Registry Settings added / removed.
 // - Dialog Screens updated: better lay-out and matches new Registry Settings
@@ -249,9 +256,6 @@ typedef struct _sparge_struct
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
    /* STD Settings */
    double vmlt_empty;      // MLT is empty below this volume
-   int    to_xsec;         // Timeout value for state 8
-   int    to3;             // Timeout value for state 10 -> 11
-   int    to4;             // Timout value for state 11 -> 10
    /* Sparge Time-stamps */
    char   mlt2boil[MAX_SP][40]; // MAX_SP strings for time-stamp moment of MLT -> BOIL
    char   hlt2mlt[MAX_SP][40];  // MAX_SP strings for time-stamp moment of HLT -> MLT
@@ -264,10 +268,9 @@ typedef struct _std_struct
    int    ms_idx;    // index in ms[] array
    int    sp_idx;    // Sparging index [0..sps->sp_batches-1]
    int    timer1;    // Timer for state 'Sparging Rest'
-   int    timer2;    // Timer for state 'Delay_1SEC'
-   int    timer3;    // Timer for transition to state 'Empty Heat Exchanger'
-   int    timer4;    // Timer for state 'Empty Heat Exchanger'
-   int    timer5;    // Timer for boiling time
+   int    timer2;    // Timer for state 'Delay_xSEC'
+   int    timer3;    // Timer for state 'Pump Prefill'
+   int    timer5;    // Timer for state 'Boiling'
 } std_struct;
 
 #define MAX_MA (50)
@@ -307,18 +310,40 @@ typedef struct _volume_struct
 //------------------------------------------------------
 #define S00_INITIALISATION         (0)
 #define S01_WAIT_FOR_HLT_TEMP      (1)
+#define S14_PUMP_PREFILL          (14)
 #define S02_FILL_MLT               (2)
-#define S03_MASH_IN_PROGRESS       (3)
+
+#define S03_WAIT_FOR_MLT_TEMP      (3)
+#define S15_ADD_MALT_TO_MLT       (15)
 #define S04_MASH_TIMER_RUNNING     (4)
 #define S13_MASH_PREHEAT_HLT      (13)
+
 #define S05_SPARGING_REST          (5)
 #define S06_PUMP_FROM_MLT_TO_BOIL  (6)
 #define S07_PUMP_FROM_HLT_TO_MLT   (7)
 #define S08_DELAY_xSEC             (8)
+
 #define S09_EMPTY_MLT              (9)
-#define S10_BOILING               (10)
-#define S11_EMPTY_HEAT_EXCHANGER  (11)
-#define S12_CHILL                 (12)
+#define S10_WAIT_FOR_BOIL         (10)
+#define S11_BOILING               (11)
+#define S12_BOILING_FINISHED      (12)
+#define S16_CHILL_PUMP_FERMENTOR  (16)
+#define S17_FINISHED              (17)
+
+//----------------------------------
+// Defines for User Interaction
+//----------------------------------
+#define UI_PID_ON            (0x01)
+#define UI_MALT_ADDED_TO_MLT (0x02)
+#define UI_BOILING_STARTED   (0x04)
+#define UI_START_CHILLING    (0x08)
+#define UI_CHILLING_FINISHED (0x10)
+
+//------------------------------
+// Hard-coded Timers
+//------------------------------
+#define TMR_PREFILL_PUMP      (60)
+#define TMR_DELAY_xSEC         (5)
 
 //--------------------------------------------------------------------------
 // #defines for the valves. Each valve can be set manually or automatically
@@ -379,7 +404,7 @@ int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int init);
 int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
                double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
-               sparge_struct *sps, std_struct *std, int pid_on, int std_fx);
+               sparge_struct *sps, std_struct *std, int ui, int std_fx);
 void   init_ma(ma *p, int N, double init_val);
 double moving_average(ma *p, double x);
 void   init_sample_delay(ma *p, int TD);

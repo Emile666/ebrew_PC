@@ -5,6 +5,20 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2004/05/08 14:52:51  emile
+// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
+//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
+// - View mash progress screen: reorganised, pre-heat timers added, timers are now
+//   in seconds instead of minutes.
+// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
+// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
+// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
+// - 'Apply' Button added to Fix parameters dialog screen.
+// - 'Edit mash scheme' no longer resets the (running) mash timers
+// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
+//   also removed.
+// - Changing init. volume of HLT did not result in an update on screen. Corrected.
+//
 // Revision 1.6  2004/05/05 15:44:15  emile
 // - Main Screen picture update
 // - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
@@ -73,24 +87,14 @@ __published:	// IDE-managed Components
         TEdit *ESVol;
         TEdit *EBoilTime;
         TLabel *Label5;
-        TLabel *Label8;
-        TEdit *Eto_xsec;
         TLabel *Label9;
         TEdit *Evmlt_empty;
-        TLabel *Label10;
-        TEdit *Eto3;
-        TLabel *Label11;
-        TEdit *Eto4;
         TLabel *Label12;
-        TLabel *Label13;
         TLabel *Label14;
         TLabel *Label15;
         TLabel *Label16;
         TLabel *Label17;
         TLabel *Label20;
-        TLabel *Label21;
-        TLabel *Label22;
-        TLabel *Label23;
         TLabel *Label6;
         TLabel *Label7;
         TEdit *Eph_time;

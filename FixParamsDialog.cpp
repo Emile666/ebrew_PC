@@ -5,6 +5,26 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2005/10/23 12:44:38  Emile
+// Several changes because of new hardware (MAX1238 instead of PCF8591):
+// - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
+//   PCF8591 is still supported).
+// - 2 time-slices added, Vhlt, Vmlt and Ttriac are read in 3 different time-slices.
+// - Ttriac also printed as label to screen, plus Switch and Fix added
+// - Alive bit is now active-low, changed in exit_ebrew()
+// - Registry vars removed: VREF3, VREF4, DAC, VHLT_SIMULATED
+// - Registry vars added: VHLT_SRC, VHLT_A, VHLT_B, VMLT_SRC, VMLT_A, VMLT_B,
+//                        TTRIAC_SRC, TTRIAC_A, TTRIAC_B and MA_VHLT
+// - Debugging for ma filter removed again
+// Changes to i2c_dll:
+// - File reorganised into 4 layers with routines for more clarity
+// - i2c_read/i2c_write: i2c_address() call added in VELLEMAN_CARD mode
+// - i2c_address: i2c_start() call added in VELLEMAN_CARD mode
+// - Routines added: get_analog_input() and max1238_read()
+// - i2c_stop() changed into i2c_stop(enum pt_action pta) so that PortTalk
+//   can be closed or remain open
+// - init_adc() removed
+//
 // Revision 1.6  2004/05/08 14:52:50  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -196,7 +216,7 @@ void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
          // Value must be between 0 and 13
          MainForm->swfx.std_fx = STD_MEdit->Text.ToInt();
          if (MainForm->swfx.std_fx < 0 ||
-             MainForm->swfx.std_fx > S13_MASH_PREHEAT_HLT)
+             MainForm->swfx.std_fx > S17_FINISHED)
          {
             MainForm->swfx.std_fx = 0; // reset to a safe value
          }
@@ -221,4 +241,5 @@ void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
       } // if
 } // TFix_Params::Apply_ButtonClick()
 //---------------------------------------------------------------------------
+
 

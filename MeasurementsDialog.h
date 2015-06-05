@@ -5,6 +5,13 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.6  2015/03/21 09:27:21  Emile
+// - Vboil_simulated removed, VHLT_START added
+// - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
+// - task_read_vhlt_vmlt() with command A5 added
+// - Flow1_hlt_mlt and Flow2_mlt_boil objects added to main-screen
+// - New Registry var USE_FLOWSENSORS. Switches between tasks 03/04 and 03F/04F
+//
 // Revision 1.5  2013/07/21 22:32:47  Emile
 // - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
 // - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
@@ -105,6 +112,12 @@ __published:	// IDE-managed Components
         TLabel *Label24;
         TEdit *Vmlt_Slope_Edit;
         TLabel *Label3;
+        TCheckBox *Flow_Temp_Corr;
+        TLabel *Cal_Temp;
+        TLabel *Label10;
+        TLabel *Label11;
+        TEdit *Flow1_Err;
+        TEdit *Flow2_Err;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

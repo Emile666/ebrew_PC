@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.43  2015/03/21 09:27:22  Emile
+// - Vboil_simulated removed, VHLT_START added
+// - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
+// - task_read_vhlt_vmlt() with command A5 added
+// - Flow1_hlt_mlt and Flow2_mlt_boil objects added to main-screen
+// - New Registry var USE_FLOWSENSORS. Switches between tasks 03/04 and 03F/04F
+//
 // Revision 1.42  2014/06/01 13:59:16  Emile
 // - Ethernet UDP Communication added.
 // - New Registry variable UDP_IP_PORT and USB_COM_PORT renamed in COMM_CHANNEL
@@ -452,7 +459,6 @@ __published:	// IDE-managed Components
         TLabel *V2;
         TLabel *V3;
         TLabel *V4;
-        TLabel *V5;
         TLabel *V6;
         TLabel *V7;
         TLabel *Std_State;
@@ -473,7 +479,6 @@ __published:	// IDE-managed Components
         TvrThermoMeter *tm_triac;
         TVrPowerMeter *Heater;
         TMenuItem *Measurements;
-        TImage *Image1;
         TStatusBar *StatusBar;
         TMenuItem *N2;
         TLabel *PID_dbg;
@@ -485,6 +490,13 @@ __published:	// IDE-managed Components
         TIdUDPServer *UDP_Server;
         TLabel *Flow1_hlt_mlt;
         TLabel *Flow2_mlt_boil;
+        TRadioGroup *Std_Manual;
+        TImage *Image1;
+        TPopupMenu *PopupMenu2;
+        TMenuItem *MaltaddedtoMLT1;
+        TMenuItem *Boilingstarted1;
+        TMenuItem *StartChilling1;
+        TMenuItem *ChillingFinished1;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -508,6 +520,10 @@ __published:	// IDE-managed Components
         void __fastcall FormKeyPress(TObject *Sender, char &Key);
         void __fastcall UDP_ServerUDPRead(TObject *Sender, TStream *AData,
           TIdSocketHandle *ABinding);
+        void __fastcall MaltaddedtoMLT1Click(TObject *Sender);
+        void __fastcall Boilingstarted1Click(TObject *Sender);
+        void __fastcall StartChilling1Click(TObject *Sender);
+        void __fastcall ChillingFinished1Click(TObject *Sender);
 private:	// User declarations
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall print_mash_scheme_to_statusbar(void);
@@ -558,6 +574,9 @@ public:		// User declarations
         bool   power_up_flag;         // true = power-up in progress
         bool   hw_debug_logging;      // true = write HW debug info to log-file
         bool   use_flowsensors;       // true = use flowsensors instead of pressure transducers
+        int    flow1_err;             // Flowsensor 1 error compensation (-5% ... +5%)
+        int    flow2_err;             // Flowsensor 2 error compensation (-5% ... +5%)
+        bool   flow_temp_corr;        // true = compensate flowsensor readings for higher temperatures
 
         volume_struct   volumes;       // Struct for Volumes
         swfx_struct     swfx;          // Switch & Fix settings for tset and gamma

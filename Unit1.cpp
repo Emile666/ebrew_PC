@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.70  2015/05/11 13:22:07  Emile
+// - Comm. debug log now with timestamps
+// - Communication with HW (R1.15) made more robust
+//
 // Revision 1.69  2015/03/21 11:12:51  Emile
 // - Bugfix W command (PWM output), W0 was always sent
 // - V command enabled (Valves output)
@@ -598,12 +602,21 @@ void task_read_vmlt(void)
 void task_read_vhlt_mlt(void)
 {
     char   s[MAX_BUF_READ];
+    double err;
 
     MainForm->comm_port_write("A5\n"); // A5 = Flowsensor between HLT and MLT
     MainForm->comm_port_read(s);       // Read flowsensor
     if (!strncmp(s,"Flow1=",6)) MainForm->Flow1_hlt_mlt->Font->Color = clLime;
     else                        MainForm->Flow1_hlt_mlt->Font->Color = clRed;
     MainForm->volumes.Flow_hlt_mlt = atof(&s[6]);
+    if (MainForm->flow_temp_corr)
+    {   // Apply correction for increased volume at higher temperatures
+        err = (1.0 + 0.00021 * (MainForm->thlt - 20.0));
+        MainForm->volumes.Flow_hlt_mlt /= err;
+    } // if
+    // Now apply Calibration error correction
+    MainForm->volumes.Flow_hlt_mlt *= 1.0 + 0.01 * MainForm->flow1_err;
+
     MainForm->volumes.Vhlt         = VHLT_START - MainForm->volumes.Flow_hlt_mlt;
     if (MainForm->swfx.vhlt_sw)
     {  // Switch & Fix
@@ -622,15 +635,23 @@ void task_read_vhlt_mlt(void)
 void task_read_vmlt_boil(void)
 {
     char   s[MAX_BUF_READ];
+    double err;
 
     MainForm->comm_port_write("A6\n"); // A6 = Flowsensor between MLT and Boil kettle
     MainForm->comm_port_read(s);       // Read flowsensor
     if (!strncmp(s,"Flow2=",6)) MainForm->Flow2_mlt_boil->Font->Color = clLime;
     else                        MainForm->Flow2_mlt_boil->Font->Color = clRed;
     MainForm->volumes.Flow_mlt_boil = atof(&s[6]);
-    MainForm->volumes.Vmlt          = MainForm->volumes.Flow_hlt_mlt -
-                                      MainForm->volumes.Flow_mlt_boil;
-    MainForm->volumes.Vboil         = MainForm->volumes.Flow_mlt_boil;
+    if (MainForm->flow_temp_corr)
+    {   // Apply correction for increased volume at higher temperatures
+        err = (1.0 + 0.00021 * (MainForm->tmlt - 20.0));
+        MainForm->volumes.Flow_mlt_boil /= err;
+    } // if
+    // Now apply Calibration error correction
+    MainForm->volumes.Flow_mlt_boil *= 1.0 + 0.01 * MainForm->flow2_err;
+    MainForm->volumes.Vmlt           = MainForm->volumes.Flow_hlt_mlt -
+                                       MainForm->volumes.Flow_mlt_boil;
+    MainForm->volumes.Vboil          = MainForm->volumes.Flow_mlt_boil;
     if (MainForm->swfx.vmlt_sw)
     {  // Switch & Fix
        MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
@@ -738,16 +759,26 @@ void task_update_std(void)
     char   s[MAX_BUF_READ];
     int    std_tmp = -1;
     double old_tset_hlt;  // previous value of tset_hlt
+    int    ui;            // various user commands
 
     if (MainForm->swfx.std_sw)
     {
        std_tmp = MainForm->swfx.std_fx;
     }
-    old_tset_hlt       = MainForm->tset_hlt; // Previous value of HLT temp. reference
+    old_tset_hlt = MainForm->tset_hlt; // Previous value of HLT temp. reference
+    ui = MainForm->PID_RB->ItemIndex; // 0=PID disabled, 1=PID enabled
+    switch (MainForm->Std_Manual->ItemIndex)
+    {
+        case 0 : ui |= UI_MALT_ADDED_TO_MLT; break;
+        case 1 : ui |= UI_BOILING_STARTED;   break;
+        case 2 : ui |= UI_START_CHILLING;    break;
+        case 3 : ui |= UI_CHILLING_FINISHED; break;
+        default: break;
+    } // switch
     update_std(&MainForm->volumes ,  MainForm->tmlt    ,  MainForm->thlt,
                &MainForm->tset_mlt, &MainForm->tset_hlt, &MainForm->std_out,
                 MainForm->ms      , &MainForm->sp      , &MainForm->std,
-                MainForm->PID_RB->ItemIndex, std_tmp);
+                ui, std_tmp);
     if (MainForm->swfx.tset_hlt_sw)
     {
        MainForm->tset_hlt = MainForm->swfx.tset_hlt_fx; // fix tset_hlt
@@ -1209,9 +1240,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("PREHEAT_TIME",0); // PREHEAT_TIME [sec]
           // STD Settings
           Reg->WriteFloat("VMLT_EMPTY", 8.0);  // Vmlt_EMPTY [L]
-          Reg->WriteInteger("TO_XSEC",1);      // TIMEOUT_xSEC [sec]
-          Reg->WriteInteger("TO3",300);        // TIMEOUT3 [sec]
-          Reg->WriteInteger("TO4",20);         // TIMEOUT4 [sec
 
           //------------------------------------
           // Measurements Dialog
@@ -1227,6 +1255,9 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("VMLT_MAX",110.1);   // Max. MLT volume
           Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
           Reg->WriteBool("USE_FLOWSENSORS",0); // Use Pressure transducers
+          Reg->WriteInteger("FLOW1_ERR",0);    // Error Correction for FLOW1
+          Reg->WriteInteger("FLOW2_ERR",0);    // Error Correction for FLOW2
+          Reg->WriteBool("FLOW_TEMP_CORR",0);  // Use Temperature Correction
        } // if
        Reg->CloseKey();
        delete Reg;
@@ -1321,6 +1352,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
          vmlt_max    = Reg->ReadFloat("VMLT_MAX");    // Read max. MLT volume
          vmlt_slope  = Reg->ReadFloat("VMLT_SLOPE");  // Slope limiter for Vmlt
          use_flowsensors = Reg->ReadBool("USE_FLOWSENSORS");
+         flow1_err   = Reg->ReadInteger("FLOW1_ERR"); // Compensation error for FLOW1
+         flow2_err   = Reg->ReadInteger("FLOW2_ERR"); // Compensation error for FLOW2
+         flow_temp_corr = Reg->ReadBool("FLOW_TEMP_CORR"); // Temp. correction for flowmeters
 
          Reg->SaveKey(REGKEY,"ebrew_reg");
          Reg->CloseKey();      // Close the Registry
@@ -1539,9 +1573,6 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.sp_time_ticks   = sp.sp_time * 60;
         sp.boil_time_ticks = sp.boil_time * 60;
         sp.vmlt_empty      = Reg->ReadFloat("VMLT_EMPTY");
-        sp.to_xsec         = Reg->ReadInteger("TO_XSEC");
-        sp.to3             = Reg->ReadInteger("TO3");
-        sp.to4             = Reg->ReadInteger("TO4");
 
         Reg->CloseKey(); // Close the Registry
         delete Reg;
@@ -1694,25 +1725,22 @@ void __fastcall TMainForm::Restore_Settings(void)
          x            *= p1[k].time_period; // Log-file -> 5 sec.: STD called -> 1 sec.
          switch (std.ebrew_std) // init. timers for states that have timers
          {
-            case S05_SPARGING_REST:        if (std.sp_idx > 0)
-                                           {
-                                              std.timer1 = x;
-                                           }
-                                           else
-                                           {  // if crash occurs in state 5 when sp_idx==0
-                                              std.timer1 = sp.sp_time_ticks;
-                                           }
-                                           break;
-            case S08_DELAY_xSEC:           std.timer2 = 1;
-                                           break;
-            case S10_BOILING:              std.timer3 = x;
-                                           std.timer4 = 0;
-                                           std.timer5 = x;
-                                           break;
-            case S11_EMPTY_HEAT_EXCHANGER: std.timer4 = x;
-                                           std.timer5 = x + sp.to3;
-                                           break;
-            default:                       break;
+            case S05_SPARGING_REST: if (std.sp_idx > 0)
+                                    {
+                                       std.timer1 = x;
+                                    }
+                                    else
+                                    {  // if crash occurs in state 5 when sp_idx==0
+                                       std.timer1 = sp.sp_time_ticks;
+                                    }
+                                    break;
+            case S08_DELAY_xSEC:    std.timer2 = 1;
+                                    break;
+            case S11_BOILING:       std.timer5 = x;
+                                    break;
+            case S14_PUMP_PREFILL:  std.timer3 = x;
+                                    break;
+            default:                break;
          } // switch
       } // if mrOK
       delete prps;  // prevent memory leaks
@@ -2004,9 +2032,6 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->Eph_time->Text    = AnsiString(sp.ph_timer);   // PREHEAT_TIME [sec]
         // STD Settings
         ptmp->Evmlt_empty->Text = AnsiString(sp.vmlt_empty); // Vmlt_EMPTY [L]
-        ptmp->Eto_xsec->Text    = AnsiString(sp.to_xsec);    // TIMEOUT_xSEC [sec]
-        ptmp->Eto3->Text        = AnsiString(sp.to3);        // TIMEOUT3 [sec]
-        ptmp->Eto4->Text        = AnsiString(sp.to4);        // TIMEOUT4 [sec]
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
@@ -2022,9 +2047,6 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());
            // STD Settings
            Reg->WriteFloat("VMLT_EMPTY",    ptmp->Evmlt_empty->Text.ToDouble());
-           Reg->WriteInteger("TO_XSEC",     ptmp->Eto_xsec->Text.ToInt());
-           Reg->WriteInteger("TO3",         ptmp->Eto3->Text.ToInt());
-           Reg->WriteInteger("TO4",         ptmp->Eto4->Text.ToInt());
 
            Init_Sparge_Settings(); // Init. struct with new sparge settings
         } // if
@@ -2092,9 +2114,12 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          ptmp->Vmlt_Offset_Edit->Text   = Reg->ReadFloat("VMLT_OFFSET");
          ptmp->Vmlt_Slope_Edit->Text    = Reg->ReadFloat("VMLT_SLOPE");
          //-------------------
-         // Boil Kettle Volume
+         // Volume Measurement
          //-------------------
          ptmp->Use_Flowsensors->Checked = use_flowsensors;
+         ptmp->Flow1_Err->Text = flow1_err;
+         ptmp->Flow2_Err->Text = flow2_err;
+         ptmp->Flow_Temp_Corr->Checked = flow_temp_corr;
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
@@ -2143,6 +2168,12 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
               MainForm->Flow1_hlt_mlt->Font->Color  = clRed;
               MainForm->Flow2_mlt_boil->Font->Color = clRed;
             } // else
+            flow1_err = ptmp->Flow1_Err->Text.ToInt();
+            Reg->WriteInteger("FLOW1_ERR",flow1_err);
+            flow2_err = ptmp->Flow2_Err->Text.ToInt();
+            Reg->WriteInteger("FLOW2_ERR",flow2_err);
+            flow_temp_corr = ptmp->Flow_Temp_Corr->Checked;
+            Reg->WriteBool("FLOW_TEMP_CORR",flow_temp_corr);
          } // if
          Reg->CloseKey(); // Close the Registry
       } // if
@@ -2523,7 +2554,7 @@ void __fastcall TMainForm::Update_GUI(void)
    tm_mlt->Value->Value = tmlt;     // update MLT thermometer object
 
    tm_triac->Value->Value = ttriac; // Update thermometer object
-   sprintf(tmp_str,"%2.0f",ttriac+0.5);
+   sprintf(tmp_str,"%3.1f",ttriac);
    Ttriac_lbl->Caption    = tmp_str;
 
    //---------------------------------------------------
@@ -2557,20 +2588,24 @@ void __fastcall TMainForm::Update_GUI(void)
 
    switch (std.ebrew_std)
    {
-      case  0: Std_State->Caption = "00. Initialisation"       ; break;
-      case  1: Std_State->Caption = "01. Wait for HLT Temp."   ; break;
-      case  2: Std_State->Caption = "02. Fill MLT"             ; break;
-      case  3: Std_State->Caption = "03. Mash in Progress"     ; break;
-      case  4: Std_State->Caption = "04. Mash Timer Running"   ; break;
-      case  5: Std_State->Caption = "05. Sparging Rest"        ; break;
-      case  6: Std_State->Caption = "06. Pump from MLT to Boil"; break;
-      case  7: Std_State->Caption = "07. Pump from HLT to MLT" ; break;
-      case  8: Std_State->Caption = "08. Delay"                ; break;
-      case  9: Std_State->Caption = "09. Empty MLT"            ; break;
-      case 10: Std_State->Caption = "10. Boiling"              ; break;
-      case 11: Std_State->Caption = "11. Empty Heat Exchanger" ; break;
-      case 12: Std_State->Caption = "12. Chill"                ; break;
-      case 13: Std_State->Caption = "13. Mash PreHeat HLT"     ; break;
+      case  0: Std_State->Caption = "00. Initialisation"                   ; break;
+      case  1: Std_State->Caption = "01. Wait for HLT Temperature"         ; break;
+      case  2: Std_State->Caption = "02. Fill MLT"                         ; break;
+      case  3: Std_State->Caption = "03. Wait for MLT Temperature"         ; break;
+      case  4: Std_State->Caption = "04. Mash Timer Running"               ; break;
+      case  5: Std_State->Caption = "05. Sparge Timer Running"             ; break;
+      case  6: Std_State->Caption = "06. Pump from MLT to Boil-Kettle"     ; break;
+      case  7: Std_State->Caption = "07. Pump from HLT to MLT"             ; break;
+      case  8: Std_State->Caption = "08. Delay"                            ; break;
+      case  9: Std_State->Caption = "09. Empty MLT"                        ; break;
+      case 10: Std_State->Caption = "10. Wait for Boil"                    ; break;
+      case 11: Std_State->Caption = "11. Now Boiling"                      ; break;
+      case 12: Std_State->Caption = "12. Boiling Finished, prepare Chiller"; break;
+      case 13: Std_State->Caption = "13. Mash Pre-Heat HLT"                ; break;
+      case 14: Std_State->Caption = "14. Pump Pre-Fill"                    ; break;
+      case 15: Std_State->Caption = "15. Add Malt to MLT"                  ; break;
+      case 16: Std_State->Caption = "16. Chill && Pump to Fermentor"       ; break;
+      case 17: Std_State->Caption = "17. Finished!"                        ; break;
       default: break;
    } // switch
    //----------------------------------------------------------------------
@@ -2631,13 +2666,6 @@ void __fastcall TMainForm::Update_GUI(void)
       case V4M      : V4->Caption = V40MTXT; break;
       case V4b      : V4->Caption = V41ATXT; break;
       default       : V4->Caption = V40ATXT; break;
-   } // switch
-   switch (std_out & (V5M | V5b))
-   {
-      case V5M | V5b: V5->Caption = V51MTXT; break;
-      case V5M      : V5->Caption = V50MTXT; break;
-      case V5b      : V5->Caption = V51ATXT; break;
-      default       : V5->Caption = V50ATXT; break;
    } // switch
    switch (std_out & (V6M | V6b))
    {
@@ -2796,5 +2824,29 @@ void __fastcall TMainForm::UDP_ServerUDPRead(TObject *Sender,
     }
     catch(const Exception &) { ; }
 } // UDP_ServerUDPRead()
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::MaltaddedtoMLT1Click(TObject *Sender)
+{
+    MaltaddedtoMLT1->Checked = True;   
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::Boilingstarted1Click(TObject *Sender)
+{
+  Boilingstarted1->Checked = True;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::StartChilling1Click(TObject *Sender)
+{
+  StartChilling1->Checked = True;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::ChillingFinished1Click(TObject *Sender)
+{
+  ChillingFinished1->Checked = True;
+}
 //---------------------------------------------------------------------------
 

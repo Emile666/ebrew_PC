@@ -6,6 +6,13 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.24  2015/03/21 09:27:22  Emile
+  - Vboil_simulated removed, VHLT_START added
+  - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
+  - task_read_vhlt_vmlt() with command A5 added
+  - Flow1_hlt_mlt and Flow2_mlt_boil objects added to main-screen
+  - New Registry var USE_FLOWSENSORS. Switches between tasks 03/04 and 03F/04F
+
   Revision 1.23  2013/07/23 09:42:46  Emile
   - Fourth intermediate version: several Registry Settings added / removed.
   - Dialog Screens updated: better lay-out and matches new Registry Settings
@@ -327,8 +334,8 @@ void calc_phases_start(FILE *fd, log_struct p[])
             // From 2 (Fill MLT) or 3 (Mash in Progress) -> 4 (Mash Timer Running) or 13 (Mash Preheat HLT)
             // ms_idx incremented from 13 (Mash Preheat HLT) -> 4 (Mash Timer Running)
             if ((p[log_idx].mashing_start[m_entry] == 0) &&
-                (((std == S04_MASH_TIMER_RUNNING) && (std_old <= S03_MASH_IN_PROGRESS)) ||
-                 ((std == S13_MASH_PREHEAT_HLT)   && (std_old <= S03_MASH_IN_PROGRESS)) ||
+                (((std == S04_MASH_TIMER_RUNNING) && (std_old <= S03_WAIT_FOR_MLT_TEMP)) ||
+                 ((std == S13_MASH_PREHEAT_HLT)   && (std_old <= S03_WAIT_FOR_MLT_TEMP)) ||
                  ((std == S04_MASH_TIMER_RUNNING) && (std_old == S13_MASH_PREHEAT_HLT))))
             {
                p[log_idx].mashing_start[m_entry] = line_nr;
@@ -348,8 +355,8 @@ void calc_phases_start(FILE *fd, log_struct p[])
                p[log_idx].sparging_start2[s2_entry] = line_nr;
                s2_entry++;
             } /* if */
-            FIND_PHASE(p[log_idx].boil_start ,S10_BOILING, S09_EMPTY_MLT);
-            FIND_PHASE(p[log_idx].chill_start,S12_CHILL  , S10_BOILING);
+            FIND_PHASE(p[log_idx].boil_start ,S11_BOILING             , S10_WAIT_FOR_BOIL);
+            FIND_PHASE(p[log_idx].chill_start,S16_CHILL_PUMP_FERMENTOR, S12_BOILING_FINISHED);
          } /* if */
 
          if (line_nr == p[log_idx].eline)
@@ -732,14 +739,13 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int 
 
 int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
                double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
-               sparge_struct *sps, std_struct *std, int pid_on, int std_fx)
+               sparge_struct *sps, std_struct *std, int ui, int std_fx)
 /*------------------------------------------------------------------
   Purpose  : This function contains the State Transition Diagram (STD)
-             for the ebrew program.
+             for the ebrew program and is called every second.
              First: the new state is calculated based upon the conditions.
              Then: the settings of the valves are calculated and returned
-             in 'kleppen'.
-             It uses various static variables (see begin of file).
+             in 'kleppen'. It uses various static variables (see begin of file).
   Variables:
       *vol : Struct containing all volume variables
       tmlt : The actual temperature of the MLT
@@ -753,7 +759,12 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       ms[] : Array containing the mash schedule
        sps : Struct containing all sparge variables
        std : Struct containing all STD variables
-    pid_on : 1 = PID Controller enabled (needed as a condition here)
+        ui : User-Interactions:
+             Bit 0: 1 = PID Controller enabled
+             Bit 1: 1 = User selects 'Mash added to MLT'
+             Bit 2: 1 = User selects 'Boiling started'
+             Bit 3: 1 = User selects 'Start chilling'
+             Bit 4: 1 = User selects 'Chilling finished'
     std_fx : Fix value for ebrew_std, -1 if no fix
   Returns  : The values of ebrew_std is returned
   ------------------------------------------------------------------*/
@@ -768,24 +779,29 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
    //            |  |  |  |  |  |  |-> In from MLT
    //           V7 V6 V5 V4 V3 V2 V1 Pump Description           Hex.
    //------------------------------------------------------------------
-   // State 00:  0  0  0  0  0  0  0  0   Initialisation        0x00
-   // State 01:  0  0  1  0  0  1  0  0   Wait for HLT Temp.    0x24
-   // State 02:  0  0  0  1  0  1  0  1   Fill MLT              0x15
-   // State 03:  0  0  0  1  0  0  1  1   Mash In Progres       0x13
-   // State 04:  0  0  0  1  0  0  1  1   Mash Timer Running    0x13
-   // State 05:  0  0  0  1  0  0  1  1   Sparging Rest         0x13
-   // State 06:  1  0  0  1  0  0  1  1   Pump from MLT to Boil 0x93
-   // State 07:  0  0  0  1  0  1  1  1   Pump from HLT to MLT  0x17
-   // State 08:  0  0  0  1  0  0  1  1   Delay x Sec.          0x13
-   // State 09:  1  0  0  0  0  0  1  1   Empty MLT             0x83
-   // State 10:  0  0  0  0  0  0  0  0   Boil                  0x00
-   // State 11:  0  0  0  1  0  0  0  0   Empty Heat Exchanger  0x10
-   // State 12:  0  1  0  0  1  0  0  1   Chill                 0x49
-   // State 13:  0  0  1  0  0  0  1  0   Mash PreHeat HLT      0x22
+   // State 00:  0  0  0  0  0  0  0  0   Initialisation            0x00
+   // State 01:  0  0  0  0  0  0  0  0   Wait for HLT Temp.        0x00
+   // State 02:  0  0  0  1  0  1  1  1   Fill MLT                  0x17
+   // State 03:  0  0  0  1  0  0  1  1   Mash In Progres           0x13
+   // State 04:  0  0  0  1  0  0  1  1   Mash Timer Running        0x13
+   // State 05:  0  0  0  1  0  0  1  1   Sparging Rest             0x13
+   // State 06:  1  0  0  0  0  0  1  1   Pump from MLT to Boil     0x83
+   // State 07:  0  0  0  1  0  1  1  1   Pump from HLT to MLT      0x17
+   // State 08:  0  0  0  0  0  0  0  0   Delay x Sec.              0x00
+   // State 09:  1  0  0  0  0  0  1  1   Empty MLT                 0x83
+   // State 10:  0  0  0  0  0  0  0  0   Wait for Boil             0x00
+   // State 11:  0  0  0  0  0  0  0  0   Boiling                   0x00
+   // State 12:  0  0  0  0  0  0  0  0   Boiling Finished          0x00
+   // State 13:  0  0  0  0  0  0  0  0   Mash PreHeat HLT          0x00
+   // State 14:  0  0  0  0  0  1  1  0   Pump Prefill              0x06
+   // State 15:  0  0  0  1  0  0  1  1   Add Malt to MLT           0x13
+   // State 16:  0  1  0  0  1  0  0  1   Chill & Pump to Fermentor 0x49
+   // State 17:  0  0  0  0  0  0  0  0   Finished!                 0x00
    //-------------------------------------------------------------------
-   unsigned int  klepstanden[] = {0x0000, 0x0024, 0x0015, 0x0013, 0x0013,
-                                  0x0013, 0x0093, 0x0017, 0x0013, 0x0083,
-                                  0x0000, 0x0010, 0x0049, 0x0022};
+   unsigned int  klepstanden[] = {0x0000, 0x0000, 0x0017, 0x0013, 0x0013,
+                                  0x0013, 0x0083, 0x0017, 0x0000, 0x0083,
+                                  0x0000, 0x0000, 0x0000, 0x0000, 0x0016,
+                                  0x0013, 0x0049, 0x0000};
    unsigned int  klepstand; // Help var. = klepstanden[std->ebrew_std]
 
    switch (std->ebrew_std)
@@ -798,14 +814,14 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            std->ms_idx = 0; // init. index in mash schem
            *tset_mlt   = ms[std->ms_idx].temp;
            *tset_hlt   = *tset_mlt + 2 * sps->temp_offset;
-           if (pid_on & 0x01)
+           if (ui & UI_PID_ON)
            {
               std->ebrew_std = S01_WAIT_FOR_HLT_TEMP;
            } // if
            break;
       //---------------------------------------------------------------------------
       // S01_WAIT_FOR_HLT_TEMP: Thlt < tset_HLT, continue to heat HLT
-      // - If Thlt > Tset_hlt, goto S02_FILL_MLT
+      // - If Thlt > Tset_hlt, goto S14_PUMP_PREFILL
       //---------------------------------------------------------------------------
       case S01_WAIT_FOR_HLT_TEMP:
            *tset_mlt = ms[std->ms_idx].temp;
@@ -813,6 +829,19 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            if (thlt >= *tset_hlt) // HLT TEMP is OK
            {
               vol->Vhlt_old  = vol->Vhlt; // remember old value
+              std->timer3    = 0;         // init. '1 minute' timer
+              std->ebrew_std = S14_PUMP_PREFILL;
+           } // if
+           break;
+      //---------------------------------------------------------------------------
+      // S14_PUMP_PREFILL: since the pump needs to be filled with water, prefill
+      // the pump with water for a minute, then goto S02_FILL_MLT
+      //---------------------------------------------------------------------------
+      case S14_PUMP_PREFILL:
+           *tset_mlt = ms[std->ms_idx].temp;
+           *tset_hlt = *tset_mlt + 2 * sps->temp_offset;
+           if (++std->timer3 >= TMR_PREFILL_PUMP) // Stay-here timer timeout?
+           {
               std->ebrew_std = S02_FILL_MLT;
            } // if
            break;
@@ -826,7 +855,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            *tset_hlt = *tset_mlt + 2 * sps->temp_offset;
            if (vol->Vmlt >= sps->mash_vol)
            {
-              std->ebrew_std = S03_MASH_IN_PROGRESS;
+              std->ebrew_std = S03_WAIT_FOR_MLT_TEMP;
            } // if
            break;
       //---------------------------------------------------------------------------
@@ -836,13 +865,31 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // - Tset_hlt = tset (from mash scheme) + double offset
       // - Start mash timer, then goto S04_MASH_TIMER_RUNNING
       //---------------------------------------------------------------------------
-      case S03_MASH_IN_PROGRESS:
+      case S03_WAIT_FOR_MLT_TEMP:
            // Add double offset as long as Tmlt < Tset_mlt + Offset2
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + 2 * sps->temp_offset;
            if (tmlt >= ms[std->ms_idx].temp + sps->temp_offset2)
-           {
-              // Tmlt has reached Tset_mlt + Offset2, start mash timer
+           {  // Tmlt has reached Tset_mlt + Offset2, start mash timer
+              if (std->ms_idx == 0)
+              {  // We need to add malt to the MLT first
+                 std->ebrew_std = S15_ADD_MALT_TO_MLT;
+              } // if
+              else
+              {  // already added malt to the MLT, start directly with timer
+                 ms[std->ms_idx].timer = 0; // start the corresponding mash timer
+                 std->ebrew_std        = S04_MASH_TIMER_RUNNING;
+              } // else
+           } // if
+           break;
+      //---------------------------------------------------------------------------
+      // S15_ADD_MALT_TO_MLT: Before a mash-timer is started, the malt has to be
+      // added to the MLT first. This is done only once (when ms_idx == 0). If this
+      // is done, then goto S04_MASH_TIMER_RUNNING.
+      //---------------------------------------------------------------------------
+      case S15_ADD_MALT_TO_MLT:
+           if (ui & UI_MALT_ADDED_TO_MLT)
+           {  // malt is added to MLT, start mash timer
               ms[std->ms_idx].timer = 0; // start the corresponding mash timer
               std->ebrew_std        = S04_MASH_TIMER_RUNNING;
            } // if
@@ -880,9 +927,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            break;
       //---------------------------------------------------------------------------
       // S13_MASH_PREHEAT_HLT: Increase Thlt PREHEAT_TIMER seconds before the time-
-      //                       out of the mash timer. Close valve V4 so that the
-      //                       mash is no longer pumped through the HLT heat-
-      //                       exchanger. Heat HLT until the next temperature has
+      //                       out of the mash timer. Heat HLT until the next temperature has
       //                       been reached.
       // - Tset_hlt = next tset (from mash scheme) + double offset
       // - Increment mash timer until time-out, then goto S03_MASH_IN_PROGRESS
@@ -894,7 +939,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            if (ms[std->ms_idx].timer >= ms[std->ms_idx].time) // time-out?
            {
               std->ms_idx++; // increment index in mash scheme
-              std->ebrew_std = S03_MASH_IN_PROGRESS;
+              std->ebrew_std = S03_WAIT_FOR_MLT_TEMP;
            } // if
            break;
       //---------------------------------------------------------------------------
@@ -933,7 +978,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            if (vol->Vmlt <= vol->Vmlt_old - sps->sp_vol_batch)
            {
-              std->timer2    = 0;          // init. 1 sec. timer
+              std->timer2    = 0;          // init. x sec. timer
               std->ebrew_std = S08_DELAY_xSEC;
            } // if
            break;
@@ -958,7 +1003,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       case S08_DELAY_xSEC:
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
-           if (++std->timer2 >= sps->to_xsec)
+           if (++std->timer2 >= TMR_DELAY_xSEC)
            {
               vol->Vhlt_old  = vol->Vhlt;          // remember old value
               vol->Vmlt_old  = vol->Vmlt;          // remember current MLT volume
@@ -974,44 +1019,60 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       case S09_EMPTY_MLT:
            *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = *tset_mlt + sps->temp_offset; // Single offset
+           *tset_hlt  = 0.0; // disable heating element
            vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            if (vol->Vmlt < sps->vmlt_empty)
            {
-              std->timer3    = 0; // init. timer for transition to 'Empty Heat Exchanger'
+              std->ebrew_std = S10_WAIT_FOR_BOIL;
+           } // if
+           break;
+      //---------------------------------------------------------------------------
+      // S10_WAIT_FOR_BOIL: After all wort is pumped to the boil kettle, it takes
+      // a while before boiling actually starts. When the user selects the
+      // 'Boiling Started' option, goto S11_BOILING.
+      //---------------------------------------------------------------------------
+      case S10_WAIT_FOR_BOIL:
+           if (ui & UI_BOILING_STARTED)
+           {
               std->timer5    = 0; // init. timer for boiling time
-              std->ebrew_std = S10_BOILING;
+              std->ebrew_std = S11_BOILING;
            } // if
            break;
-
-      case S10_BOILING:
-           *tset_hlt = 0.0; // disable heating element
-           ++std->timer5;
-           if ((std->timer3 != NOT_STARTED) && (++std->timer3 >= sps->to3))
+      //---------------------------------------------------------------------------
+      // S11_BOILING: Boiling has started, remain here for BOIL_TIME minutes
+      //---------------------------------------------------------------------------
+      case S11_BOILING:
+           if (++std->timer5 >= sps->boil_time_ticks)
            {
-              std->timer4    = 0;
-              std->ebrew_std = S11_EMPTY_HEAT_EXCHANGER;
-           } // if
-           else if (std->timer5 >= sps->boil_time_ticks)
-           {
-              std->ebrew_std = S12_CHILL;
-           } // else if
-           break;
-      case S11_EMPTY_HEAT_EXCHANGER:
-           *tset_hlt = 0.0; // disable heating element
-           ++std->timer5;
-           if (++std->timer4 >= sps->to4)
-           {
-              std->timer3    = NOT_STARTED; // disable timer3
-              std->ebrew_std = S10_BOILING;
+              std->ebrew_std = S12_BOILING_FINISHED;
            } // if
            break;
-      case S12_CHILL:
-           *tset_hlt = 0.0; // disable heating element
-           if (pid_on & 0x02)
+      //---------------------------------------------------------------------------
+      // S12_BOILING_FINISHED: Boiling has finished, remain here until the user
+      // has set up everything for chilling, then goto S15_CHILL_PUMP_FERMENTOR
+      //---------------------------------------------------------------------------
+      case S12_BOILING_FINISHED:
+           if (ui & UI_START_CHILLING)
            {
-              std->ebrew_std = S00_INITIALISATION;
+              std->ebrew_std = S16_CHILL_PUMP_FERMENTOR;
            } // if
+           break;
+      //---------------------------------------------------------------------------
+      // S16_CHILL_PUMP_FERMENTOR: The boiled wort is sent through the counterflow
+      // chiller and directly into the fermentation bin.
+      //---------------------------------------------------------------------------
+      case S16_CHILL_PUMP_FERMENTOR:
+           if (ui & UI_CHILLING_FINISHED)
+           {
+              std->ebrew_std = S17_FINISHED;
+           } // if
+           break;
+      //---------------------------------------------------------------------------
+      // S17_FINISHED: All wort in pumped into the fermentation bin. The brewing
+      // session is finished. This is the end-state.
+      //---------------------------------------------------------------------------
+      case S17_FINISHED:
+           // Remain in this state until Program Exit.
            break;
       default:
            std->ebrew_std = S00_INITIALISATION;
