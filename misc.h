@@ -6,6 +6,10 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.25  2015/06/05 19:18:40  Emile
+// - STD optimized for new solenoid valves. User Interaction dialog added
+// - Calibration & Temp. correction added for flowsensors
+//
 // Revision 1.24  2015/03/21 09:27:22  Emile
 // - Vboil_simulated removed, VHLT_START added
 // - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
@@ -256,9 +260,11 @@ typedef struct _sparge_struct
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
    /* STD Settings */
    double vmlt_empty;      // MLT is empty below this volume
-   /* Sparge Time-stamps */
+   /* Time-stamps for Sparge, Boil and Chilling*/
    char   mlt2boil[MAX_SP][40]; // MAX_SP strings for time-stamp moment of MLT -> BOIL
    char   hlt2mlt[MAX_SP][40];  // MAX_SP strings for time-stamp moment of HLT -> MLT
+   char   boil[2][40];          // Boil-start and Boil-End time-stamps
+   char   chill[2][40];         // Chill-start and Chill-End time-stamps
 } sparge_struct;
 
 typedef struct _std_struct
@@ -269,7 +275,7 @@ typedef struct _std_struct
    int    sp_idx;    // Sparging index [0..sps->sp_batches-1]
    int    timer1;    // Timer for state 'Sparging Rest'
    int    timer2;    // Timer for state 'Delay_xSEC'
-   int    timer3;    // Timer for state 'Pump Prefill'
+   int    timer3;    // Timer for state 'Pump Pre-Fill'
    int    timer5;    // Timer for state 'Boiling'
 } std_struct;
 
@@ -318,7 +324,7 @@ typedef struct _volume_struct
 #define S04_MASH_TIMER_RUNNING     (4)
 #define S13_MASH_PREHEAT_HLT      (13)
 
-#define S05_SPARGING_REST          (5)
+#define S05_SPARGE_TIMER_RUNNING   (5)
 #define S06_PUMP_FROM_MLT_TO_BOIL  (6)
 #define S07_PUMP_FROM_HLT_TO_MLT   (7)
 #define S08_DELAY_xSEC             (8)

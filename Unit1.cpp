@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.71  2015/06/05 19:18:40  Emile
+// - STD optimized for new solenoid valves. User Interaction dialog added
+// - Calibration & Temp. correction added for flowsensors
+//
 // Revision 1.70  2015/05/11 13:22:07  Emile
 // - Comm. debug log now with timestamps
 // - Communication with HW (R1.15) made more robust
@@ -487,6 +491,7 @@ extern vector theta; // defined in pid_reg.h
 #pragma link "VrThermoMeter"
 #pragma link "VrPowerMeter"
 #pragma link "VrLeds"
+#pragma link "VrButtons"
 #pragma resource "*.dfm"
 
 TMainForm *MainForm;
@@ -704,34 +709,34 @@ void task_pid_ctrl(void)
     TDateTime td_now; // holds current date and time
 
     // Only useful if PID controller is disabled AND time_switch is enabled
-    if ((MainForm->PID_RB->ItemIndex != 1) && (MainForm->time_switch == 1))
+    if (!MainForm->PID_Ctrl->Active && (MainForm->time_switch == 1))
     {
        td_now = Now(); // Get Current Date and Time
        if ((td_now >= MainForm->dt_time_switch) &&
            (td_now <  MainForm->dt_time_switch + ONE_MINUTE))
        {
-          MainForm->PID_RB->ItemIndex = 1; // Enable PID Controller
+            MainForm->PID_Ctrl->Active = true;
        } // if
     } // if
 
-    // PID_RB->ItemIndex = 1 => PID Controller On
+    // PID_Ctrl->Active = true => PID Controller On
     switch (MainForm->pid_pars.pid_model)
     {
-         case 0 : pid_reg2(MainForm->thlt             , &MainForm->gamma,
-                           MainForm->tset_hlt         , &MainForm->pid_pars,
-                           MainForm->PID_RB->ItemIndex, &MainForm->sys_id_pars);
+         case 0 : pid_reg2(MainForm->thlt            , &MainForm->gamma,
+                           MainForm->tset_hlt        , &MainForm->pid_pars,
+                           MainForm->PID_Ctrl->Active, &MainForm->sys_id_pars);
                   break; // Self-Tuning Takahashi Type C
          case 1 : pid_reg3(MainForm->thlt     , &MainForm->gamma,
                            MainForm->tset_hlt , &MainForm->pid_pars,
-                           MainForm->PID_RB->ItemIndex);
+                           MainForm->PID_Ctrl->Active);
                   break; // Type A with filtering of D-action
          case 2 : pid_reg4(MainForm->thlt     , &MainForm->gamma,
                            MainForm->tset_hlt , &MainForm->pid_pars,
-                           MainForm->PID_RB->ItemIndex);
+                           MainForm->PID_Ctrl->Active);
                   break; // Takahashi Type C, NO filtering of D-action
          default: pid_reg4(MainForm->thlt     , &MainForm->gamma,
                            MainForm->tset_hlt , &MainForm->pid_pars,
-                           MainForm->PID_RB->ItemIndex);
+                           MainForm->PID_Ctrl->Active);
                   break; // default to Type C, NO filtering of D-action
     } // switch
     if (MainForm->swfx.gamma_sw)
@@ -766,15 +771,12 @@ void task_update_std(void)
        std_tmp = MainForm->swfx.std_fx;
     }
     old_tset_hlt = MainForm->tset_hlt; // Previous value of HLT temp. reference
-    ui = MainForm->PID_RB->ItemIndex; // 0=PID disabled, 1=PID enabled
-    switch (MainForm->Std_Manual->ItemIndex)
-    {
-        case 0 : ui |= UI_MALT_ADDED_TO_MLT; break;
-        case 1 : ui |= UI_BOILING_STARTED;   break;
-        case 2 : ui |= UI_START_CHILLING;    break;
-        case 3 : ui |= UI_CHILLING_FINISHED; break;
-        default: break;
-    } // switch
+    ui = (MainForm->PID_Ctrl->Active ? 1 : 0);
+    if (MainForm->MaltaddedtoMLT1->Checked)   ui |= UI_MALT_ADDED_TO_MLT;
+    if (MainForm->Boilingstarted1->Checked)   ui |= UI_BOILING_STARTED;
+    if (MainForm->StartChilling1->Checked)    ui |= UI_START_CHILLING;
+    if (MainForm->ChillingFinished1->Checked) ui |= UI_CHILLING_FINISHED;
+
     update_std(&MainForm->volumes ,  MainForm->tmlt    ,  MainForm->thlt,
                &MainForm->tset_mlt, &MainForm->tset_hlt, &MainForm->std_out,
                 MainForm->ms      , &MainForm->sp      , &MainForm->std,
@@ -784,6 +786,10 @@ void task_update_std(void)
        MainForm->tset_hlt = MainForm->swfx.tset_hlt_fx; // fix tset_hlt
     } // if
     slope_limiter(MainForm->tset_hlt_slope, old_tset_hlt, &MainForm->tset_hlt);
+    if (MainForm->PID_Ctrl->Active && (MainForm->tset_hlt < 5.0))
+    {   // Disable PID controller when sparging is finished
+        MainForm->PID_Ctrl->Active = false;
+    } // if
     //-----------------------------------------------------------------
     // Now output all valve bits to Ebrew hardware.
     // NOTE: The pump bit is sent using the P0/P1 command
@@ -1397,6 +1403,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
          sp.mlt2boil[i][0] = '\0'; // empty time-stamp strings
          sp.hlt2mlt[i][0]  = '\0';
       } // for i
+      sp.boil[0][0]  = '\0'; // boil-start
+      sp.boil[1][0]  = '\0'; // boil-end
+      sp.chill[0][0] = '\0'; // chill-start
+      sp.chill[1][0] = '\0'; // chill-end
    } // if
 
    try
@@ -1530,7 +1540,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //----------------------------------
    if (T50msec)          T50msec->Enabled                       = true; // start Interrupt Timer
    if (ViewMashProgress) ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
-   PID_RB->Enabled = true; // Enable PID Controller Radio-buttons
+   PID_Ctrl->Enabled = true;
    time_switch     = 0;    // Time switch disabled at power-up
    delete Reg; // Delete Registry object to prevent memory leak
 } // Main_Initialisation()
@@ -1721,11 +1731,12 @@ void __fastcall TMainForm::Restore_Settings(void)
             else MainForm->sp.hlt2mlt[j+1][0] = '\0';
          } // for j
          // Restore other timing parameters
-         x             = p1[k].eline + 1 - p1[k].start_lstd;
-         x            *= p1[k].time_period; // Log-file -> 5 sec.: STD called -> 1 sec.
+         x  = p1[k].eline + 1 - p1[k].start_lstd;
+         x *= p1[k].time_period; // Log-file -> 5 sec.: STD called -> 1 sec.
          switch (std.ebrew_std) // init. timers for states that have timers
          {
-            case S05_SPARGING_REST: if (std.sp_idx > 0)
+            case S05_SPARGE_TIMER_RUNNING:
+                                    if (std.sp_idx > 0)
                                     {
                                        std.timer1 = x;
                                     }
@@ -2598,13 +2609,13 @@ void __fastcall TMainForm::Update_GUI(void)
       case  7: Std_State->Caption = "07. Pump from HLT to MLT"             ; break;
       case  8: Std_State->Caption = "08. Delay"                            ; break;
       case  9: Std_State->Caption = "09. Empty MLT"                        ; break;
-      case 10: Std_State->Caption = "10. Wait for Boil"                    ; break;
+      case 10: Std_State->Caption = "10. Wait for Boil (M)"                ; break;
       case 11: Std_State->Caption = "11. Now Boiling"                      ; break;
-      case 12: Std_State->Caption = "12. Boiling Finished, prepare Chiller"; break;
+      case 12: Std_State->Caption = "12. Boiling Finished, prepare Chiller (M)"; break;
       case 13: Std_State->Caption = "13. Mash Pre-Heat HLT"                ; break;
       case 14: Std_State->Caption = "14. Pump Pre-Fill"                    ; break;
-      case 15: Std_State->Caption = "15. Add Malt to MLT"                  ; break;
-      case 16: Std_State->Caption = "16. Chill && Pump to Fermentor"       ; break;
+      case 15: Std_State->Caption = "15. Add Malt to MLT (M)"              ; break;
+      case 16: Std_State->Caption = "16. Chill && Pump to Fermentor (M)"   ; break;
       case 17: Std_State->Caption = "17. Finished!"                        ; break;
       default: break;
    } // switch
@@ -2848,5 +2859,7 @@ void __fastcall TMainForm::ChillingFinished1Click(TObject *Sender)
 {
   ChillingFinished1->Checked = True;
 }
+//---------------------------------------------------------------------------
+// TMainForm::PID_CtrlClick()
 //---------------------------------------------------------------------------
 

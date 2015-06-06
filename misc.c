@@ -6,6 +6,10 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.25  2015/06/05 19:18:40  Emile
+  - STD optimized for new solenoid valves. User Interaction dialog added
+  - Calibration & Temp. correction added for flowsensors
+
   Revision 1.24  2015/03/21 09:27:22  Emile
   - Vboil_simulated removed, VHLT_START added
   - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
@@ -342,7 +346,7 @@ void calc_phases_start(FILE *fd, log_struct p[])
                m_entry++;
             } /* if */
             // Sparging phase: MLT -> Boil
-            if ((p[log_idx].sparging_start[s1_entry] == 0) && (std_old == S05_SPARGING_REST) &&
+            if ((p[log_idx].sparging_start[s1_entry] == 0) && (std_old == S05_SPARGE_TIMER_RUNNING) &&
                 ((std == S06_PUMP_FROM_MLT_TO_BOIL) || (std == S09_EMPTY_MLT)))
             {
                p[log_idx].sparging_start[s1_entry] = line_nr;
@@ -920,7 +924,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
               {
                  std->sp_idx    = 0;                       // init. sparging index
                  std->timer1    = sps->sp_time_ticks - 10; // timer1 -> TIME-OUT - 10 sec.
-                 std->ebrew_std = S05_SPARGING_REST;       // goto SPARGING phase
+                 std->ebrew_std = S05_SPARGE_TIMER_RUNNING;       // goto SPARGING phase
               } // if
               // else remain in this state (timer is incremented)
            } // else
@@ -945,12 +949,12 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       //                            S P A R G I N G
       //---------------------------------------------------------------------------
-      // S05_SPARGING_REST:
+      // S05_SPARGE_TIMER_RUNNING:
       // - Increment timer until time-out
       // - If more sparge phases are required, goto S06_PUMP_FROM_MLT_TO_BOIL
       //                                  else goto S09_EMPTY_MLT
       //---------------------------------------------------------------------------
-      case S05_SPARGING_REST:
+      case S05_SPARGE_TIMER_RUNNING:
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
            if (++std->timer1 >= sps->sp_time_ticks)
@@ -963,6 +967,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
               } // if
               else
               {
+                 std->timer1    = 0; // reset timer1
                  std->ebrew_std = S09_EMPTY_MLT; // Finished with Sparging, empty MLT
               } // else if
            } // if
@@ -985,7 +990,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       // S07_PUMP_FROM_HLT_TO_MLT:
       // - Pump hot water from HLT to MLT until Vmlt change > sparge batch size
-      // - The goto S05_SPARGING_REST
+      // - The goto S05_SPARGE_TIMER_RUNNING
       //---------------------------------------------------------------------------
       case S07_PUMP_FROM_HLT_TO_MLT:
            *tset_mlt = ms[std->ms_idx].temp;
@@ -994,7 +999,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            {
               std->sp_idx++;              // Increase #Sparging Sessions done
               std->timer1    = 0;         // init timer1
-              std->ebrew_std = S05_SPARGING_REST;
+              std->ebrew_std = S05_SPARGE_TIMER_RUNNING;
            } // if
            break;
       //---------------------------------------------------------------------------
@@ -1032,6 +1037,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // 'Boiling Started' option, goto S11_BOILING.
       //---------------------------------------------------------------------------
       case S10_WAIT_FOR_BOIL:
+           *tset_hlt  = 0.0; // disable heating element
            if (ui & UI_BOILING_STARTED)
            {
               std->timer5    = 0; // init. timer for boiling time

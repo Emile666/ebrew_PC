@@ -5,6 +5,10 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2015/06/05 19:18:40  Emile
+// - STD optimized for new solenoid valves. User Interaction dialog added
+// - Calibration & Temp. correction added for flowsensors
+//
 // Revision 1.11  2013/07/23 09:42:46  Emile
 // - Fourth intermediate version: several Registry Settings added / removed.
 // - Dialog Screens updated: better lay-out and matches new Registry Settings
@@ -118,11 +122,10 @@ void __fastcall TViewMashProgress::CloseButtonClick(TObject *Sender)
 
 void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
 {
-   int    i;
+   int    i,tmp;
    char   s[120];
    double x;
    maisch_schedule *p; // pointer naar maisch_schedule structure
-   int    ltr;
 
    if (ViewMashProgress)
    {
@@ -168,7 +171,7 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
          ViewMashProgress->Memo1->Lines->Add(s);
       } // for
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
-      sprintf(s,"mash index (ms_idx) = %d",MainForm->std.ms_idx);
+      sprintf(s,"Mash Index (ms_idx) = %d",MainForm->std.ms_idx);
       ViewMashProgress->Memo1->Lines->Add(s);
 
       //-----------------------------------
@@ -178,9 +181,8 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       ViewMashProgress->Memo1->Lines->Add("index  HLT to MLT   MLT to Boil  Sparging");
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
 
-      ltr = MainForm->sp.sp_vol_batch;
       if ((MainForm->std.ebrew_std == S06_PUMP_FROM_MLT_TO_BOIL) &&
-          (prev_ebrew_std == S05_SPARGING_REST))
+          (prev_ebrew_std == S05_SPARGE_TIMER_RUNNING))
       {  // New transition detected, copy time-stamp into array of strings
          strcpy(MainForm->sp.mlt2boil[MainForm->std.sp_idx],TimeToStr(Time()).c_str());
       } // if
@@ -189,29 +191,55 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       {  // New transition detected, copy time-stamp into array of strings
          strcpy(MainForm->sp.hlt2mlt[1+MainForm->std.sp_idx],TimeToStr(Time()).c_str());
       } // if
+      if ((MainForm->std.ebrew_std == S11_BOILING) && (prev_ebrew_std == S10_WAIT_FOR_BOIL))
+      {  // New transition detected, copy time-stamp into array of strings
+         strcpy(MainForm->sp.boil[0],TimeToStr(Time()).c_str());
+      } // if
+      if ((MainForm->std.ebrew_std == S12_BOILING_FINISHED) && (prev_ebrew_std == S11_BOILING))
+      {  // New transition detected, copy time-stamp into array of strings
+         strcpy(MainForm->sp.boil[1],TimeToStr(Time()).c_str());
+      } // if
+      if ((MainForm->std.ebrew_std == S16_CHILL_PUMP_FERMENTOR) && (prev_ebrew_std == S12_BOILING_FINISHED))
+      {  // New transition detected, copy time-stamp into array of strings
+         strcpy(MainForm->sp.chill[0],TimeToStr(Time()).c_str());
+      } // if
+      if ((MainForm->std.ebrew_std == S17_FINISHED) && (prev_ebrew_std == S16_CHILL_PUMP_FERMENTOR))
+      {  // New transition detected, copy time-stamp into array of strings
+         strcpy(MainForm->sp.chill[1],TimeToStr(Time()).c_str());
+      } // if
       prev_ebrew_std = MainForm->std.ebrew_std; // update previous value
 
-      sprintf(s,"  0     - - - -  %12s    - - , %2d L",MainForm->sp.mlt2boil[0],ltr);
+      x = MainForm->sp.sp_vol_batch;
+      sprintf(s,"  0     - - - -  %12s     - -  , %4.1f L",MainForm->sp.mlt2boil[0],x);
       ViewMashProgress->Memo1->Lines->Add(s);
       for (i = 1; i <= MainForm->sp.sp_batches; i++)
       {
          if (i == MainForm->sp.sp_batches)
-              sprintf(s,"%3d %12s %12s    %2d L, Empty",i,MainForm->sp.hlt2mlt[i],MainForm->sp.mlt2boil[i],ltr);
-         else sprintf(s,"%3d %12s %12s    %2d L, %2d L",i,MainForm->sp.hlt2mlt[i],MainForm->sp.mlt2boil[i],ltr,ltr);
+              sprintf(s,"%3d %12s %12s    %4.1f L, Empty"  ,i,MainForm->sp.hlt2mlt[i],MainForm->sp.mlt2boil[i],x);
+         else sprintf(s,"%3d %12s %12s    %4.1f L, %4.1f L",i,MainForm->sp.hlt2mlt[i],MainForm->sp.mlt2boil[i],x,x);
          ViewMashProgress->Memo1->Lines->Add(s);
       } // for i
       ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
-      sprintf(s,"sp_idx = %d, Timer = %d/%d sec.",MainForm->std.sp_idx,
-                                                  MainForm->std.timer1,
-                                                  MainForm->sp.sp_time_ticks);
+      sprintf(s,"Sparge Index (sp_idx) = %d",MainForm->std.sp_idx);
       ViewMashProgress->Memo1->Lines->Add(s);
       ViewMashProgress->Memo1->Lines->Add(" ");
 
-      sprintf(s,"Timer3 (state 'Pump Prefill'): %d/%d sec.",MainForm->std.timer3,TMR_PREFILL_PUMP);
+      sprintf(s,"Timer1 (state 'Sparge Timer Running'): %d/%d min.",MainForm->std.timer1/60,MainForm->sp.sp_time);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer2 (state 'Delay_xSEC')  : %d/%d sec.",MainForm->std.timer2,TMR_DELAY_xSEC);
+      sprintf(s,"Timer2 (state 'Delay')               : %02d/%02d sec.",MainForm->std.timer2,TMR_DELAY_xSEC);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer5 (state 'Now Boiling') : %d/%d sec.",MainForm->std.timer5,MainForm->sp.boil_time_ticks);
+      sprintf(s,"Timer3 (state 'Pump Pre-Fill')       : %02d/%02d sec.",MainForm->std.timer3,TMR_PREFILL_PUMP);
+      ViewMashProgress->Memo1->Lines->Add(s);
+      sprintf(s,"Timer5 (state 'Now Boiling')         : %d/%d min.",MainForm->std.timer5/60,MainForm->sp.boil_time);
+      ViewMashProgress->Memo1->Lines->Add(s);
+      s[0] = '\0';
+      tmp  = MainForm->std.timer1 + MainForm->std.timer5;
+      tmp  = (tmp % 60) / 5;
+      for (i = 0; i < tmp; i++) strcat(s,".");
+      ViewMashProgress->Memo1->Lines->Add(s);
+      sprintf(s,"Boiling  started at: %s",MainForm->sp.boil[0]);
+      ViewMashProgress->Memo1->Lines->Add(s);
+      sprintf(s,"Chilling started at: %s",MainForm->sp.chill[0]);
       ViewMashProgress->Memo1->Lines->Add(s);
    } // if
 } // TViewMashProgress::UpdateTimerTimer()

@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.44  2015/06/05 19:18:40  Emile
+// - STD optimized for new solenoid valves. User Interaction dialog added
+// - Calibration & Temp. correction added for flowsensors
+//
 // Revision 1.43  2015/03/21 09:27:22  Emile
 // - Vboil_simulated removed, VHLT_START added
 // - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
@@ -358,6 +362,7 @@
 #include <IdUDPBase.hpp>
 #include <IdUDPClient.hpp>
 #include <IdUDPServer.hpp>
+#include "VrButtons.hpp"
 
 #define TS_INIT    (5.0)
 #define KC_INIT   (69.0)
@@ -462,7 +467,6 @@ __published:	// IDE-managed Components
         TLabel *V6;
         TLabel *V7;
         TLabel *Std_State;
-        TRadioGroup *PID_RB;
         TAnimTimer *T50msec;
         TMenuItem *MenuViewMash_progress;
         TMenuItem *MenuOptionsI2CSettings;
@@ -490,13 +494,13 @@ __published:	// IDE-managed Components
         TIdUDPServer *UDP_Server;
         TLabel *Flow1_hlt_mlt;
         TLabel *Flow2_mlt_boil;
-        TRadioGroup *Std_Manual;
         TImage *Image1;
         TPopupMenu *PopupMenu2;
         TMenuItem *MaltaddedtoMLT1;
         TMenuItem *Boilingstarted1;
         TMenuItem *StartChilling1;
         TMenuItem *ChillingFinished1;
+        TVrPowerButton *PID_Ctrl;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
