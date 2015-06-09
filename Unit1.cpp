@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.72  2015/06/06 14:02:33  Emile
+// - User Interaction now with PopupMenu to State-label
+// - PID Controller now made with a TvrPowerButton instead of a radiobutton box
+// - View Mash Progress Form improved
+//
 // Revision 1.71  2015/06/05 19:18:40  Emile
 // - STD optimized for new solenoid valves. User Interaction dialog added
 // - Calibration & Temp. correction added for flowsensors
@@ -2630,7 +2635,7 @@ void __fastcall TMainForm::Update_GUI(void)
    sprintf(tmp_str,"%4.1f",volumes.Vboil);
    Vol_Boil->Caption = tmp_str;
 
-   sprintf(tmp_str,"%4.1f",volumes.Flow_hlt_mlt); // Display flow from HLT -> MLT
+   sprintf(tmp_str,"%4.1f",volumes.Flow_hlt_mlt);  // Display flow from HLT -> MLT
    Flow1_hlt_mlt->Caption = tmp_str;
 
    sprintf(tmp_str,"%4.1f",volumes.Flow_mlt_boil); // Display flow from MLT -> Boil

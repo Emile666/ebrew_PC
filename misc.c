@@ -6,6 +6,11 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.26  2015/06/06 14:02:33  Emile
+  - User Interaction now with PopupMenu to State-label
+  - PID Controller now made with a TvrPowerButton instead of a radiobutton box
+  - View Mash Progress Form improved
+
   Revision 1.25  2015/06/05 19:18:40  Emile
   - STD optimized for new solenoid valves. User Interaction dialog added
   - Calibration & Temp. correction added for flowsensors
@@ -804,7 +809,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
    //-------------------------------------------------------------------
    unsigned int  klepstanden[] = {0x0000, 0x0000, 0x0017, 0x0013, 0x0013,
                                   0x0013, 0x0083, 0x0017, 0x0000, 0x0083,
-                                  0x0000, 0x0000, 0x0000, 0x0000, 0x0016,
+                                  0x0000, 0x0000, 0x0000, 0x0000, 0x0006,
                                   0x0013, 0x0049, 0x0000};
    unsigned int  klepstand; // Help var. = klepstanden[std->ebrew_std]
 
