@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.73  2015/06/09 21:00:21  Emile
+// Bugfix STD: Valve V4 was ON in state 14, should be OFF. Now corrected.
+//
 // Revision 1.72  2015/06/06 14:02:33  Emile
 // - User Interaction now with PopupMenu to State-label
 // - PID Controller now made with a TvrPowerButton instead of a radiobutton box
@@ -506,6 +509,8 @@ HANDLE       hComm = NULL;
 COMMTIMEOUTS ctmoNew = {0}, ctmoOld;
 FILE         *fdbg_com; // COM-port debug file-descriptor
 
+#define MAX_READ_RETRIES (4)
+#define WR2RD_SLEEP_TIME (10)
 /*-----------------------------------------------------------------------------
   Purpose    : TASK 01: Read THLT (HLT Temperature) from Ebrew hardware
   Period-Time: 1 second
@@ -514,13 +519,20 @@ FILE         *fdbg_com; // COM-port debug file-descriptor
   ---------------------------------------------------------------------------*/
 void task_read_thlt(void)
 {
-    char   s[MAX_BUF_READ];
-    double temp;
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Thlt=";
+    double     temp;
+    int        x = 0;
 
     MainForm->comm_port_write("A3\n"); // A3 = THLT
-    MainForm->comm_port_read(s);       // Read HLT temp. from LM92 device
-    temp = atof(&s[5]);                // Equals 99.99 in case of i2c HW error
-    if ((!strncmp(s,"Thlt=",5)) && (temp < 99.9))
+    do
+    {
+        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        MainForm->comm_port_read(s); // Read HLT temp. from LM92 device
+        temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
     {
          MainForm->Val_Thlt->Font->Color = clLime;
          MainForm->thlt = temp; // update THLT with new value
@@ -540,13 +552,20 @@ void task_read_thlt(void)
   ---------------------------------------------------------------------------*/
 void task_read_tmlt(void)
 {
-    char   s[MAX_BUF_READ];
-    double temp;
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Tmlt=";
+    double     temp;
+    int        x = 0;
 
     MainForm->comm_port_write("A4\n"); // A4 = TMLT
-    MainForm->comm_port_read(s);       // Read MLT temp. from LM92 device
-    temp = atof(&s[5]);                // Equals 99.99 in case of i2c HW error
-    if ((!strncmp(s,"Tmlt=",5)) && (temp < 99.9))
+    do
+    {
+        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        MainForm->comm_port_read(s); // Read MLT temp. from LM92 device
+        temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
     {
          MainForm->Val_Tmlt->Font->Color = clLime;
          MainForm->tmlt = temp; // update TMLT with new value
@@ -567,12 +586,19 @@ void task_read_tmlt(void)
   ---------------------------------------------------------------------------*/
 void task_read_vhlt(void)
 {
-    char   s[MAX_BUF_READ];
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Vhlt=";
+    int        x = 0;
 
     MainForm->comm_port_write("A1\n"); // A1 = VHLT
-    MainForm->comm_port_read(s);       // Read HLT Volume from pressure sensor
-    if (!strncmp(s,"Vhlt=",5)) MainForm->Vol_HLT->Font->Color = clLime;
-    else                       MainForm->Vol_HLT->Font->Color = clRed;
+    do
+    {
+        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        MainForm->comm_port_read(s); // Read HLT Volume from pressure sensor
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if (!strncmp(s,s_exp,5)) MainForm->Vol_HLT->Font->Color = clLime;
+    else                     MainForm->Vol_HLT->Font->Color = clRed;
     MainForm->volumes.Vhlt  = atof(&s[5]);
     if (MainForm->swfx.vhlt_sw)
     {  // Switch & Fix
@@ -589,12 +615,19 @@ void task_read_vhlt(void)
   ---------------------------------------------------------------------------*/
 void task_read_vmlt(void)
 {
-    char   s[MAX_BUF_READ];
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Vmlt=";
+    int        x = 0;
 
     MainForm->comm_port_write("A2\n"); // A2 = VMLT
-    MainForm->comm_port_read(s);       // Read MLT Volume from pressure sensor
-    if (!strncmp(s,"Vmlt=",5)) MainForm->Vol_MLT->Font->Color = clLime;
-    else                       MainForm->Vol_MLT->Font->Color = clRed;
+    do
+    {
+        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        MainForm->comm_port_read(s); // Read MLT Volume from pressure sensor
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if (!strncmp(s,s_exp,5)) MainForm->Vol_MLT->Font->Color = clLime;
+    else                     MainForm->Vol_MLT->Font->Color = clRed;
     MainForm->volumes.Vmlt  = atof(&s[5]);
     if (MainForm->swfx.vmlt_sw)
     {  // Switch & Fix
@@ -611,13 +644,20 @@ void task_read_vmlt(void)
   ---------------------------------------------------------------------------*/
 void task_read_vhlt_mlt(void)
 {
-    char   s[MAX_BUF_READ];
-    double err;
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Flow1=";
+    double     err;
+    int        x = 0;
 
     MainForm->comm_port_write("A5\n"); // A5 = Flowsensor between HLT and MLT
-    MainForm->comm_port_read(s);       // Read flowsensor
-    if (!strncmp(s,"Flow1=",6)) MainForm->Flow1_hlt_mlt->Font->Color = clLime;
-    else                        MainForm->Flow1_hlt_mlt->Font->Color = clRed;
+    do
+    {
+        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        MainForm->comm_port_read(s); // Read flowsensor
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
+
+    if (!strncmp(s,s_exp,6)) MainForm->Flow1_hlt_mlt->Font->Color = clLime;
+    else                     MainForm->Flow1_hlt_mlt->Font->Color = clRed;
     MainForm->volumes.Flow_hlt_mlt = atof(&s[6]);
     if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
@@ -644,13 +684,20 @@ void task_read_vhlt_mlt(void)
   ---------------------------------------------------------------------------*/
 void task_read_vmlt_boil(void)
 {
-    char   s[MAX_BUF_READ];
-    double err;
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Flow2=";
+    double     err;
+    int        x = 0;
 
     MainForm->comm_port_write("A6\n"); // A6 = Flowsensor between MLT and Boil kettle
-    MainForm->comm_port_read(s);       // Read flowsensor
-    if (!strncmp(s,"Flow2=",6)) MainForm->Flow2_mlt_boil->Font->Color = clLime;
-    else                        MainForm->Flow2_mlt_boil->Font->Color = clRed;
+    do
+    {
+        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        MainForm->comm_port_read(s); // Read flowsensor
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
+
+    if (!strncmp(s,s_exp,6)) MainForm->Flow2_mlt_boil->Font->Color = clLime;
+    else                     MainForm->Flow2_mlt_boil->Font->Color = clRed;
     MainForm->volumes.Flow_mlt_boil = atof(&s[6]);
     if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
@@ -678,12 +725,19 @@ void task_read_vmlt_boil(void)
   ---------------------------------------------------------------------------*/
 void task_read_lm35(void)
 {
-    char   s[MAX_BUF_READ];
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Lm35=";
+    int        x = 0;
 
     MainForm->comm_port_write("A0\n"); // A0 = LM35
-    MainForm->comm_port_read(s);       // Read LM35 Volume from Ebrew hardware
-    if (!strncmp(s,"Lm35=",5)) MainForm->Ttriac_lbl->Font->Color = clLime;
-    else                       MainForm->Ttriac_lbl->Font->Color = clRed;
+    do
+    {
+        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        MainForm->comm_port_read(s); // Read LM35 Volume from Ebrew hardware
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if (!strncmp(s,s_exp,5)) MainForm->Ttriac_lbl->Font->Color = clLime;
+    else                     MainForm->Ttriac_lbl->Font->Color = clRed;
     MainForm->ttriac  = atof(&s[5]);
     if (MainForm->swfx.ttriac_sw)
     {  // Switch & Fix
@@ -888,24 +942,24 @@ void task_write_pars(void)
        strcat(s,s1);         // add to previous commands
        switch (i)
        {
-         case  0: sprintf(s1,"%d\n",MainForm->system_mode)        ; break;
-         case  1: sprintf(s1,"%d\n",MainForm->gas_non_mod_llimit) ; break;
-         case  2: sprintf(s1,"%d\n",MainForm->gas_non_mod_hlimit) ; break;
-         case  3: sprintf(s1,"%d\n",MainForm->gas_mod_pwm_llimit) ; break;
-         case  4: sprintf(s1,"%d\n",MainForm->gas_mod_pwm_hlimit) ; break;
-         case  5: sprintf(s1,"%d\n",MainForm->ttriac_llim * 100)  ; break;
-         case  6: sprintf(s1,"%d\n",MainForm->ttriac_hlim * 100)  ; break;
-         case  7: sprintf(s1,"%2.0f\n",MainForm->vhlt_offset * 10); break;
-         case  8: sprintf(s1,"%2.0f\n",MainForm->vhlt_max    * 10); break;
-         case  9: sprintf(s1,"%2.0f\n",MainForm->vhlt_slope  * 10); break;
-         case 10: sprintf(s1,"%2.0f\n",MainForm->vmlt_offset * 10); break;
-         case 11: sprintf(s1,"%2.0f\n",MainForm->vmlt_max    * 10); break;
-         case 12: sprintf(s1,"%2.0f\n",MainForm->vmlt_slope  * 10); break;
-         case 13: sprintf(s1,"%2.0f\n",MainForm->thlt_offset * 16); break;
-         case 14: sprintf(s1,"%2.0f\n",MainForm->thlt_slope  * 16); break;
-         case 15: sprintf(s1,"%2.0f\n",MainForm->tmlt_offset * 16); break;
-         case 16: sprintf(s1,"%2.0f\n",MainForm->tmlt_slope  * 16); break;
-         case 17: sprintf(s1,"%d\n"   ,MainForm->fscl_prescaler)  ; break;
+         case  0: sprintf(s1,"%d\n",MainForm->system_mode)         ; break;
+         case  1: sprintf(s1,"%d\n",MainForm->gas_non_mod_llimit)  ; break;
+         case  2: sprintf(s1,"%d\n",MainForm->gas_non_mod_hlimit)  ; break;
+         case  3: sprintf(s1,"%d\n",MainForm->gas_mod_pwm_llimit)  ; break;
+         case  4: sprintf(s1,"%d\n",MainForm->gas_mod_pwm_hlimit)  ; break;
+         case  5: sprintf(s1,"%d\n",MainForm->ttriac_llim * 100)   ; break;
+         case  6: sprintf(s1,"%d\n",MainForm->ttriac_hlim * 100)   ; break;
+         case  7: sprintf(s1,"%2.0f\n",MainForm->vhlt_offset * 10) ; break;
+         case  8: sprintf(s1,"%2.0f\n",MainForm->vhlt_max    * 10) ; break;
+         case  9: sprintf(s1,"%2.0f\n",MainForm->vhlt_slope  * 10) ; break;
+         case 10: sprintf(s1,"%2.0f\n",MainForm->vmlt_offset * 10) ; break;
+         case 11: sprintf(s1,"%2.0f\n",MainForm->vmlt_max    * 10) ; break;
+         case 12: sprintf(s1,"%2.0f\n",MainForm->vmlt_slope  * 10) ; break;
+         case 13: sprintf(s1,"%2.0f\n",MainForm->thlt_offset * 128); break; // Q8.7 format
+         case 14: sprintf(s1,"%2.0f\n",MainForm->thlt_slope  * 128); break; // Q8.7 format
+         case 15: sprintf(s1,"%2.0f\n",MainForm->tmlt_offset * 128); break; // Q8.7 format
+         case 16: sprintf(s1,"%2.0f\n",MainForm->tmlt_slope  * 128); break; // Q8.7 format
+         case 17: sprintf(s1,"%d\n"   ,MainForm->fscl_prescaler)   ; break;
        } // switch
        strcat(s,s1); // add to existing commands
      } // if
@@ -1113,18 +1167,13 @@ void __fastcall TMainForm::comm_port_read(char *s)
       gettime(&t1);
       for (i = j = 0; i < dwBytesRead; i++)
       {
-         if (s[i] != '\r')
+         if ((s[i] != '\r') && (s[i] != '\n'))
          {
-            if (s[i] == '\n')
-            {
-                rbuf[j++] = '\\';
-                rbuf[j++] = 'n';
-            }
-            else rbuf[j++] = s[i];
+             rbuf[j++] = s[i];
          } // if
       } // if
       rbuf[j] = '\0';
-      fprintf(fdbg_com,"R%02d.%03d[%s]",t1.ti_sec,t1.ti_hund,rbuf);
+      fprintf(fdbg_com,"R%02d.%03d[%s]",t1.ti_sec,t1.ti_hund*10,rbuf);
    } // if
 } // comm_port_read()
 
@@ -1164,18 +1213,13 @@ void __fastcall TMainForm::comm_port_write(const char *s)
       j = 0;
       for (i = 0; i < bytes_to_send; i++)
       {
-         if (send_buffer[i] == '\n')
-         {
-            s2[j++] = '\\';
-            s2[j++] = 'n';
-         }
-         else
+         if (send_buffer[i] != '\n')
          {
             s2[j++] = send_buffer[i];
          } // else
          s2[j] = '\0'; // terminate string
       } // for i
-      fprintf(fdbg_com,"\nW%02d.%03d[%s]",t1.ti_sec,t1.ti_hund,s2);
+      fprintf(fdbg_com,"\nW%02d.%03d[%s]",t1.ti_sec,t1.ti_hund*10,s2);
    } // if
    ::Sleep(5);  // Give Arduino HW a bit of time for command processing
 } // COM_port_write()
@@ -1260,10 +1304,10 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
           Reg->WriteFloat("TMLT_SLOPE",2.0);   // Slope limit for Tmlt °C/sec.
           Reg->WriteFloat("VHLT_OFFSET",0.0);  // Offset for Vhlt
-          Reg->WriteFloat("VHLT_MAX",140.1);   // Max. HLT volume
+          Reg->WriteFloat("VHLT_MAX",140.0);   // Max. HLT volume
           Reg->WriteFloat("VHLT_SLOPE",1.0);   // Slope limit for Vhlt L/sec.
           Reg->WriteFloat("VMLT_OFFSET",0.0);  // Offset for Vmlt
-          Reg->WriteFloat("VMLT_MAX",110.1);   // Max. MLT volume
+          Reg->WriteFloat("VMLT_MAX",110.0);   // Max. MLT volume
           Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
           Reg->WriteBool("USE_FLOWSENSORS",0); // Use Pressure transducers
           Reg->WriteInteger("FLOW1_ERR",0);    // Error Correction for FLOW1
@@ -1482,13 +1526,13 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-----------------------------------------
    // Now add all the tasks for the scheduler
    //-----------------------------------------
-   add_task(task_read_thlt     , "read_thlt"    ,   0, 1000); /* task 01 */
-   add_task(task_read_tmlt     , "read_tmlt"    ,  50, 1000); /* task 02 */
+   add_task(task_read_thlt     , "read_thlt"    ,   0, 2000); /* task 01 */
+   add_task(task_read_tmlt     , "read_tmlt"    ,  50, 2000); /* task 02 */
    add_task(task_read_vhlt     , "read_vhlt"    , 100, 1000); /* task 03 */
    add_task(task_read_vmlt     , "read_vmlt"    , 150, 1000); /* task 04 */
    add_task(task_read_vhlt_mlt , "flow_hlt_mlt" , 100, 1000); /* task 03F */
    add_task(task_read_vmlt_boil, "flow_mlt_boil", 150, 1000); /* task 04F */
-   add_task(task_read_lm35     , "read_lm35"    , 200, 1000);
+   add_task(task_read_lm35     , "read_lm35"    , 200, 2000);
    add_task(task_pid_ctrl      , "pid_control"  , 250, (uint16_t)(pid_pars.ts * 1000));
    add_task(task_update_std    , "update_std"   , 350, 1000);
    add_task(task_alive_led     , "alive_pump"   , 400,  500);
