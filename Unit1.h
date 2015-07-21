@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.45  2015/06/06 14:02:33  Emile
+// - User Interaction now with PopupMenu to State-label
+// - PID Controller now made with a TvrPowerButton instead of a radiobutton box
+// - View Mash Progress Form improved
+//
 // Revision 1.44  2015/06/05 19:18:40  Emile
 // - STD optimized for new solenoid valves. User Interaction dialog added
 // - Calibration & Temp. correction added for flowsensors
@@ -487,9 +492,6 @@ __published:	// IDE-managed Components
         TMenuItem *N2;
         TLabel *PID_dbg;
         TLabel *Ttriac_lbl;
-        TStaticText *StaticText1;
-        TStaticText *StaticText2;
-        TStaticText *StaticText3;
         TIdUDPClient *UDP_Client;
         TIdUDPServer *UDP_Server;
         TLabel *Flow1_hlt_mlt;
@@ -501,6 +503,9 @@ __published:	// IDE-managed Components
         TMenuItem *StartChilling1;
         TMenuItem *ChillingFinished1;
         TVrPowerButton *PID_Ctrl;
+        TLabel *Flow2_rate;
+        TLabel *Flow1_rate;
+        TStaticText *StaticText3;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -574,6 +579,7 @@ public:		// User declarations
         bool   cb_i2c_err_msg;        // true = give error message on successful I2C reset
         bool   cb_debug_com_port;     // true = file-logging for COM port communication
         bool   cb_pid_dbg;            // true = Show PID Debug label
+        bool   cb_vsp2;               // true = Double the initial Sparge volume to Boil-kettle
         bool   toggle_led;            // Status of Alive LED
         bool   power_up_flag;         // true = power-up in progress
         bool   hw_debug_logging;      // true = write HW debug info to log-file
@@ -589,6 +595,8 @@ public:		// User declarations
         maisch_schedule ms[MAX_MS]; // struct containing maisch schedule
         sparge_struct   sp;         // Values for Sparging
         std_struct      std;        // Values for State Transition Diagram
+        ma              flow1_ma;   // Moving average filter for flow-rate HLT->MLT
+        ma              flow2_ma;   // Moving average filter for flow-rate MLT->Boil
 
         double          gamma;          // PID controller output
         double          tset_hlt;       // HLT reference temperature

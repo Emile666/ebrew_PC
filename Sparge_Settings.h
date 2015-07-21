@@ -5,6 +5,10 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2015/06/05 19:18:40  Emile
+// - STD optimized for new solenoid valves. User Interaction dialog added
+// - Calibration & Temp. correction added for flowsensors
+//
 // Revision 1.7  2004/05/08 14:52:51  emile
 // - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
 //   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
@@ -81,20 +85,11 @@ __published:	// IDE-managed Components
         TButton *Help_Button;
         TEdit *EBTime;
         TLabel *Label2;
-        TLabel *Label3;
-        TEdit *EMVol;
-        TLabel *Label4;
-        TEdit *ESVol;
         TEdit *EBoilTime;
         TLabel *Label5;
-        TLabel *Label9;
-        TEdit *Evmlt_empty;
         TLabel *Label12;
         TLabel *Label14;
-        TLabel *Label15;
-        TLabel *Label16;
         TLabel *Label17;
-        TLabel *Label20;
         TLabel *Label6;
         TLabel *Label7;
         TEdit *Eph_time;
@@ -105,6 +100,8 @@ __published:	// IDE-managed Components
         TLabel *Label26;
         TEdit *Offs_Edit;
         TEdit *Offs2_Edit;
+        TCheckBox *CB_VSp2;
+        TLabel *Label3;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.74  2015/06/28 12:19:41  Emile
+// - All temperature reading tasks from 1 -> 2 seconds
+// - Comm port debug logging improved
+// - Q8.7 format for Thlt and Tmlt parameters (instead of Q8.4)
+// - Read retries added to reading temperatures
+//
 // Revision 1.73  2015/06/09 21:00:21  Emile
 // Bugfix STD: Valve V4 was ON in state 14, should be OFF. Now corrected.
 //
@@ -646,7 +652,7 @@ void task_read_vhlt_mlt(void)
 {
     char       s[MAX_BUF_READ];
     const char s_exp[] = "Flow1=";
-    double     err;
+    double     err, temp;
     int        x = 0;
 
     MainForm->comm_port_write("A5\n"); // A5 = Flowsensor between HLT and MLT
@@ -658,7 +664,8 @@ void task_read_vhlt_mlt(void)
 
     if (!strncmp(s,s_exp,6)) MainForm->Flow1_hlt_mlt->Font->Color = clLime;
     else                     MainForm->Flow1_hlt_mlt->Font->Color = clRed;
-    MainForm->volumes.Flow_hlt_mlt = atof(&s[6]);
+    MainForm->volumes.Flow_hlt_mlt_old = MainForm->volumes.Flow_hlt_mlt;
+    MainForm->volumes.Flow_hlt_mlt     = atof(&s[6]);
     if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->thlt - 20.0));
@@ -666,8 +673,11 @@ void task_read_vhlt_mlt(void)
     } // if
     // Now apply Calibration error correction
     MainForm->volumes.Flow_hlt_mlt *= 1.0 + 0.01 * MainForm->flow1_err;
-
-    MainForm->volumes.Vhlt         = VHLT_START - MainForm->volumes.Flow_hlt_mlt;
+    // Calculate Flow-rate in L per minute
+    temp = 60.0 * (MainForm->volumes.Flow_hlt_mlt - MainForm->volumes.Flow_hlt_mlt_old);
+    MainForm->volumes.Flow_rate_hlt_mlt = moving_average(&MainForm->flow1_ma,temp);
+    // Calculate VHLT volume here
+    MainForm->volumes.Vhlt = VHLT_START - MainForm->volumes.Flow_hlt_mlt;
     if (MainForm->swfx.vhlt_sw)
     {  // Switch & Fix
        MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
@@ -686,7 +696,7 @@ void task_read_vmlt_boil(void)
 {
     char       s[MAX_BUF_READ];
     const char s_exp[] = "Flow2=";
-    double     err;
+    double     err, temp;
     int        x = 0;
 
     MainForm->comm_port_write("A6\n"); // A6 = Flowsensor between MLT and Boil kettle
@@ -698,6 +708,7 @@ void task_read_vmlt_boil(void)
 
     if (!strncmp(s,s_exp,6)) MainForm->Flow2_mlt_boil->Font->Color = clLime;
     else                     MainForm->Flow2_mlt_boil->Font->Color = clRed;
+    MainForm->volumes.Flow_mlt_boil_old = MainForm->volumes.Flow_mlt_boil;
     MainForm->volumes.Flow_mlt_boil = atof(&s[6]);
     if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
@@ -706,6 +717,10 @@ void task_read_vmlt_boil(void)
     } // if
     // Now apply Calibration error correction
     MainForm->volumes.Flow_mlt_boil *= 1.0 + 0.01 * MainForm->flow2_err;
+    // Calculate Flow-rate in L per minute
+    temp = 60.0 * (MainForm->volumes.Flow_mlt_boil - MainForm->volumes.Flow_mlt_boil_old);
+    MainForm->volumes.Flow_rate_mlt_boil = moving_average(&MainForm->flow2_ma,temp);
+    // Calculate VMLT and VBOIL volumes here
     MainForm->volumes.Vmlt           = MainForm->volumes.Flow_hlt_mlt -
                                        MainForm->volumes.Flow_mlt_boil;
     MainForm->volumes.Vboil          = MainForm->volumes.Flow_mlt_boil;
@@ -1283,18 +1298,15 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           // Sparge, Mash & STD Settings Dialog
           //------------------------------------
           // Sparge Settings
-          Reg->WriteInteger("MASH_VOL",85);    // Total Mash Volume (L)
-          Reg->WriteInteger("SP_VOL",35);      // Total Sparge Volume (L)
           Reg->WriteInteger("SP_BATCHES",3);   // #Sparge Batches
           Reg->WriteInteger("SP_TIME",20);     // Time between sparge batches
           Reg->WriteInteger("BOIL_TIME",120);  // Total Boil Time (min.)
+          Reg->WriteBool("CB_VSP2",0);         // Double Initial Sparge Volume to Boil-Kettle
           // Mash Settings
           Reg->WriteInteger("ms_idx",MAX_MS);  // init. index in mash scheme
           Reg->WriteFloat("TOffset",0.5);      // Compensation HLT-MLT heat-loss
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
-          Reg->WriteInteger("PREHEAT_TIME",0); // PREHEAT_TIME [sec]
-          // STD Settings
-          Reg->WriteFloat("VMLT_EMPTY", 8.0);  // Vmlt_EMPTY [L]
+          Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
 
           //------------------------------------
           // Measurements Dialog
@@ -1439,7 +1451,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    // Mash scheme is used in the STD, sample time of STD is 1 second
    // Init mash. timers only when doing a power-up, not after an I2C reset
    //--------------------------------------------------------------------------
-   if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,power_up_flag ? INIT_TIMERS : NO_INIT_TIMERS))
+   if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,power_up_flag ? INIT_TIMERS : NO_INIT_TIMERS,&sp.mash_vol,&sp.sp_vol))
    {
        MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
    } /* if */
@@ -1544,11 +1556,17 @@ void __fastcall TMainForm::Main_Initialisation(void)
    { // use flowsensors between HLT-MLT and between MLT-BOIL
      disable_task("read_vhlt");
      disable_task("read_vmlt");
+     MainForm->Flow1_rate->Visible = true;
+     MainForm->Flow2_rate->Visible = true;
+     init_ma(&MainForm->flow1_ma,10,0.0); // init moving_average filter for flowrate
+     init_ma(&MainForm->flow2_ma,10,0.0); // init moving_average filter for flowrate
    }
    else
    { // use pressure transducers in HLT and MLT for volume measurement
-        disable_task("flow_hlt_mlt");
-        disable_task("flow_mlt_boil");
+     disable_task("flow_hlt_mlt");
+     disable_task("flow_mlt_boil");
+     MainForm->Flow1_rate->Visible = false;
+     MainForm->Flow2_rate->Visible = false;
    } // else
 
    //-----------------------------------------------
@@ -1612,16 +1630,18 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
      {
         Reg->OpenKey(REGKEY,FALSE);
         // Sparge Settings
-        sp.mash_vol     = Reg->ReadInteger("MASH_VOL");   // Total Mash Volume (L)
-        sp.sp_vol       = Reg->ReadInteger("SP_VOL");     // Total Sparge Volume (L)
-        sp.sp_batches   = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
-        sp.sp_time      = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
-        sp.boil_time    = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
-        sp.sp_vol_batch = ((double)(sp.sp_vol)) / sp.sp_batches;
+        sp.sp_batches     = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
+        sp.sp_time        = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
+        sp.boil_time      = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
+        MainForm->cb_vsp2 = Reg->ReadBool("CB_VSP2");     // Duble Initial Sparge Volume to Boil-Kettle
+        sp.sp_vol_batch   = ((double)(sp.sp_vol)) / sp.sp_batches;
+        if (MainForm->cb_vsp2)
+             sp.sp_vol_batch0 = 2.0 * sp.sp_vol_batch;
+        else sp.sp_vol_batch0 = sp.sp_vol_batch;
         // Mash Settings
         sp.temp_offset  = Reg->ReadFloat("TOffset");
         sp.temp_offset2 = Reg->ReadFloat("TOffset2");
-        sp.ph_timer     = Reg->ReadInteger("PREHEAT_TIME");
+        sp.ph_timer     = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_timer is in seconds
         // STD Settings
         //---------------------------------------------------------------
         // Now calculate the internal values for the timers. Since the
@@ -1631,7 +1651,6 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         //---------------------------------------------------------------
         sp.sp_time_ticks   = sp.sp_time * 60;
         sp.boil_time_ticks = sp.boil_time * 60;
-        sp.vmlt_empty      = Reg->ReadFloat("VMLT_EMPTY");
 
         Reg->CloseKey(); // Close the Registry
         delete Reg;
@@ -2081,32 +2100,28 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
      {
         Reg->OpenKey(REGKEY,FALSE);
         // Sparge Settings
-        ptmp->EMVol->Text       = AnsiString(sp.mash_vol);   // Total Mash Volume (L)
-        ptmp->ESVol->Text       = AnsiString(sp.sp_vol);     // Total Sparge Volume (L)
         ptmp->EBatches->Text    = AnsiString(sp.sp_batches); // Number of Sparge Batches
         ptmp->EBTime->Text      = AnsiString(sp.sp_time);    // Time between two Sparge Batches
         ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);  // Total Boil Time (min.)
+        ptmp->CB_VSp2->Checked  = MainForm->cb_vsp2;         // Double the Initial Sparge Volume to Boil-kettle
         // Mash Settings
         ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
         ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
-        ptmp->Eph_time->Text    = AnsiString(sp.ph_timer);   // PREHEAT_TIME [sec]
-        // STD Settings
-        ptmp->Evmlt_empty->Text = AnsiString(sp.vmlt_empty); // Vmlt_EMPTY [L]
+        ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60);   // PREHEAT_TIME [minutes]
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
            // Sparge Settings
-           Reg->WriteInteger("MASH_VOL",    ptmp->EMVol->Text.ToInt());
-           Reg->WriteInteger("SP_VOL",      ptmp->ESVol->Text.ToInt());
            Reg->WriteInteger("SP_BATCHES",  ptmp->EBatches->Text.ToInt());
            Reg->WriteInteger("SP_TIME",     ptmp->EBTime->Text.ToInt());
            Reg->WriteInteger("BOIL_TIME",   ptmp->EBoilTime->Text.ToInt());
+           Reg->WriteBool("CB_VSP2",        ptmp->CB_VSp2->Checked);
+           MainForm->cb_vsp2 = ptmp->CB_VSp2->Checked;
+
            // Mash Settings
            Reg->WriteFloat("TOffset",       ptmp->Offs_Edit->Text.ToDouble());
            Reg->WriteFloat("TOffset2",      ptmp->Offs2_Edit->Text.ToDouble());
            Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());
-           // STD Settings
-           Reg->WriteFloat("VMLT_EMPTY",    ptmp->Evmlt_empty->Text.ToDouble());
 
            Init_Sparge_Settings(); // Init. struct with new sparge settings
         } // if
@@ -2218,6 +2233,10 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
               disable_task("read_vmlt");
               MainForm->Vol_MLT->Font->Color = clRed;
               MainForm->Vol_HLT->Font->Color = clRed;
+              MainForm->Flow1_rate->Visible = true;
+              MainForm->Flow2_rate->Visible = true;
+              init_ma(&MainForm->flow1_ma,10,0.0); // init moving_average filter for flowrate
+              init_ma(&MainForm->flow2_ma,10,0.0); // init moving_average filter for flowrate
             }
             else
             { // use pressure transducers in HLT and MLT for volume measurement
@@ -2227,6 +2246,8 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
               disable_task("flow_mlt_boil");
               MainForm->Flow1_hlt_mlt->Font->Color  = clRed;
               MainForm->Flow2_mlt_boil->Font->Color = clRed;
+              MainForm->Flow1_rate->Visible = false;
+              MainForm->Flow2_rate->Visible = false;
             } // else
             flow1_err = ptmp->Flow1_Err->Text.ToInt();
             Reg->WriteInteger("FLOW1_ERR",flow1_err);
@@ -2411,10 +2432,11 @@ void __fastcall TMainForm::MenuEditMashSchemeClick(TObject *Sender)
       //-----------------------------------------------------
       // Read Mash Scheme again, but do not init. mash timers
       //-----------------------------------------------------
-      if (!read_input_file(MASH_FILE,ms,&(std.ms_tot),1.0,NO_INIT_TIMERS))
+      if (!read_input_file(MASH_FILE,ms,&std.ms_tot,1.0,NO_INIT_TIMERS,&sp.mash_vol,&sp.sp_vol))
       {
           MessageBox(NULL,"File " MASH_FILE " not found","error in read_input_file()",MB_OK);
       } /* if */
+      Init_Sparge_Settings(); // Init. struct with new sparge settings
       print_mash_scheme_to_statusbar();
    } // if
    delete ptmp;
@@ -2679,11 +2701,15 @@ void __fastcall TMainForm::Update_GUI(void)
    sprintf(tmp_str,"%4.1f",volumes.Vboil);
    Vol_Boil->Caption = tmp_str;
 
-   sprintf(tmp_str,"%4.1f",volumes.Flow_hlt_mlt);  // Display flow from HLT -> MLT
+   sprintf(tmp_str,"%4.1f",volumes.Flow_hlt_mlt);      // Display flow from HLT -> MLT
    Flow1_hlt_mlt->Caption = tmp_str;
+   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_hlt_mlt); // Display flowrate from HLT -> MLT
+   Flow1_rate->Caption = tmp_str;
 
-   sprintf(tmp_str,"%4.1f",volumes.Flow_mlt_boil); // Display flow from MLT -> Boil
+   sprintf(tmp_str,"%4.1f",volumes.Flow_mlt_boil);      // Display flow from MLT -> Boil
    Flow2_mlt_boil->Caption = tmp_str;
+   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_mlt_boil); // Display flowrate from MLT -> Boil
+   Flow2_rate->Caption = tmp_str;
 
    //--------------------------------------------------------------------------
    // Update the Captions for all valves (they might have
@@ -2911,4 +2937,5 @@ void __fastcall TMainForm::ChillingFinished1Click(TObject *Sender)
 //---------------------------------------------------------------------------
 // TMainForm::PID_CtrlClick()
 //---------------------------------------------------------------------------
+
 

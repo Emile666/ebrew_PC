@@ -5,6 +5,10 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2015/06/05 19:18:39  Emile
+// - STD optimized for new solenoid valves. User Interaction dialog added
+// - Calibration & Temp. correction added for flowsensors
+//
 // Revision 1.7  2005/10/23 12:44:38  Emile
 // Several changes because of new hardware (MAX1238 instead of PCF8591):
 // - Vhlt added, Vmlt and Ttriac now all adjustable to an AD-channel (the
@@ -241,5 +245,6 @@ void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
       } // if
 } // TFix_Params::Apply_ButtonClick()
 //---------------------------------------------------------------------------
+
 
 

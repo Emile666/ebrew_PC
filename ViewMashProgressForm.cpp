@@ -5,6 +5,11 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.13  2015/06/06 14:02:33  Emile
+// - User Interaction now with PopupMenu to State-label
+// - PID Controller now made with a TvrPowerButton instead of a radiobutton box
+// - View Mash Progress Form improved
+//
 // Revision 1.12  2015/06/05 19:18:40  Emile
 // - STD optimized for new solenoid valves. User Interaction dialog added
 // - Calibration & Temp. correction added for flowsensors
@@ -209,9 +214,9 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       } // if
       prev_ebrew_std = MainForm->std.ebrew_std; // update previous value
 
-      x = MainForm->sp.sp_vol_batch;
-      sprintf(s,"  0     - - - -  %12s     - -  , %4.1f L",MainForm->sp.mlt2boil[0],x);
+      sprintf(s,"  0     - - - -  %12s     - -  , %4.1f L",MainForm->sp.mlt2boil[0],MainForm->sp.sp_vol_batch0);
       ViewMashProgress->Memo1->Lines->Add(s);
+      x = MainForm->sp.sp_vol_batch;
       for (i = 1; i <= MainForm->sp.sp_batches; i++)
       {
          if (i == MainForm->sp.sp_batches)

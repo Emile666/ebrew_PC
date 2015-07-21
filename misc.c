@@ -6,6 +6,9 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.27  2015/06/09 21:00:21  Emile
+  Bugfix STD: Valve V4 was ON in state 14, should be OFF. Now corrected.
+
   Revision 1.26  2015/06/06 14:02:33  Emile
   - User Interaction now with PopupMenu to State-label
   - PID Controller now made with a TvrPowerButton instead of a radiobutton box
@@ -680,7 +683,8 @@ int decode_log_file(FILE *fd, log_struct p[])
    return rval;
 } /* decode_log_file() */
 
-int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int init)
+int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts,
+                    int init, int *vmash, int *vsparge)
 /*------------------------------------------------------------------
   Purpose  : The purpose of this routine is to read the mash scheme
              file specified by 'inf'. Each line in inf consists of two
@@ -693,6 +697,8 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int 
      count : The total number of temp & time values read
          ts: The sample time in seconds
        init: [NO_INIT_TIMERS, INIT_TIMERS]
+      vmash: The total amount of mash water in Litres
+    vsparge: The total amount of sparge water in Litres
   Returns  : TRUE : No errors found
              FALSE: An error occurred
   ------------------------------------------------------------------*/
@@ -713,6 +719,38 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int 
       i   = 0;    // init. index value
       fgets(tmp,SLEN,f1); /* read dummy first line */
       fgets(tmp,SLEN,f1); /* read dummy second line */
+      fgets(tmp,SLEN,f1); /* read dummy third line */
+      // Start with reading Amount of Mash water from file
+      *vmash = 0; // result in case of file-error
+      if (fgets(tmp,SLEN,f1) != NULL)
+      {
+         p = strtok(tmp,":"); // Read part of line up to ':'
+         if (p != NULL)
+         {
+            p = strtok(NULL,",");
+            if (p != NULL)
+            {
+               *vmash = atoi(p);
+            } // if
+         } // if
+      } // if
+      // Now read Amount of Sparge water from file
+      *vsparge = 0; // result in case of file-error
+      if (fgets(tmp,SLEN,f1) != NULL)
+      {
+         p = strtok(tmp,":"); // Read part of line up to ':'
+         if (p != NULL)
+         {
+            p = strtok(NULL,",");
+            if (p != NULL)
+            {
+               *vsparge = atoi(p);
+            } // if
+         } // if
+      } // if
+      fgets(tmp,SLEN,f1); /* read dummy blank line */
+      fgets(tmp,SLEN,f1); /* read dummy comment line */
+      fgets(tmp,SLEN,f1); /* read dummy comment line */
       *count = 0;         /* init. count */
       do
       {
@@ -745,6 +783,52 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int 
    } // else
    return ret;
 } // read_input_file
+
+/*------------------------------------------------------------------
+  Purpose  : This function is called every second from
+             STD state 'Empty MLT' and is used to detect when the MLT
+             is empty. In that case the flow-rate becomes low / zero.
+  Variables:
+  flow_rate: the flow-rate from MLT to Boil-kettle in L/min.
+  Returns  : 1: flow-rate is low, 0: flow-rate is still high
+  ------------------------------------------------------------------*/
+int flow_rate_low(double flow_rate)
+{
+   static int    std_fr = 0;   // state number
+   static int    tmr_fr = 0;   // timer
+   static double det_fr = 0.0; // Detection limit for minimum flow-rate
+   int           retv = 0;     // return-value
+
+   switch (std_fr)
+   {
+        case 0 : // Give flow-rate time to increase because of the MA-filter
+                 // Use 20 seconds which is enough to stabilize the MA-filter
+                 if (++tmr_fr > 20)
+                 {
+                    det_fr = 0.0;
+                    tmr_fr = 0; // reset timer again
+                    std_fr = 1;
+                 } // if
+                 break;
+        case 1 : // Calculate the average flow-rate for the next 20 seconds
+                 // Use 25 % of average flow-rate as detection-limit
+                 if (++tmr_fr > 20)
+                 {
+                    det_fr /= 80.0; // 25 % of average of 20 samples
+                    std_fr = 2;
+                 }
+                 else det_fr += flow_rate;
+                 break;
+        case 2: // Now check if flow-rate decreases
+                if (flow_rate < det_fr) // flow-rate < 25 % of average flow-rate?
+                     retv = 1;
+                break;
+        default: std_fr = 0;
+                 tmr_fr = 0;
+                 break;
+   } // switch
+   return retv;
+} // flow_rate_low()
 
 int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
                double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
@@ -986,7 +1070,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            *tset_mlt  = ms[std->ms_idx].temp;
            *tset_hlt  = *tset_mlt + sps->temp_offset; // Single offset
            vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
-           if (vol->Vmlt <= vol->Vmlt_old - sps->sp_vol_batch)
+           if (vol->Vmlt <= vol->Vmlt_old - (std->sp_idx == 0 ? sps->sp_vol_batch0 : sps->sp_vol_batch))
            {
               std->timer2    = 0;          // init. x sec. timer
               std->ebrew_std = S08_DELAY_xSEC;
@@ -1031,7 +1115,8 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            *tset_mlt  = ms[std->ms_idx].temp;
            *tset_hlt  = 0.0; // disable heating element
            vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
-           if (vol->Vmlt < sps->vmlt_empty)
+           if (flow_rate_low(vol->Flow_rate_mlt_boil))
+           //if (vol->Vmlt < sps->vmlt_empty)
            {
               std->ebrew_std = S10_WAIT_FOR_BOIL;
            } // if

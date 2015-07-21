@@ -4,6 +4,11 @@
 // Purpose     : Provides the code for the About... Screen.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.3  2013/07/23 09:42:46  Emile
+// - Fourth intermediate version: several Registry Settings added / removed.
+// - Dialog Screens updated: better lay-out and matches new Registry Settings
+// - Source-code improved for readability
+//
 // Revision 1.2  2013/06/16 14:39:19  Emile
 // Intermediate version for new Ebrew 2.0 USB hardware:
 // - Hardware settings Dialog: COM Port + Settings added + LEDx removed
@@ -100,7 +105,7 @@ void __fastcall TVersionAwareAbout::FormCreate(TObject *Sender)
      if(buf[0] !='\0')
         reVersionInfo->Lines->Add("Brewery  : "+AnsiString(buf));
      reVersionInfo->Lines->Add("Web-site : www.vandelogt.nl");
-     reVersionInfo->Lines->Add("(c) 2003-2014: ir. drs. Emile van de Logt");
+     reVersionInfo->Lines->Add("(c) 2003-2015: ir. drs. Emile van de Logt");
      free(VerInfo);
   }
 

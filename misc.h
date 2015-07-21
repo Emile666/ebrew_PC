@@ -6,6 +6,11 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.26  2015/06/06 14:02:33  Emile
+// - User Interaction now with PopupMenu to State-label
+// - PID Controller now made with a TvrPowerButton instead of a radiobutton box
+// - View Mash Progress Form improved
+//
 // Revision 1.25  2015/06/05 19:18:40  Emile
 // - STD optimized for new solenoid valves. User Interaction dialog added
 // - Calibration & Temp. correction added for flowsensors
@@ -258,8 +263,7 @@ typedef struct _sparge_struct
    int    sp_time_ticks;   // sp_time in TS ticks
    int    boil_time_ticks; // boil_time in TS ticks
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
-   /* STD Settings */
-   double vmlt_empty;      // MLT is empty below this volume
+   double sp_vol_batch0;   // Sparge volume of first batch
    /* Time-stamps for Sparge, Boil and Chilling*/
    char   mlt2boil[MAX_SP][40]; // MAX_SP strings for time-stamp moment of MLT -> BOIL
    char   hlt2mlt[MAX_SP][40];  // MAX_SP strings for time-stamp moment of HLT -> MLT
@@ -302,6 +306,8 @@ typedef struct _volume_struct
    double Flow_mlt_boil;
    double Flow_hlt_mlt_old;
    double Flow_mlt_boil_old;
+   double Flow_rate_hlt_mlt;
+   double Flow_rate_mlt_boil;
 } volume_struct;
 
 //------------------------------
@@ -349,7 +355,7 @@ typedef struct _volume_struct
 // Hard-coded Timers
 //------------------------------
 #define TMR_PREFILL_PUMP      (60)
-#define TMR_DELAY_xSEC         (5)
+#define TMR_DELAY_xSEC        (10)
 
 //--------------------------------------------------------------------------
 // #defines for the valves. Each valve can be set manually or automatically
@@ -407,7 +413,7 @@ typedef struct _volume_struct
 
 void add_seconds(char *s, int seconds);
 int decode_log_file(FILE *fd, log_struct p[]);
-int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int init);
+int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int init, int *vmash, int *vsparge);
 int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
                double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
                sparge_struct *sps, std_struct *std, int ui, int std_fx);
