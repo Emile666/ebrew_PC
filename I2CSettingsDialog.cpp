@@ -5,6 +5,11 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2014/06/01 13:59:15  Emile
+// - Ethernet UDP Communication added.
+// - New Registry variable UDP_IP_PORT and USB_COM_PORT renamed in COMM_CHANNEL
+// - This version works with Ebrew HW R1.9
+//
 // Revision 1.6  2013/07/23 09:42:46  Emile
 // - Fourth intermediate version: several Registry Settings added / removed.
 // - Dialog Screens updated: better lay-out and matches new Registry Settings
@@ -124,14 +129,14 @@ void __fastcall TI2C_Settings::update_i2c_gui(void)
 void __fastcall TI2C_Settings::update_comm_gui(void)
 {
    if (Comm_Setting->ItemIndex == 0)
-   {
+   {    // Ethernet UDP
         COM_Port_Settings_Edit->Enabled = false;
         COM_Port_Settings_lbl->Enabled  = false;
         UDP_Settings->Enabled = true;
         UDP_Settings_lbl->Enabled = true;
    }
-   else if (Comm_Setting->ItemIndex == 1)
-   {
+   else
+   {    // Virtual COM Port
         COM_Port_Settings_Edit->Enabled = true;
         COM_Port_Settings_lbl->Enabled  = true;
         UDP_Settings->Enabled = false;

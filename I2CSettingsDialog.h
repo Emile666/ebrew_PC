@@ -5,6 +5,11 @@
 //               settings can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2014/06/01 13:59:16  Emile
+// - Ethernet UDP Communication added.
+// - New Registry variable UDP_IP_PORT and USB_COM_PORT renamed in COMM_CHANNEL
+// - This version works with Ebrew HW R1.9
+//
 // Revision 1.11  2013/07/23 09:42:46  Emile
 // - Fourth intermediate version: several Registry Settings added / removed.
 // - Dialog Screens updated: better lay-out and matches new Registry Settings
@@ -110,9 +115,6 @@ __published:	// IDE-managed Components
         TLabel *S2L_L1a;
         TEdit *S2U_Edit;
         TLabel *S2U_L1a;
-        TCheckBox *cb_i2c_err_msg;
-        TComboBox *fscl_combo;
-        TLabel *Label11;
         TLabel *S2L_L1b;
         TLabel *S2U_L1b;
         TLabel *COM_Port_Settings_lbl;
@@ -120,7 +122,6 @@ __published:	// IDE-managed Components
         TCheckBox *cb_debug_com_port;
         TRadioGroup *System_Mode;
         TLabel *Label5;
-        TLabel *Label1;
         TLabel *Label4;
         TLabel *S1L_L1a;
         TLabel *S1U_L1a;

@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.75  2015/07/21 19:42:45  Emile
+// - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
+// - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
+// - Transition from 'Empty MLT' to 'Wait for Boil' now detected automatically with
+//   new function flow_rate_low().
+// - Registry vars VMLT_EMPTY, MASH_VOL and SPARGE_VOL removed.
+// - Functionality and Checkbox for 'Double initial Sparge Volume' added.
+// - Registry var CB_VSP2 added.
+//
 // Revision 1.74  2015/06/28 12:19:41  Emile
 // - All temperature reading tasks from 1 -> 2 seconds
 // - Comm port debug logging improved
@@ -515,8 +524,6 @@ HANDLE       hComm = NULL;
 COMMTIMEOUTS ctmoNew = {0}, ctmoOld;
 FILE         *fdbg_com; // COM-port debug file-descriptor
 
-#define MAX_READ_RETRIES (4)
-#define WR2RD_SLEEP_TIME (10)
 /*-----------------------------------------------------------------------------
   Purpose    : TASK 01: Read THLT (HLT Temperature) from Ebrew hardware
   Period-Time: 1 second
@@ -974,7 +981,6 @@ void task_write_pars(void)
          case 14: sprintf(s1,"%2.0f\n",MainForm->thlt_slope  * 128); break; // Q8.7 format
          case 15: sprintf(s1,"%2.0f\n",MainForm->tmlt_offset * 128); break; // Q8.7 format
          case 16: sprintf(s1,"%2.0f\n",MainForm->tmlt_slope  * 128); break; // Q8.7 format
-         case 17: sprintf(s1,"%d\n"   ,MainForm->fscl_prescaler)   ; break;
        } // switch
        strcat(s,s1); // add to existing commands
      } // if
@@ -1040,7 +1046,7 @@ void task_hw_debug(void)
         } // time_slice
         fclose(fd); // close file again
       } // if
-      MainForm->comm_port_set_read_timeout(20); // back to 20 msec. again
+      MainForm->comm_port_set_read_timeout(WAIT_READ_TIMEOUT); // back to normal timeout
    } // if
 } // task_hw_debug()
 
@@ -1266,9 +1272,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("COMM_CHANNEL",0);   // Select Ethernet as Comm. Channel
           Reg->WriteString("COM_PORT_SETTINGS","19200,N,8,1"); // COM port settings
           Reg->WriteString("UDP_IP_PORT","192.168.1.177:8888"); // IP & Port number
-          Reg->WriteBool("CB_DEBUG_COM_PORT",false);
-          Reg->WriteInteger("FSCL_PRESCALER",10); // set fscl to 20 kHz
-          Reg->WriteBool("CB_I2C_ERR_MSG",true);
+          Reg->WriteBool("CB_DEBUG_COM_PORT",true);
 
           Reg->WriteInteger("GAS_NON_MOD_LLIMIT",30);
           Reg->WriteInteger("GAS_NON_MOD_HLIMIT",35);
@@ -1287,9 +1291,9 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("Td",TD_INIT);         // Td constant
           Reg->WriteFloat("K_LPF",0);            // LPF filter time-constant
           Reg->WriteInteger("STC_N",1);          // order N for system identification
-          Reg->WriteInteger("STC_TD",0); // Time-Delay estimate for system identification
+          Reg->WriteInteger("STC_TD",4); // Time-Delay estimate for system identification
           Reg->WriteFloat("TSET_HLT_SLOPE",1.0); // Slope Limit for Tset_HLT
-          sys_id_pars.stc_adf = 0; // true = use Adaptive directional forgetting
+          sys_id_pars.stc_adf = 1; // true = use Adaptive directional forgetting
           Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
           cb_pid_dbg       = false; // no PID debug to screen (not a Reg. variable)
           PID_dbg->Visible = false;
@@ -1298,13 +1302,13 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           // Sparge, Mash & STD Settings Dialog
           //------------------------------------
           // Sparge Settings
-          Reg->WriteInteger("SP_BATCHES",3);   // #Sparge Batches
-          Reg->WriteInteger("SP_TIME",20);     // Time between sparge batches
-          Reg->WriteInteger("BOIL_TIME",120);  // Total Boil Time (min.)
-          Reg->WriteBool("CB_VSP2",0);         // Double Initial Sparge Volume to Boil-Kettle
+          Reg->WriteInteger("SP_BATCHES",4);   // #Sparge Batches
+          Reg->WriteInteger("SP_TIME",15);     // Time between sparge batches
+          Reg->WriteInteger("BOIL_TIME",90);   // Total Boil Time (min.)
+          Reg->WriteBool("CB_VSP2",1);         // Double Initial Sparge Volume to Boil-Kettle
           // Mash Settings
           Reg->WriteInteger("ms_idx",MAX_MS);  // init. index in mash scheme
-          Reg->WriteFloat("TOffset",0.5);      // Compensation HLT-MLT heat-loss
+          Reg->WriteFloat("TOffset",1.0);      // Compensation HLT-MLT heat-loss
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
 
@@ -1312,19 +1316,19 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           // Measurements Dialog
           //------------------------------------
           Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
-          Reg->WriteFloat("THLT_SLOPE",2.0);   // Slope limit for Thlt °C/sec.
+          Reg->WriteFloat("THLT_SLOPE",1.0);   // Slope limit for Thlt °C/sec.
           Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
-          Reg->WriteFloat("TMLT_SLOPE",2.0);   // Slope limit for Tmlt °C/sec.
+          Reg->WriteFloat("TMLT_SLOPE",1.0);   // Slope limit for Tmlt °C/sec.
           Reg->WriteFloat("VHLT_OFFSET",0.0);  // Offset for Vhlt
           Reg->WriteFloat("VHLT_MAX",140.0);   // Max. HLT volume
           Reg->WriteFloat("VHLT_SLOPE",1.0);   // Slope limit for Vhlt L/sec.
           Reg->WriteFloat("VMLT_OFFSET",0.0);  // Offset for Vmlt
           Reg->WriteFloat("VMLT_MAX",110.0);   // Max. MLT volume
           Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
-          Reg->WriteBool("USE_FLOWSENSORS",0); // Use Pressure transducers
+          Reg->WriteBool("USE_FLOWSENSORS",1); // Use Pressure transducers
           Reg->WriteInteger("FLOW1_ERR",0);    // Error Correction for FLOW1
           Reg->WriteInteger("FLOW2_ERR",0);    // Error Correction for FLOW2
-          Reg->WriteBool("FLOW_TEMP_CORR",0);  // Use Temperature Correction
+          Reg->WriteBool("FLOW_TEMP_CORR",1);  // Use Temperature Correction
        } // if
        Reg->CloseKey();
        delete Reg;
@@ -1357,7 +1361,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    FILE *fd;             // Log File Descriptor
    int  i;               // temp. variable
    char s[MAX_BUF_READ]; // Temp. string
-   char srev[50];        // Temp. string for building revision numbers
    char *result;
 
    //----------------------------------------
@@ -1377,8 +1380,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
          strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
          strcpy(udp_ip_port,Reg->ReadString("UDP_IP_PORT").c_str()); // UDP IP & Port number settings
          cb_debug_com_port = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
-         fscl_prescaler    = Reg->ReadInteger("FSCL_PRESCALER"); // I2C SCL Frequency
-         cb_i2c_err_msg    = Reg->ReadBool("CB_I2C_ERR_MSG");    // display message
 
          comm_port_open(); // Start Communication with Ebrew Hardware
 
@@ -1503,32 +1504,6 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //--------------------------------------------------------------------------
    std_out = 0x0000;
 
-   // Init logfile
-   if ((fd = fopen(LOGFILE,"a")) == NULL)
-   {
-      MessageBox(NULL,"Could not open log-file","Error during Initialisation",MB_OK);
-   } /* if */
-   else
-   {
-      date d1;
-      getdate(&d1);
-      fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
-      fprintf(fd,"Kc = %6.2f, Ti = %6.2f, Td = %6.2f, K_lpf = %6.2f, Ts = %5.2f, ",
-                 pid_pars.kc, pid_pars.ti, pid_pars.td, pid_pars.k_lpf, pid_pars.ts);
-      fprintf(fd,"PID_Model =%2d\n",pid_pars.pid_model);
-      strncpy(s,&ebrew_revision[11],4); // extract the CVS revision number
-      s[4] = '\0';
-      fprintf(fd,"ebrew CVS Rev. %s\n",s);
-      fprintf(fd,"ms_tot =%2d, fscl_prescaler =%2d\n", std.ms_tot, fscl_prescaler);
-      fprintf(fd,"Temp Offset = %4.1f, Temp Offset2 = %4.1f\n",sp.temp_offset,sp.temp_offset2);
-      fprintf(fd,"Vhlt_max=%5.1f, Vhlt_offset=%5.1f, Vmlt_max=%5.1f, Vmlt_offset=%5.1f\n\n",
-                 vhlt_max, vhlt_offset, vmlt_max, vmlt_offset);
-      fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms STD  Gamma  Vhlt\n");
-      fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id       [%]    [L]\n");
-      fprintf(fd,"-------------------------------------------------------------------------\n");
-      fclose(fd);
-   } // else
-
    // Reset all flags for sending parameters to hardware (task write_pars)
    for (i = 0 ; i < MAX_PARS; i++)
    {
@@ -1539,18 +1514,18 @@ void __fastcall TMainForm::Main_Initialisation(void)
    // Now add all the tasks for the scheduler
    //-----------------------------------------
    add_task(task_read_thlt     , "read_thlt"    ,   0, 2000); /* task 01 */
-   add_task(task_read_tmlt     , "read_tmlt"    ,  50, 2000); /* task 02 */
-   add_task(task_read_vhlt     , "read_vhlt"    , 100, 1000); /* task 03 */
-   add_task(task_read_vmlt     , "read_vmlt"    , 150, 1000); /* task 04 */
-   add_task(task_read_vhlt_mlt , "flow_hlt_mlt" , 100, 1000); /* task 03F */
-   add_task(task_read_vmlt_boil, "flow_mlt_boil", 150, 1000); /* task 04F */
-   add_task(task_read_lm35     , "read_lm35"    , 200, 2000);
-   add_task(task_pid_ctrl      , "pid_control"  , 250, (uint16_t)(pid_pars.ts * 1000));
-   add_task(task_update_std    , "update_std"   , 350, 1000);
-   add_task(task_alive_led     , "alive_pump"   , 400,  500);
-   add_task(task_log_file      , "wr_log_file"  , 450, 5000);
-   add_task(task_write_pars    , "write_pars"   , 500, 5000);
-   add_task(task_hw_debug      , "hw_debug"     , 550, 1000);
+   add_task(task_read_tmlt     , "read_tmlt"    ,  90, 2000); /* task 02 */
+   add_task(task_read_vhlt     , "read_vhlt"    , 180, 1000); /* task 03 */
+   add_task(task_read_vmlt     , "read_vmlt"    , 270, 1000); /* task 04 */
+   add_task(task_read_vhlt_mlt , "flow_hlt_mlt" , 180, 1000); /* task 03F */
+   add_task(task_read_vmlt_boil, "flow_mlt_boil", 270, 1000); /* task 04F */
+   add_task(task_read_lm35     , "read_lm35"    , 360, 2000);
+   add_task(task_pid_ctrl      , "pid_control"  , 450, (uint16_t)(pid_pars.ts * 1000));
+   add_task(task_alive_led     , "alive_pump"   , 470,  500);
+   add_task(task_update_std    , "update_std"   , 490, 1000);
+   add_task(task_log_file      , "wr_log_file"  , 520, 5000);
+   add_task(task_write_pars    , "write_pars"   , 540, 5000);
+   add_task(task_hw_debug      , "hw_debug"     , 600, 1000);
 
    if (use_flowsensors)
    { // use flowsensors between HLT-MLT and between MLT-BOIL
@@ -1600,7 +1575,31 @@ void __fastcall TMainForm::Main_Initialisation(void)
    else           strcat(srev,"?.?");
    StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(srev);
 
-   comm_port_set_read_timeout(20); // Now change Read time-out to 20 msec.
+   // Init logfile
+   if ((fd = fopen(LOGFILE,"a")) == NULL)
+   {
+      MessageBox(NULL,"Could not open log-file","Error during Initialisation",MB_OK);
+   } /* if */
+   else
+   {
+      date d1;
+      getdate(&d1);
+      fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
+      fprintf(fd,"Kc:%6.2f, Ti:%6.2f, Td:%6.2f, K_lpf:%6.2f, Ts:%5.2f, ",
+                 pid_pars.kc, pid_pars.ti, pid_pars.td, pid_pars.k_lpf, pid_pars.ts);
+      fprintf(fd,"PID_Model:%2d\n",pid_pars.pid_model);
+      fprintf(fd,"Version used: %s\n",srev);
+      fprintf(fd,"ms_tot:%2d\n", std.ms_tot);
+      fprintf(fd,"Temp Offset:%4.1f, Temp Offset2:%4.1f\n",sp.temp_offset,sp.temp_offset2);
+      fprintf(fd,"Vhlt_max:%5.1f, Vhlt_offset:%5.1f, Vmlt_max:%5.1f, Vmlt_offset:%5.1f\n\n",
+                 vhlt_max, vhlt_offset, vmlt_max, vmlt_offset);
+      fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms      Gamma  Vhlt\n");
+      fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id STD   [%]    [L]\n");
+      fprintf(fd,"-------------------------------------------------------------------------\n");
+      fclose(fd);
+   } // else
+
+   comm_port_set_read_timeout(WAIT_READ_TIMEOUT); // Now change Read time-out to default value
 
    //----------------------------------
    // We came all the way! Start Timers
@@ -2005,8 +2004,6 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          ptmp->COM_Port_Settings_Edit->Text = Reg->ReadString("COM_PORT_SETTINGS");
          ptmp->UDP_Settings->Text           = Reg->ReadString("UDP_IP_PORT");
          ptmp->cb_debug_com_port->Checked   = Reg->ReadBool("CB_DEBUG_COM_PORT");
-         ptmp->fscl_combo->ItemIndex        = Reg->ReadInteger("FSCL_PRESCALER");
-         ptmp->cb_i2c_err_msg->Checked      = Reg->ReadBool("CB_I2C_ERR_MSG");
 
          ptmp->S0L_Edit->Text = AnsiString(Reg->ReadInteger("GAS_MOD_PWM_LLIMIT"));
          ptmp->S0U_Edit->Text = AnsiString(Reg->ReadInteger("GAS_MOD_PWM_HLIMIT"));
@@ -2042,11 +2039,7 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
             cb_debug_com_port = ptmp->cb_debug_com_port->Checked;
             Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
 
-            cb_i2c_err_msg = ptmp->cb_i2c_err_msg->Checked;
-            Reg->WriteBool("CB_I2C_ERR_MSG",cb_i2c_err_msg);
-
             CH_I_PAR( 0,system_mode       ,ptmp->System_Mode->ItemIndex,"SYSTEM_MODE");
-            CH_I_PAR(17,fscl_prescaler    ,ptmp->fscl_combo->ItemIndex ,"FSCL_PRESCALER");
             CH_I_PAR( 3,gas_mod_pwm_llimit,ptmp->S0L_Edit->Text.ToInt(),"GAS_MOD_PWM_LLIMIT");
             CH_I_PAR( 4,gas_mod_pwm_hlimit,ptmp->S0U_Edit->Text.ToInt(),"GAS_MOD_PWM_HLIMIT");
             CH_I_PAR( 1,gas_non_mod_llimit,ptmp->S1L_Edit->Text.ToInt(),"GAS_NON_MOD_LLIMIT");
@@ -2840,16 +2833,6 @@ void __fastcall TMainForm::FormCreate(TObject *Sender)
 {
    Application->OnIdle = ebrew_idle_handler;
 } // TMainForm::FormCreate()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::MenuView_I2C_HW_DevicesClick(TObject *Sender)
-{
-   //---------------------------------------------------------------------------
-   // Restart I2C bus communication and print all devices found.
-   // This is done in the main timer interrupt to avoid I2C timing problems.
-   //---------------------------------------------------------------------------
-   i2c_hw_scan_req = true;
-} // MenuView_I2C_HW_DevicesClick()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Contents1Click(TObject *Sender)

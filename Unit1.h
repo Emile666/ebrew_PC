@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.46  2015/07/21 19:42:45  Emile
+// - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
+// - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
+// - Transition from 'Empty MLT' to 'Wait for Boil' now detected automatically with
+//   new function flow_rate_low().
+// - Registry vars VMLT_EMPTY, MASH_VOL and SPARGE_VOL removed.
+// - Functionality and Checkbox for 'Double initial Sparge Volume' added.
+// - Registry var CB_VSP2 added.
+//
 // Revision 1.45  2015/06/06 14:02:33  Emile
 // - User Interaction now with PopupMenu to State-label
 // - PID Controller now made with a TvrPowerButton instead of a radiobutton box
@@ -369,10 +378,10 @@
 #include <IdUDPServer.hpp>
 #include "VrButtons.hpp"
 
-#define TS_INIT    (5.0)
-#define KC_INIT   (69.0)
-#define TI_INIT  (520.0)
-#define TD_INIT  (130.0)
+#define TS_INIT   (20.0)
+#define KC_INIT   (80.0)
+#define TI_INIT  (282.0)
+#define TD_INIT   (20.0)
 #define LOGFILE   "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
 #define REGKEY    "Software\\ebrew"
@@ -405,18 +414,23 @@
 
 #define max(a, b)  (((a) > (b)) ? (a) : (b))
 
-// BUFFER SIZE FOR COM PORT READ
+//-----------------------------------------------------------
+// Defines for COM Port Communication.
+// The longest task on ebrew HW is the one-wire task,
+// this task lasts max. 34 msec.
+// Set WR2RD_SLEEP_TIME + WAIT_READ_TIMEOUT > 34 msec.
+// The max. duration for a task in this program is then:
+// MAX_READ_RETRIES * (WR2RD_SLEEP_TIME + WAIT_READ_TIMEOUT).
+//-----------------------------------------------------------
+#define MAX_READ_RETRIES     (2)
+#define WR2RD_SLEEP_TIME     (10)
+#define WAIT_READ_TIMEOUT    (30)
 #define MAX_BUF_WRITE        (255)
 #define MAX_BUF_READ         (255)
 #define COM_PORT_DEBUG_FNAME "_com_port_dbg.txt"
 
 #define EBREW_HW_ID          "E-Brew"
 #define MAX_PARS             (18)
-
-//------------------------------------------------------------------------------
-// The text I2C_STOP_ERR_TXT is printed whenever i2c_stop() was not successful
-//------------------------------------------------------------------------------
-#define I2C_STOP_ERR_TXT "i2c_stop() was not succesful: 'Yes' to exit program, 'No' to continue"
 
 typedef struct _swfx_struct
 {
@@ -452,7 +466,6 @@ __published:	// IDE-managed Components
         TMenuItem *HowtoUseHelp1;
         TMenuItem *Contents1;
         TMenuItem *MenuOptionsPIDSettings;
-        TMenuItem *MenuView_I2C_HW_Devices;
         TMenuItem *MenuEditMashScheme;
         TMenuItem *File2;
         TMenuItem *MenuFileExit;
@@ -522,7 +535,6 @@ __published:	// IDE-managed Components
         void __fastcall FormClose(TObject *Sender, TCloseAction &Action);
         void __fastcall ReadLogFile1Click(TObject *Sender);
         void __fastcall FormCreate(TObject *Sender);
-        void __fastcall MenuView_I2C_HW_DevicesClick(TObject *Sender);
         void __fastcall MeasurementsClick(TObject *Sender);
         void __fastcall Contents1Click(TObject *Sender);
         void __fastcall HowtoUseHelp1Click(TObject *Sender);
@@ -574,9 +586,6 @@ public:		// User declarations
         char   com_port_settings[20]; // Virtual COM Port Settings
         char   udp_ip_port[30];       // UDP IP Port Number
         bool   com_port_is_open;      // true = COM-port is open for Read/Write
-        bool   i2c_hw_scan_req;       // true = check I2C HW devices
-        int    fscl_prescaler;        // P17: index into I2C SCL Frequency values
-        bool   cb_i2c_err_msg;        // true = give error message on successful I2C reset
         bool   cb_debug_com_port;     // true = file-logging for COM port communication
         bool   cb_pid_dbg;            // true = Show PID Debug label
         bool   cb_vsp2;               // true = Double the initial Sparge volume to Boil-kettle
@@ -609,6 +618,7 @@ public:		// User declarations
         TDateTime       dt_time_switch;   // object holding date and time
         char            *ebrew_revision;  // contains CVS revision number
         char            udp_read[MAX_BUF_READ]; // contains bytes read from UDP
+        char            srev[50];        // String for building SW+HW revision numbers
 
         void __fastcall comm_port_open(void);           // Init. Comm. Port
         void __fastcall comm_port_close(void);          // Close Comm. Port
