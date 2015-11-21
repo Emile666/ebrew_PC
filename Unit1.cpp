@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.76  2015/08/07 10:59:42  Emile
+// - HW revision number now also written to logfile
+// - 'Check I2C Hardware' removed from menu-bar, is no longer used
+// - Update to HW Settings Dialog screen: unused items are removed
+// - Communication Read Timeout now set to 30 msec.
+//
 // Revision 1.75  2015/07/21 19:42:45  Emile
 // - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
 // - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
@@ -540,7 +546,7 @@ void task_read_thlt(void)
     MainForm->comm_port_write("A3\n"); // A3 = THLT
     do
     {
-        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
         MainForm->comm_port_read(s); // Read HLT temp. from LM92 device
         temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
     } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
@@ -573,7 +579,7 @@ void task_read_tmlt(void)
     MainForm->comm_port_write("A4\n"); // A4 = TMLT
     do
     {
-        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
         MainForm->comm_port_read(s); // Read MLT temp. from LM92 device
         temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
     } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
@@ -606,7 +612,7 @@ void task_read_vhlt(void)
     MainForm->comm_port_write("A1\n"); // A1 = VHLT
     do
     {
-        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
         MainForm->comm_port_read(s); // Read HLT Volume from pressure sensor
     } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
 
@@ -635,7 +641,7 @@ void task_read_vmlt(void)
     MainForm->comm_port_write("A2\n"); // A2 = VMLT
     do
     {
-        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
         MainForm->comm_port_read(s); // Read MLT Volume from pressure sensor
     } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
 
@@ -665,7 +671,7 @@ void task_read_vhlt_mlt(void)
     MainForm->comm_port_write("A5\n"); // A5 = Flowsensor between HLT and MLT
     do
     {
-        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
         MainForm->comm_port_read(s); // Read flowsensor
     } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
 
@@ -709,7 +715,7 @@ void task_read_vmlt_boil(void)
     MainForm->comm_port_write("A6\n"); // A6 = Flowsensor between MLT and Boil kettle
     do
     {
-        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
         MainForm->comm_port_read(s); // Read flowsensor
     } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
 
@@ -754,7 +760,7 @@ void task_read_lm35(void)
     MainForm->comm_port_write("A0\n"); // A0 = LM35
     do
     {
-        ::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
+        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
         MainForm->comm_port_read(s); // Read LM35 Volume from Ebrew hardware
     } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
 
@@ -1242,7 +1248,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
       } // for i
       fprintf(fdbg_com,"\nW%02d.%03d[%s]",t1.ti_sec,t1.ti_hund*10,s2);
    } // if
-   ::Sleep(5);  // Give Arduino HW a bit of time for command processing
+   //::Sleep(5);  // Give Arduino HW a bit of time for command processing
 } // COM_port_write()
 
 /*------------------------------------------------------------------
@@ -1604,7 +1610,11 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //----------------------------------
    // We came all the way! Start Timers
    //----------------------------------
-   if (T50msec)          T50msec->Enabled                       = true; // start Interrupt Timer
+   if (T50msec)
+   {
+      T50msec->Interval = (int)(1000 / TICKS_PER_SEC); /* scheduler.h */
+      T50msec->Enabled  = true; // start Interrupt Timer
+   } // if
    if (ViewMashProgress) ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
    PID_Ctrl->Enabled = true;
    time_switch     = 0;    // Time switch disabled at power-up

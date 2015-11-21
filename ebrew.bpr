@@ -17,7 +17,8 @@
       Sparge_Settings.dfm RestoreSettings.dfm VersionAwareAbout.dfm 
       MeasurementsDialog.dfm"/>
     <LIBFILES value=""/>
-    <LIBRARIES value="inet.lib indy.lib Vcwb6.lib AnimTimer.lib"/>
+    <LIBRARIES value="nmfast.lib inet.lib indy.lib Vcwb6.lib vclx.lib bcbsmp.lib AnimTimer.lib 
+      vcljpg.lib vcl.lib rtl.lib"/>
     <SPARELIBS value="rtl.lib vcl.lib vcljpg.lib AnimTimer.lib bcbsmp.lib vclx.lib Vcwb6.lib 
       indy.lib inet.lib nmfast.lib"/>
     <PACKAGES value="rtl.bpi vcl.bpi vclx.bpi vcljpg.bpi bcbsmp.bpi qrpt.bpi dbrtl.bpi 
@@ -31,7 +32,7 @@
     <RELEASELIBPATH value="$(BCB)\lib\release"/>
     <LINKER value="ilink32"/>
     <USERDEFINES value=""/>
-    <SYSDEFINES value="NO_STRICT;USEPACKAGES"/>
+    <SYSDEFINES value="NO_STRICT"/>
     <MAINSOURCE value="ebrew.cpp"/>
     <INCLUDEPATH value="i2c_dll;..;$(BCB)\include;D:\BCB6\Projects\AnimTimer\lib;$(BCB)\include\vcl;D:\BCB6\Lib\TIW6"/>
     <LIBPATH value="$(BCB)\lib\release;i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Projects\AnimTimer\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib"/>
@@ -51,7 +52,7 @@
     <OTHERFILES value=""/>
   </OPTIONS>
   <LINKER>
-    <ALLOBJ value="c0w32.obj $(PACKAGES) sysinit.obj $(OBJFILES)"/>
+    <ALLOBJ value="c0w32.obj sysinit.obj $(OBJFILES)"/>
     <ALLRES value="$(RESFILES)"/>
     <ALLLIB value="$(LIBFILES) $(LIBRARIES) import32.lib cp32mt.lib"/>
     <OTHERFILES value=""/>
@@ -83,7 +84,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=1
 Release=0
-Build=92
+Build=93
 Debug=0
 PreRelease=0
 Special=0
@@ -95,7 +96,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=de Boezem
 FileDescription=ebrew automates the HERMS home-brewery, web-site: www.vandelogt.nl
-FileVersion=1.1.0.92
+FileVersion=1.1.0.93
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=

@@ -7,6 +7,11 @@
   Purpose : This is the header-file for scheduler.c
   ------------------------------------------------------------------
   $Log$
+  Revision 1.1  2015/03/21 11:12:51  Emile
+  - Bugfix W command (PWM output), W0 was always sent
+  - V command enabled (Valves output)
+  - scheduler.h and scheduler.c added to CVS library
+
   ==================================================================
 */ 
 #ifndef _SCHEDULER_H
@@ -21,7 +26,7 @@ extern "C" {
 
 #define MAX_TASKS        (15)
 #define MAX_MSEC      (60000)
-#define TICKS_PER_SEC   (20L)
+#define TICKS_PER_SEC   (10L)
 #define NAME_LEN         (30)
 
 #define TASK_READY    (0x01)
