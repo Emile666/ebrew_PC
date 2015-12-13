@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.77  2015/11/21 10:36:38  Emile
+// - Task-time was > 50 msec. resulting in inaccurate timing. All sleeps(20)
+//   removed in communication routines.
+//
 // Revision 1.76  2015/08/07 10:59:42  Emile
 // - HW revision number now also written to logfile
 // - 'Check I2C Hardware' removed from menu-bar, is no longer used
@@ -690,7 +694,7 @@ void task_read_vhlt_mlt(void)
     temp = 60.0 * (MainForm->volumes.Flow_hlt_mlt - MainForm->volumes.Flow_hlt_mlt_old);
     MainForm->volumes.Flow_rate_hlt_mlt = moving_average(&MainForm->flow1_ma,temp);
     // Calculate VHLT volume here
-    MainForm->volumes.Vhlt = VHLT_START - MainForm->volumes.Flow_hlt_mlt;
+    MainForm->volumes.Vhlt = MainForm->vhlt_max - MainForm->volumes.Flow_hlt_mlt;
     if (MainForm->swfx.vhlt_sw)
     {  // Switch & Fix
        MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
@@ -1317,6 +1321,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TOffset",1.0);      // Compensation HLT-MLT heat-loss
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
+          Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 10 minutes after Malt is added
 
           //------------------------------------
           // Measurements Dialog
@@ -1331,6 +1336,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("VMLT_OFFSET",0.0);  // Offset for Vmlt
           Reg->WriteFloat("VMLT_MAX",110.0);   // Max. MLT volume
           Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
+          Reg->WriteFloat("VBOIL_MAX",140.0);  // Max. Boil kettle volume
           Reg->WriteBool("USE_FLOWSENSORS",1); // Use Pressure transducers
           Reg->WriteInteger("FLOW1_ERR",0);    // Error Correction for FLOW1
           Reg->WriteInteger("FLOW2_ERR",0);    // Error Correction for FLOW2
@@ -1346,7 +1352,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
        return;
     } // catch
 
-    Main_Initialisation(); // Init all I2C Hardware, ISR and PID controller
+    Main_Initialisation(); // Init all ebrew Hardware, ISR and PID controller
     //----------------------------------------
     // Init. volumes. Should be done only once
     //----------------------------------------
@@ -1357,9 +1363,9 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 
 void __fastcall TMainForm::Main_Initialisation(void)
 /*------------------------------------------------------------------
-  Purpose  : This function Initialises all I2C Hardware and checks if
-             it is present. It also initialises the Interrupt Service
-             Routine (ISR) and the PID controller.
+  Purpose  : This function Initialises all ebrew Hardware and checks
+             to see if it is present. It also initialises the
+             Interrupt Service Routine (ISR) and the PID controller.
   Returns  : None
   ------------------------------------------------------------------*/
 {
@@ -1425,6 +1431,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
          vmlt_offset = Reg->ReadFloat("VMLT_OFFSET"); // Read Vmlt Offset
          vmlt_max    = Reg->ReadFloat("VMLT_MAX");    // Read max. MLT volume
          vmlt_slope  = Reg->ReadFloat("VMLT_SLOPE");  // Slope limiter for Vmlt
+         vboil_max   = Reg->ReadFloat("VBOIL_MAX");   // Boil kettle volume
+
          use_flowsensors = Reg->ReadBool("USE_FLOWSENSORS");
          flow1_err   = Reg->ReadInteger("FLOW1_ERR"); // Compensation error for FLOW1
          flow2_err   = Reg->ReadInteger("FLOW2_ERR"); // Compensation error for FLOW2
@@ -1581,6 +1589,17 @@ void __fastcall TMainForm::Main_Initialisation(void)
    else           strcat(srev,"?.?");
    StatusBar->Panels->Items[PANEL_REVIS]->Text = AnsiString(srev);
 
+   // Now update Kettle volumes (Label and Tank objects) in GUI
+   sprintf(s,"Boil %3.0fL", vboil_max); // Boil Kettle
+   Boil_Label->Caption = s;
+   Tank_Boil->Max = vboil_max;
+   sprintf(s,"HLT %3.0fL", vhlt_max); // HLT
+   HLT_Label->Caption = s;
+   Tank_HLT->Max = vhlt_max;
+   sprintf(s,"MLT %3.0fL", vmlt_max); // MLT
+   MLT_Label->Caption = s;
+   Tank_MLT->Max = vmlt_max;
+
    // Init logfile
    if ((fd = fopen(LOGFILE,"a")) == NULL)
    {
@@ -1651,6 +1670,8 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.temp_offset  = Reg->ReadFloat("TOffset");
         sp.temp_offset2 = Reg->ReadFloat("TOffset2");
         sp.ph_timer     = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_timer is in seconds
+        std.mash_rest   = Reg->ReadBool("CB_Mash_Rest");  // Mash rest 10 minutes after malt is added
+
         // STD Settings
         //---------------------------------------------------------------
         // Now calculate the internal values for the timers. Since the
@@ -2111,6 +2132,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
         ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
         ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60);   // PREHEAT_TIME [minutes]
+        ptmp->CB_mash_rest->Checked = std.mash_rest;         // Mash rest for 10 min after malt is added
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
@@ -2125,7 +2147,9 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteFloat("TOffset",       ptmp->Offs_Edit->Text.ToDouble());
            Reg->WriteFloat("TOffset2",      ptmp->Offs2_Edit->Text.ToDouble());
            Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());
-
+           Reg->WriteBool("CB_Mash_Rest",   ptmp->CB_mash_rest->Checked);
+           std.mash_rest = ptmp->CB_mash_rest->Checked;
+           
            Init_Sparge_Settings(); // Init. struct with new sparge settings
         } // if
         delete ptmp;
@@ -2160,6 +2184,7 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
 {
    TRegistry *Reg = new TRegistry();
    TMeasurements *ptmp;
+   char tmp_str[30];
 
    ptmp = new TMeasurements(this);
 
@@ -2191,6 +2216,8 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          ptmp->Vmlt_Max_Edit->Text      = Reg->ReadFloat("VMLT_MAX");
          ptmp->Vmlt_Offset_Edit->Text   = Reg->ReadFloat("VMLT_OFFSET");
          ptmp->Vmlt_Slope_Edit->Text    = Reg->ReadFloat("VMLT_SLOPE");
+
+         ptmp->Boil_Max_Edit->Text      = Reg->ReadFloat("VBOIL_MAX"); // For Screen only
          //-------------------
          // Volume Measurement
          //-------------------
@@ -2223,6 +2250,18 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             CH_F_PAR(10,vmlt_offset,ptmp->Vmlt_Offset_Edit->Text.ToDouble(),"VMLT_OFFSET");
             CH_F_PAR(11,vmlt_max   ,ptmp->Vmlt_Max_Edit->Text.ToDouble()   ,"VMLT_MAX");
             CH_F_PAR(12,vmlt_slope ,ptmp->Vmlt_Slope_Edit->Text.ToDouble() ,"VMLT_SLOPE");
+
+            Reg->WriteFloat("VBOIL_MAX",ptmp->Boil_Max_Edit->Text.ToDouble()); // Boil Kettle
+            sprintf(tmp_str,"Boil %dL", ptmp->Boil_Max_Edit->Text.ToInt());
+            Boil_Label->Caption = tmp_str;
+            Tank_Boil->Max = ptmp->Boil_Max_Edit->Text.ToInt();
+            sprintf(tmp_str,"HLT %dL", ptmp->Vhlt_Max_Edit->Text.ToInt());    // HLT
+            HLT_Label->Caption = tmp_str;
+            Tank_HLT->Max = ptmp->Vhlt_Max_Edit->Text.ToInt();
+            sprintf(tmp_str,"MLT %dL", ptmp->Vmlt_Max_Edit->Text.ToInt());    // MLT
+            MLT_Label->Caption = tmp_str;
+            Tank_MLT->Max = ptmp->Vmlt_Max_Edit->Text.ToInt();
+
             //-------------------
             // Volume Measurement
             //-------------------
@@ -2662,7 +2701,9 @@ void __fastcall TMainForm::Update_GUI(void)
 
    // Heater object shows %
    Heater->Value = gamma; // Update object on screen
-
+   sprintf(tmp_str,"%d %%",(int)gamma);
+   Gamma_Perc->Caption = tmp_str;
+   
    sprintf(tmp_str,"%4.1f",tset_mlt);
    Val_Tset_mlt->Caption   = tmp_str;
    tm_mlt->SetPoint->Value = tset_mlt; // Update MLT thermometer object
@@ -2691,6 +2732,7 @@ void __fastcall TMainForm::Update_GUI(void)
       case 15: Std_State->Caption = "15. Add Malt to MLT (M)"              ; break;
       case 16: Std_State->Caption = "16. Chill && Pump to Fermentor (M)"   ; break;
       case 17: Std_State->Caption = "17. Finished!"                        ; break;
+      case 18: Std_State->Caption = "18. Mash Rest (10 minutes)"           ; break;
       default: break;
    } // switch
    //----------------------------------------------------------------------
@@ -2821,14 +2863,15 @@ void __fastcall TMainForm::Update_GUI(void)
    StatusBar->Panels->Items[PANEL_MSIDX]->Text = AnsiString(tmp_str);
    sprintf(tmp_str,"sp_idx = %d",std.sp_idx);
    StatusBar->Panels->Items[PANEL_SPIDX]->Text = AnsiString(tmp_str);
-   strcpy(tmp_str,"V7 [");
-   p = 128;
+   sprintf(tmp_str,"Mash: %dL, Sparge: %dL",sp.mash_vol,sp.sp_vol);
+/*   p = 128;
    for (i = 7; i > 0; i--)
    {  // cycle through the 7 valve bits V7..V1
       std_out & p ? strcat(tmp_str,"1") : strcat(tmp_str,"0");
       p = p / 2; // decrease power of 2
    } // for
    strcat(tmp_str,"] V1");
+*/
    StatusBar->Panels->Items[PANEL_VALVE]->Text = AnsiString(tmp_str);
 } // Update_GUI()
 
@@ -2885,6 +2928,12 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
       // This code only works if V7 is the MSB and V1 is the LSB!! (see misc.h)
       std_out |= (V1M << (Key - '1')); // set corresponding V1M..V7M bit
       std_out ^= (V1b << (Key - '1')); // set corresponding V1b..V7b bit
+   } // else if
+   else if (UpCase(Key) == 'A')
+   {
+      // Auto All
+      std_out &= ~(P0M | V1M | V2M | V3M | V4M | V5M | V6M | V7M);
+      swfx.gamma_sw = false; // Release switch for gamma
    } // else if
 } // FormKeyPress()
 //---------------------------------------------------------------------------

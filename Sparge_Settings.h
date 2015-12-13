@@ -5,6 +5,15 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2015/07/21 19:42:45  Emile
+// - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
+// - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
+// - Transition from 'Empty MLT' to 'Wait for Boil' now detected automatically with
+//   new function flow_rate_low().
+// - Registry vars VMLT_EMPTY, MASH_VOL and SPARGE_VOL removed.
+// - Functionality and Checkbox for 'Double initial Sparge Volume' added.
+// - Registry var CB_VSP2 added.
+//
 // Revision 1.8  2015/06/05 19:18:40  Emile
 // - STD optimized for new solenoid valves. User Interaction dialog added
 // - Calibration & Temp. correction added for flowsensors
@@ -102,6 +111,8 @@ __published:	// IDE-managed Components
         TEdit *Offs2_Edit;
         TCheckBox *CB_VSp2;
         TLabel *Label3;
+        TLabel *Label4;
+        TCheckBox *CB_mash_rest;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.47  2015/08/07 10:59:42  Emile
+// - HW revision number now also written to logfile
+// - 'Check I2C Hardware' removed from menu-bar, is no longer used
+// - Update to HW Settings Dialog screen: unused items are removed
+// - Communication Read Timeout now set to 30 msec.
+//
 // Revision 1.46  2015/07/21 19:42:45  Emile
 // - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
 // - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
@@ -394,9 +400,9 @@
 //------------------------------
 #define PANEL_SYS_MODE (0)
 #define PANEL_MASHS    (1)
-#define PANEL_MSIDX    (2)
-#define PANEL_SPIDX    (3)
-#define PANEL_VALVE    (4)
+#define PANEL_VALVE    (2)
+#define PANEL_MSIDX    (3)
+#define PANEL_SPIDX    (4)
 #define PANEL_REVIS    (5)
 
 //-----------------------------
@@ -518,7 +524,10 @@ __published:	// IDE-managed Components
         TVrPowerButton *PID_Ctrl;
         TLabel *Flow2_rate;
         TLabel *Flow1_rate;
-        TStaticText *StaticText3;
+        TLabel *HLT_Label;
+        TLabel *MLT_Label;
+        TLabel *Boil_Label;
+        TLabel *Gamma_Perc;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -573,7 +582,8 @@ public:		// User declarations
         double vmlt_offset;   // P10: Offset to add to Vmlt measurement
         double vmlt_max;      // P11: Max. Volume for Vmlt
         double vmlt_slope;    // P12: Slope limiter for Vmlt volume
-
+        double vboil_max;     // Boil Kettle Volume
+        
         double thlt;          // HLT actual temperature
         double thlt_offset;   // P13: offset to add to Thlt measurement
         double thlt_slope;    // P14: Slope limiter for Thlt temperature

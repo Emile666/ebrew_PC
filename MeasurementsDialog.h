@@ -5,6 +5,10 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.7  2015/06/05 19:18:40  Emile
+// - STD optimized for new solenoid valves. User Interaction dialog added
+// - Calibration & Temp. correction added for flowsensors
+//
 // Revision 1.6  2015/03/21 09:27:21  Emile
 // - Vboil_simulated removed, VHLT_START added
 // - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
@@ -118,6 +122,8 @@ __published:	// IDE-managed Components
         TLabel *Label11;
         TEdit *Flow1_Err;
         TEdit *Flow2_Err;
+        TLabel *Label4;
+        TEdit *Boil_Max_Edit;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

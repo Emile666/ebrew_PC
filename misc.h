@@ -6,6 +6,15 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.27  2015/07/21 19:42:46  Emile
+// - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
+// - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
+// - Transition from 'Empty MLT' to 'Wait for Boil' now detected automatically with
+//   new function flow_rate_low().
+// - Registry vars VMLT_EMPTY, MASH_VOL and SPARGE_VOL removed.
+// - Functionality and Checkbox for 'Double initial Sparge Volume' added.
+// - Registry var CB_VSP2 added.
+//
 // Revision 1.26  2015/06/06 14:02:33  Emile
 // - User Interaction now with PopupMenu to State-label
 // - PID Controller now made with a TvrPowerButton instead of a radiobutton box
@@ -280,7 +289,9 @@ typedef struct _std_struct
    int    timer1;    // Timer for state 'Sparging Rest'
    int    timer2;    // Timer for state 'Delay_xSEC'
    int    timer3;    // Timer for state 'Pump Pre-Fill'
+   int    mrest_tmr; // Timer for state 'Mast Rest 10 Min.'
    int    timer5;    // Timer for state 'Boiling'
+   int    mash_rest; // 1 = mash rest after malt is added
 } std_struct;
 
 #define MAX_MA (50)
@@ -292,7 +303,6 @@ typedef struct _ma
    double sum;       // The running sum of the MA filter
 } ma;
 
-#define VHLT_START  (140.0)
 #define VBOIL_START   (0.0)
 typedef struct _volume_struct
 {
@@ -341,6 +351,7 @@ typedef struct _volume_struct
 #define S12_BOILING_FINISHED      (12)
 #define S16_CHILL_PUMP_FERMENTOR  (16)
 #define S17_FINISHED              (17)
+#define S18_MASH_REST_10_MIN      (18)
 
 //----------------------------------
 // Defines for User Interaction
@@ -354,8 +365,9 @@ typedef struct _volume_struct
 //------------------------------
 // Hard-coded Timers
 //------------------------------
-#define TMR_PREFILL_PUMP      (60)
-#define TMR_DELAY_xSEC        (10)
+#define TMR_PREFILL_PUMP       (60)
+#define TMR_DELAY_xSEC         (10)
+#define TMR_MASH_REST_10_MIN  (600)
 
 //--------------------------------------------------------------------------
 // #defines for the valves. Each valve can be set manually or automatically

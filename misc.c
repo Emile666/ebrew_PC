@@ -6,6 +6,15 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.28  2015/07/21 19:42:46  Emile
+  - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
+  - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
+  - Transition from 'Empty MLT' to 'Wait for Boil' now detected automatically with
+    new function flow_rate_low().
+  - Registry vars VMLT_EMPTY, MASH_VOL and SPARGE_VOL removed.
+  - Functionality and Checkbox for 'Double initial Sparge Volume' added.
+  - Registry var CB_VSP2 added.
+
   Revision 1.27  2015/06/09 21:00:21  Emile
   Bugfix STD: Valve V4 was ON in state 14, should be OFF. Now corrected.
 
@@ -887,14 +896,15 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
    // State 12:  0  0  0  0  0  0  0  0   Boiling Finished          0x00
    // State 13:  0  0  0  0  0  0  0  0   Mash PreHeat HLT          0x00
    // State 14:  0  0  0  0  0  1  1  0   Pump Prefill              0x06
-   // State 15:  0  0  0  1  0  0  1  1   Add Malt to MLT           0x13
+   // State 15:  0  0  0  0  0  0  0  0   Add Malt to MLT           0x00
    // State 16:  0  1  0  0  1  0  0  1   Chill & Pump to Fermentor 0x49
    // State 17:  0  0  0  0  0  0  0  0   Finished!                 0x00
+   // State 18:  0  0  0  0  0  0  0  0   Mash Rest 10 minutes      0x00
    //-------------------------------------------------------------------
    unsigned int  klepstanden[] = {0x0000, 0x0000, 0x0017, 0x0013, 0x0013,
-                                  0x0013, 0x0083, 0x0017, 0x0000, 0x0083,
-                                  0x0000, 0x0000, 0x0000, 0x0000, 0x0006,
-                                  0x0013, 0x0049, 0x0000};
+                         /* 05 */ 0x0013, 0x0083, 0x0017, 0x0000, 0x0083,
+                         /* 10 */ 0x0000, 0x0000, 0x0000, 0x0000, 0x0006,
+                         /* 15 */ 0x0000, 0x0049, 0x0000, 0x0000};
    unsigned int  klepstand; // Help var. = klepstanden[std->ebrew_std]
 
    switch (std->ebrew_std)
@@ -984,7 +994,12 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            if (ui & UI_MALT_ADDED_TO_MLT)
            {  // malt is added to MLT, start mash timer
               ms[std->ms_idx].timer = 0; // start the corresponding mash timer
-              std->ebrew_std        = S04_MASH_TIMER_RUNNING;
+              if (std->mash_rest)
+              {    // Start with mash rest for 10 min. after malt is added
+                   std->mrest_tmr = 0; // init mash rest timer
+                   std->ebrew_std = S18_MASH_REST_10_MIN;
+              }
+              else std->ebrew_std = S04_MASH_TIMER_RUNNING;
            } // if
            break;
       //---------------------------------------------------------------------------
@@ -1034,6 +1049,44 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
               std->ms_idx++; // increment index in mash scheme
               std->ebrew_std = S03_WAIT_FOR_MLT_TEMP;
            } // if
+           break;
+      //---------------------------------------------------------------------------
+      // S18_MASH_REST_10_MIN: If the 'Mash Rest' checkbox is enabled, remain for
+      //                       10 minutes in this state, giving the malt time to
+      //                       soak up all the water. If you leave the pump running
+      //                       the filter-bed can be sucked dry.
+      // - Tset_hlt = next tset (from mash scheme) + double offset
+      // - Increment mash timer until time-out, then goto S03_MASH_IN_PROGRESS
+      //---------------------------------------------------------------------------
+      case S18_MASH_REST_10_MIN:
+           ms[std->ms_idx].timer++; // increment mash timer
+           std->mrest_tmr++;        // increment mash-rest timer
+           *tset_mlt = ms[std->ms_idx].temp;
+           *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
+           if (std->ms_idx < std->ms_tot - 1)
+           {
+              // There's a next mash phase
+              if (ms[std->ms_idx].timer >= ms[std->ms_idx].time - sps->ph_timer)
+              {  // Preheat timer has priority, since it also switches off the pump
+                 std->ebrew_std = S13_MASH_PREHEAT_HLT;
+              } // if
+              else if (!std->mash_rest || (std->mrest_tmr >= TMR_MASH_REST_10_MIN))
+              {  // after 10 min., goto normal mashing phase and switch pump on
+                 std->ebrew_std = S04_MASH_TIMER_RUNNING;
+              } // if
+              // else remain in this state (timer is incremented)
+           }
+           else
+           {  // Only possible when there is only one mash phase
+              // This is the last mash phase, continue with sparging
+              if (ms[std->ms_idx].timer >= ms[std->ms_idx].time) // time-out?
+              {
+                 std->sp_idx    = 0;                        // init. sparging index
+                 std->timer1    = sps->sp_time_ticks - 10;  // timer1 -> TIME-OUT - 10 sec.
+                 std->ebrew_std = S05_SPARGE_TIMER_RUNNING; // goto SPARGING phase
+              } // if
+              // else remain in this state (timer is incremented)
+           } // else
            break;
       //---------------------------------------------------------------------------
       //                            S P A R G I N G

@@ -5,6 +5,15 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.14  2015/07/21 19:42:46  Emile
+// - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
+// - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
+// - Transition from 'Empty MLT' to 'Wait for Boil' now detected automatically with
+//   new function flow_rate_low().
+// - Registry vars VMLT_EMPTY, MASH_VOL and SPARGE_VOL removed.
+// - Functionality and Checkbox for 'Double initial Sparge Volume' added.
+// - Registry var CB_VSP2 added.
+//
 // Revision 1.13  2015/06/06 14:02:33  Emile
 // - User Interaction now with PopupMenu to State-label
 // - PID Controller now made with a TvrPowerButton instead of a radiobutton box
@@ -234,6 +243,8 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       sprintf(s,"Timer2 (state 'Delay')               : %02d/%02d sec.",MainForm->std.timer2,TMR_DELAY_xSEC);
       ViewMashProgress->Memo1->Lines->Add(s);
       sprintf(s,"Timer3 (state 'Pump Pre-Fill')       : %02d/%02d sec.",MainForm->std.timer3,TMR_PREFILL_PUMP);
+      ViewMashProgress->Memo1->Lines->Add(s);
+      sprintf(s,"Timer4 (state 'Mash Rest 10 Min.')   : %02d/600 sec.",MainForm->std.mrest_tmr);
       ViewMashProgress->Memo1->Lines->Add(s);
       sprintf(s,"Timer5 (state 'Now Boiling')         : %d/%d min.",MainForm->std.timer5/60,MainForm->sp.boil_time);
       ViewMashProgress->Memo1->Lines->Add(s);
