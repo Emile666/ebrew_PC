@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.78  2015/12/13 14:20:27  Emile
+// - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
+// - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
+//   CB_Mash_Rest. New state 18 'Mast Rest (10 minutes)' added to STD.
+// - Pump and Valves are now all off in state 'Add Malt to MLT'.
+// - Statusbar now also shows mash and sparge litres (valves indicators removed).
+// - Auto-All option added to set all valves and the pump to Auto when 'A' pressed.
+//
 // Revision 1.77  2015/11/21 10:36:38  Emile
 // - Task-time was > 50 msec. resulting in inaccurate timing. All sleeps(20)
 //   removed in communication routines.
@@ -525,6 +533,9 @@ extern vector theta; // defined in pid_reg.h
 #pragma link "VrPowerMeter"
 #pragma link "VrLeds"
 #pragma link "VrButtons"
+#pragma link "VrBanner"
+#pragma link "VrGradient"
+#pragma link "VrAnimate"
 #pragma resource "*.dfm"
 
 TMainForm *MainForm;
@@ -1220,6 +1231,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
    int  bytes_to_send = 0;          // Number of bytes to send
    int  i, j, bytes_sent = 0;       // Number of bytes sent to COM port
    struct time t1;
+   int    xmit_err = 0;
 
    strcpy(send_buffer,s);    // copy command to send into send_buffer
    bytes_to_send = strlen(send_buffer);
@@ -1230,11 +1242,12 @@ void __fastcall TMainForm::comm_port_write(const char *s)
    else if (com_port_is_open)
    {
      bytes_sent    = 0;
-     while (bytes_sent < bytes_to_send)
+     while ((bytes_sent < bytes_to_send) && (xmit_err < 3))
      {
         if (!TransmitCommChar(hComm, send_buffer[bytes_sent++]))
         {
            MessageBox(NULL,"TransmitCommChar() Error","COM_port_write()",MB_OK);
+           xmit_err++;
         } // if
      } // while()
    } // else if
@@ -1248,11 +1261,15 @@ void __fastcall TMainForm::comm_port_write(const char *s)
          {
             s2[j++] = send_buffer[i];
          } // else
-         s2[j] = '\0'; // terminate string
       } // for i
+      s2[j] = '\0'; // terminate string
       fprintf(fdbg_com,"\nW%02d.%03d[%s]",t1.ti_sec,t1.ti_hund*10,s2);
+      if (xmit_err >= 3)
+      {
+         fprintf(fdbg_com,"[xmit_err]");
+         comm_port_close();
+      } // if
    } // if
-   //::Sleep(5);  // Give Arduino HW a bit of time for command processing
 } // COM_port_write()
 
 /*------------------------------------------------------------------
@@ -1321,7 +1338,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TOffset",1.0);      // Compensation HLT-MLT heat-loss
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
-          Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 10 minutes after Malt is added
+          Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 5 minutes after Malt is added
 
           //------------------------------------
           // Measurements Dialog
@@ -1528,17 +1545,17 @@ void __fastcall TMainForm::Main_Initialisation(void)
    // Now add all the tasks for the scheduler
    //-----------------------------------------
    add_task(task_read_thlt     , "read_thlt"    ,   0, 2000); /* task 01 */
-   add_task(task_read_tmlt     , "read_tmlt"    ,  90, 2000); /* task 02 */
-   add_task(task_read_vhlt     , "read_vhlt"    , 180, 1000); /* task 03 */
-   add_task(task_read_vmlt     , "read_vmlt"    , 270, 1000); /* task 04 */
-   add_task(task_read_vhlt_mlt , "flow_hlt_mlt" , 180, 1000); /* task 03F */
-   add_task(task_read_vmlt_boil, "flow_mlt_boil", 270, 1000); /* task 04F */
-   add_task(task_read_lm35     , "read_lm35"    , 360, 2000);
-   add_task(task_pid_ctrl      , "pid_control"  , 450, (uint16_t)(pid_pars.ts * 1000));
-   add_task(task_alive_led     , "alive_pump"   , 470,  500);
-   add_task(task_update_std    , "update_std"   , 490, 1000);
-   add_task(task_log_file      , "wr_log_file"  , 520, 5000);
-   add_task(task_write_pars    , "write_pars"   , 540, 5000);
+   add_task(task_read_tmlt     , "read_tmlt"    , 100, 2000); /* task 02 */
+   add_task(task_read_vhlt     , "read_vhlt"    , 200, 1000); /* task 03P */
+   add_task(task_read_vmlt     , "read_vmlt"    , 300, 1000); /* task 04P */
+   add_task(task_read_vhlt_mlt , "flow_hlt_mlt" , 200, 1000); /* task 03F */
+   add_task(task_read_vmlt_boil, "flow_mlt_boil", 300, 1000); /* task 04F */
+   add_task(task_read_lm35     , "read_lm35"    , 400, 2000);
+   add_task(task_pid_ctrl      , "pid_control"  , 500, (uint16_t)(pid_pars.ts * 1000));
+   add_task(task_alive_led     , "alive_pump"   , 500,  500);
+   add_task(task_update_std    , "update_std"   , 500, 1000);
+   add_task(task_log_file      , "wr_log_file"  , 500, 5000);
+   add_task(task_write_pars    , "write_pars"   , 600, 5000);
    add_task(task_hw_debug      , "hw_debug"     , 600, 1000);
 
    if (use_flowsensors)
@@ -1670,7 +1687,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.temp_offset  = Reg->ReadFloat("TOffset");
         sp.temp_offset2 = Reg->ReadFloat("TOffset2");
         sp.ph_timer     = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_timer is in seconds
-        std.mash_rest   = Reg->ReadBool("CB_Mash_Rest");  // Mash rest 10 minutes after malt is added
+        std.mash_rest   = Reg->ReadBool("CB_Mash_Rest");  // Mash rest 5 minutes after malt is added
 
         // STD Settings
         //---------------------------------------------------------------
@@ -1697,7 +1714,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
 
 /*------------------------------------------------------------------
   Purpose  : This is the main Timer function which is called every
-             50 milliseconds. It is only used for the interrupt part
+             100 milliseconds. It is only used for the interrupt part
              of the task-scheduler.
   Returns  : None
   ------------------------------------------------------------------*/
@@ -2132,7 +2149,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
         ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
         ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60);   // PREHEAT_TIME [minutes]
-        ptmp->CB_mash_rest->Checked = std.mash_rest;         // Mash rest for 10 min after malt is added
+        ptmp->CB_mash_rest->Checked = std.mash_rest;         // Mash rest for 5 min after malt is added
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
@@ -2765,52 +2782,52 @@ void __fastcall TMainForm::Update_GUI(void)
    //--------------------------------------------------------------------------
    switch (std_out & (P0M | P0b))
    {
-      case P0M | P0b: P0->Caption = P01MTXT; break;
-      case P0M      : P0->Caption = P00MTXT; break;
-      case P0b      : P0->Caption = P01ATXT; break;
-      default       : P0->Caption = P00ATXT; break;
+      case P0M | P0b: P0->Caption = P01MTXT; P0->Font->Color = clRed;   break;
+      case P0M      : P0->Caption = P00MTXT; P0->Font->Color = clGreen; break;
+      case P0b      : P0->Caption = P01ATXT; P0->Font->Color = clRed;   break;
+      default       : P0->Caption = P00ATXT; P0->Font->Color = clGreen; break;
    } // switch
    switch (std_out & (V1M | V1b))
    {
-      case V1M | V1b: V1->Caption = V11MTXT; break;
-      case V1M      : V1->Caption = V10MTXT; break;
-      case V1b      : V1->Caption = V11ATXT; break;
-      default       : V1->Caption = V10ATXT; break;
+      case V1M | V1b: V1->Caption = V11MTXT; V1->Font->Color = clRed;   break;
+      case V1M      : V1->Caption = V10MTXT; V1->Font->Color = clGreen; break;
+      case V1b      : V1->Caption = V11ATXT; V1->Font->Color = clRed;   break;
+      default       : V1->Caption = V10ATXT; V1->Font->Color = clGreen; break;
    } // switch
    switch (std_out & (V2M | V2b))
    {
-      case V2M | V2b: V2->Caption = V21MTXT; break;
-      case V2M      : V2->Caption = V20MTXT; break;
-      case V2b      : V2->Caption = V21ATXT; break;
-      default       : V2->Caption = V20ATXT; break;
+      case V2M | V2b: V2->Caption = V21MTXT; V2->Font->Color = clRed;   break;
+      case V2M      : V2->Caption = V20MTXT; V2->Font->Color = clGreen; break;
+      case V2b      : V2->Caption = V21ATXT; V2->Font->Color = clRed;   break;
+      default       : V2->Caption = V20ATXT; V2->Font->Color = clGreen; break;
    } // switch
    switch (std_out & (V3M | V3b))
    {
-      case V3M | V3b: V3->Caption = V31MTXT; break;
-      case V3M      : V3->Caption = V30MTXT; break;
-      case V3b      : V3->Caption = V31ATXT; break;
-      default       : V3->Caption = V30ATXT; break;
+      case V3M | V3b: V3->Caption = V31MTXT; V3->Font->Color = clRed;   break;
+      case V3M      : V3->Caption = V30MTXT; V3->Font->Color = clGreen; break;
+      case V3b      : V3->Caption = V31ATXT; V3->Font->Color = clRed;   break;
+      default       : V3->Caption = V30ATXT; V3->Font->Color = clGreen; break;
    } // switch
    switch (std_out & (V4M | V4b))
    {
-      case V4M | V4b: V4->Caption = V41MTXT; break;
-      case V4M      : V4->Caption = V40MTXT; break;
-      case V4b      : V4->Caption = V41ATXT; break;
-      default       : V4->Caption = V40ATXT; break;
+      case V4M | V4b: V4->Caption = V41MTXT; V4->Font->Color = clRed;   break;
+      case V4M      : V4->Caption = V40MTXT; V4->Font->Color = clGreen; break;
+      case V4b      : V4->Caption = V41ATXT; V4->Font->Color = clRed;   break;
+      default       : V4->Caption = V40ATXT; V4->Font->Color = clGreen; break;
    } // switch
    switch (std_out & (V6M | V6b))
    {
-      case V6M | V6b: V6->Caption = V61MTXT; break;
-      case V6M      : V6->Caption = V60MTXT; break;
-      case V6b      : V6->Caption = V61ATXT; break;
-      default       : V6->Caption = V60ATXT; break;
+      case V6M | V6b: V6->Caption = V61MTXT; V6->Font->Color = clRed;   break;
+      case V6M      : V6->Caption = V60MTXT; V6->Font->Color = clGreen; break;
+      case V6b      : V6->Caption = V61ATXT; V6->Font->Color = clRed;   break;
+      default       : V6->Caption = V60ATXT; V6->Font->Color = clGreen; break;
    } // switch
    switch (std_out & (V7M | V7b))
    {
-      case V7M | V7b: V7->Caption = V71MTXT; break;
-      case V7M      : V7->Caption = V70MTXT; break;
-      case V7b      : V7->Caption = V71ATXT; break;
-      default       : V7->Caption = V70ATXT; break;
+      case V7M | V7b: V7->Caption = V71MTXT; V7->Font->Color = clRed;   break;
+      case V7M      : V7->Caption = V70MTXT; V7->Font->Color = clGreen; break;
+      case V7b      : V7->Caption = V71ATXT; V7->Font->Color = clRed;   break;
+      default       : V7->Caption = V70ATXT; V7->Font->Color = clGreen; break;
    } // switch
 
    //-------------------------------------------
@@ -2845,6 +2862,102 @@ void __fastcall TMainForm::Update_GUI(void)
       } // else
       PID_dbg->Caption = tmp_str;
    } // if
+
+   bool any_input_on  = std_out & (V1b | V2b | V3b);
+   bool any_output_on = std_out & (V4b | V6b | V7b);
+   //-------------------------------------------------------------
+   // Output lines: clNavy (OFF) - clAqua (ON)
+   //-------------------------------------------------------------
+   if (((std_out & (P0b | V4b)) == (P0b | V4b)) && any_input_on)
+   {  // Output Pump -> Heat-Exchanger HLT -> MLT
+      VrGradient1->StartColor = clAqua; VrGradient1->EndColor = clAqua;
+      VrGradient2->StartColor = clAqua; VrGradient2->EndColor = clAqua;
+      VrGradient3->StartColor = clAqua; VrGradient3->EndColor = clAqua;
+      VrGradient4->StartColor = clAqua; VrGradient4->EndColor = clAqua;
+      VrGradient5->StartColor = clAqua; VrGradient5->EndColor = clAqua;
+   }
+   else
+   {
+      VrGradient1->StartColor = clNavy; VrGradient1->EndColor = clNavy;
+      VrGradient2->StartColor = clNavy; VrGradient2->EndColor = clNavy;
+      VrGradient3->StartColor = clNavy; VrGradient3->EndColor = clNavy;
+      VrGradient4->StartColor = clNavy; VrGradient4->EndColor = clNavy;
+      VrGradient5->StartColor = clNavy; VrGradient5->EndColor = clNavy;
+   } // else
+   //-------------------------------------------------------------
+   if (((std_out & (P0b | V6b)) == (P0b | V6b) ||
+        (std_out & (P0b | V7b)) == (P0b | V7b)) && any_input_on)
+   {  // Pump Output -> CFC or Boil-kettle
+      VrGradient6->StartColor = clAqua; VrGradient6->EndColor = clAqua;
+   }
+   else
+   {
+      VrGradient6->StartColor = clNavy; VrGradient6->EndColor = clNavy;
+   } // else
+   //-------------------------------------------------------------
+   if (((std_out & (P0b | V7b)) == (P0b | V7b)) && any_input_on)
+   {  // From CFC -> Boil kettle
+      VrGradient7->StartColor = clAqua; VrGradient7->EndColor = clAqua;
+      VrGradient8->StartColor = clAqua; VrGradient8->EndColor = clAqua;
+   }
+   else
+   {
+      VrGradient7->StartColor = clNavy; VrGradient7->EndColor = clNavy;
+      VrGradient8->StartColor = clNavy; VrGradient8->EndColor = clNavy;
+   } // else
+   //-------------------------------------------------------------
+   // INPUT LINES: clMaroon (OFF) - clRed (ON)
+   //-------------------------------------------------------------
+   if (((std_out & (P0b | V2b)) == (P0b | V2b)) && any_output_on)
+   {  // From HLT -> Pump input
+      VrGradient9->StartColor = clRed; VrGradient9->EndColor = clRed;
+   }
+   else
+   {
+      VrGradient9->StartColor = clMaroon; VrGradient9->EndColor = clMaroon;
+   } // else
+   //-------------------------------------------------------------
+   if (((std_out & (P0b | V1b)) == (P0b | V1b) ||
+        (std_out & (P0b | V3b)) == (P0b | V3b)) && any_output_on)
+   {  // From MLT -> Pump input
+      VrGradient10->StartColor = clRed; VrGradient10->EndColor = clRed;
+   }
+   else
+   {
+      VrGradient10->StartColor = clMaroon; VrGradient10->EndColor = clMaroon;
+   } // else
+   //-------------------------------------------------------------
+   if (((std_out & (P0b | V3b)) == (P0b | V3b)) && any_output_on)
+   {  // From Boil-kettle -> Pump input
+      VrGradient11->StartColor = clRed; VrGradient11->EndColor = clRed;
+   }
+   else
+   {
+      VrGradient11->StartColor = clMaroon; VrGradient11->EndColor = clMaroon;
+   } // else
+   //-------------------------------------------------------------
+   if ((std_out & P0b) && any_input_on && any_output_on)
+   {  // 12: Pump input, 13: pump output
+      VrGradient12->StartColor = clRed; VrGradient12->EndColor = clRed;
+      VrGradient13->StartColor = clAqua; VrGradient13->EndColor = clAqua;
+   }
+   else
+   {
+      VrGradient12->StartColor = clMaroon; VrGradient12->EndColor = clMaroon;
+      VrGradient13->StartColor = clNavy;   VrGradient13->EndColor = clNavy;
+   } // else
+   //-------------------------------------------------------------
+   if (((std_out & (P0b | V6b)) == (P0b | V6b)) && any_input_on)
+   {  // CFC
+      VrGradient14->StartColor = clAqua; VrGradient14->EndColor = clAqua;
+      VrGradient15->StartColor = clAqua; VrGradient15->EndColor = clAqua;
+   }
+   else
+   {
+      VrGradient14->StartColor = clNavy; VrGradient14->EndColor = clNavy;
+      VrGradient15->StartColor = clNavy; VrGradient15->EndColor = clNavy;
+   } // else
+   //-------------------------------------------------------------
 
    //-------------------------------------------
    // Update the various panels of the Statusbar
@@ -2979,5 +3092,6 @@ void __fastcall TMainForm::ChillingFinished1Click(TObject *Sender)
 //---------------------------------------------------------------------------
 // TMainForm::PID_CtrlClick()
 //---------------------------------------------------------------------------
+
 
 

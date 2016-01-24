@@ -6,6 +6,14 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.48  2015/12/13 14:20:27  Emile
+// - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
+// - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
+//   CB_Mash_Rest. New state 18 'Mast Rest (10 minutes)' added to STD.
+// - Pump and Valves are now all off in state 'Add Malt to MLT'.
+// - Statusbar now also shows mash and sparge litres (valves indicators removed).
+// - Auto-All option added to set all valves and the pump to Auto when 'A' pressed.
+//
 // Revision 1.47  2015/08/07 10:59:42  Emile
 // - HW revision number now also written to logfile
 // - 'Check I2C Hardware' removed from menu-bar, is no longer used
@@ -383,6 +391,7 @@
 #include <IdUDPClient.hpp>
 #include <IdUDPServer.hpp>
 #include "VrButtons.hpp"
+#include "VrGradient.hpp"
 
 #define TS_INIT   (20.0)
 #define KC_INIT   (80.0)
@@ -528,6 +537,21 @@ __published:	// IDE-managed Components
         TLabel *MLT_Label;
         TLabel *Boil_Label;
         TLabel *Gamma_Perc;
+        TVrGradient *VrGradient1;
+        TVrGradient *VrGradient2;
+        TVrGradient *VrGradient3;
+        TVrGradient *VrGradient4;
+        TVrGradient *VrGradient5;
+        TVrGradient *VrGradient6;
+        TVrGradient *VrGradient7;
+        TVrGradient *VrGradient8;
+        TVrGradient *VrGradient9;
+        TVrGradient *VrGradient10;
+        TVrGradient *VrGradient11;
+        TVrGradient *VrGradient12;
+        TVrGradient *VrGradient13;
+        TVrGradient *VrGradient14;
+        TVrGradient *VrGradient15;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -606,7 +630,7 @@ public:		// User declarations
         int    flow1_err;             // Flowsensor 1 error compensation (-5% ... +5%)
         int    flow2_err;             // Flowsensor 2 error compensation (-5% ... +5%)
         bool   flow_temp_corr;        // true = compensate flowsensor readings for higher temperatures
-
+        
         volume_struct   volumes;       // Struct for Volumes
         swfx_struct     swfx;          // Switch & Fix settings for tset and gamma
         pid_params      pid_pars;      // struct containing PID parameters

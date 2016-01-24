@@ -6,6 +6,14 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.29  2015/12/13 14:20:27  Emile
+  - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
+  - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
+    CB_Mash_Rest. New state 18 'Mast Rest (10 minutes)' added to STD.
+  - Pump and Valves are now all off in state 'Add Malt to MLT'.
+  - Statusbar now also shows mash and sparge litres (valves indicators removed).
+  - Auto-All option added to set all valves and the pump to Auto when 'A' pressed.
+
   Revision 1.28  2015/07/21 19:42:46  Emile
   - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
   - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
@@ -997,7 +1005,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
               if (std->mash_rest)
               {    // Start with mash rest for 10 min. after malt is added
                    std->mrest_tmr = 0; // init mash rest timer
-                   std->ebrew_std = S18_MASH_REST_10_MIN;
+                   std->ebrew_std = S18_MASH_REST_5_MIN;
               }
               else std->ebrew_std = S04_MASH_TIMER_RUNNING;
            } // if
@@ -1051,14 +1059,14 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            } // if
            break;
       //---------------------------------------------------------------------------
-      // S18_MASH_REST_10_MIN: If the 'Mash Rest' checkbox is enabled, remain for
-      //                       10 minutes in this state, giving the malt time to
+      // S18_MASH_REST_5_MIN: If the 'Mash Rest' checkbox is enabled, remain for
+      //                       5 minutes in this state, giving the malt time to
       //                       soak up all the water. If you leave the pump running
       //                       the filter-bed can be sucked dry.
       // - Tset_hlt = next tset (from mash scheme) + double offset
       // - Increment mash timer until time-out, then goto S03_MASH_IN_PROGRESS
       //---------------------------------------------------------------------------
-      case S18_MASH_REST_10_MIN:
+      case S18_MASH_REST_5_MIN:
            ms[std->ms_idx].timer++; // increment mash timer
            std->mrest_tmr++;        // increment mash-rest timer
            *tset_mlt = ms[std->ms_idx].temp;
@@ -1070,7 +1078,7 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
               {  // Preheat timer has priority, since it also switches off the pump
                  std->ebrew_std = S13_MASH_PREHEAT_HLT;
               } // if
-              else if (!std->mash_rest || (std->mrest_tmr >= TMR_MASH_REST_10_MIN))
+              else if (!std->mash_rest || (std->mrest_tmr >= TMR_MASH_REST_5_MIN))
               {  // after 10 min., goto normal mashing phase and switch pump on
                  std->ebrew_std = S04_MASH_TIMER_RUNNING;
               } // if
