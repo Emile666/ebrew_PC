@@ -15,6 +15,11 @@
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
   $Log$
+  Revision 1.11  2013/07/23 09:42:46  Emile
+  - Fourth intermediate version: several Registry Settings added / removed.
+  - Dialog Screens updated: better lay-out and matches new Registry Settings
+  - Source-code improved for readability
+
   Revision 1.10  2011/05/29 20:56:26  Emile
   - New Registry variables added: STC_N, STC_TD and STC_ADF
   - PID Settings Dialog screen extended with new parameters for self-tuning
@@ -347,7 +352,7 @@ void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
       p->pi = p->k0 * (tset - xk);              // (Kc.Ts/Ti).e[k]
       p->pd = p->k1 * (2.0 * xk_1 - xk - xk_2); // (Kc.Td/Ts).(2.x[k-1]-x[k]-x[k-2])
       *yk  += p->pp + p->pi + p->pd;            // add y[k-1] + P, I & D actions to y[k]
-   }
+   } // if
    else { *yk = p->pp = p->pi = p->pd = 0.0; }
 
    xk_2  = xk_1;  // x[k-2] = x[k-1]

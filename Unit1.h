@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.49  2016/01/24 19:36:55  Emile
+// - Valves and Pump now show colours: RED (on) and GREEN (off)
+// - Pipes are now highlighted to show actual direction of fluid movement
+// - Initial delay of tasks changed to multiples of 100 msec. scheduler tick
+// - Mash-rest in new state now set to 5 min. instead of 10 min.
+//
 // Revision 1.48  2015/12/13 14:20:27  Emile
 // - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
 // - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
@@ -432,39 +438,48 @@
 //-----------------------------------------------------------
 // Defines for COM Port Communication.
 // The longest task on ebrew HW is the one-wire task,
-// this task lasts max. 34 msec.
-// Set WR2RD_SLEEP_TIME + WAIT_READ_TIMEOUT > 34 msec.
+// this task lasts max. 24 msec.
+// Set WAIT_READ_TIMEOUT > 24 msec.
 // The max. duration for a task in this program is then:
 // MAX_READ_RETRIES * (WR2RD_SLEEP_TIME + WAIT_READ_TIMEOUT).
 //-----------------------------------------------------------
 #define MAX_READ_RETRIES     (2)
-#define WR2RD_SLEEP_TIME     (10)
 #define WAIT_READ_TIMEOUT    (30)
 #define MAX_BUF_WRITE        (255)
 #define MAX_BUF_READ         (255)
 #define COM_PORT_DEBUG_FNAME "_com_port_dbg.txt"
 
 #define EBREW_HW_ID          "E-Brew"
-#define MAX_PARS             (18)
+#define MAX_PARS             (7)
 
 typedef struct _swfx_struct
 {
-   bool   tset_hlt_sw;  // Switch value for tset_hlt
-   double tset_hlt_fx;  // Fix value for tset_hlt
-   bool   gamma_sw;     // Switch value for gamma
-   double gamma_fx;     // Fix value for gamma
+   bool   tset_hlt_sw;   // Switch value for tset_hlt
+   double tset_hlt_fx;   // Fix value for tset_hlt
+   bool   tset_boil_sw;  // Switch value for tset_boil
+   double tset_boil_fx;  // Fix value for tset_boil
+   bool   gamma_hlt_sw;  // Switch value for gamma-hlt
+   double gamma_hlt_fx;  // Fix value for gamma-hlt
+   bool   gamma_boil_sw; // Switch value for gamma-boil
+   double gamma_boil_fx; // Fix value for gamma-boil
+
    bool   thlt_sw;      // Switch value for Thlt
    double thlt_fx;      // Fix value for Thlt [Celsius]
    bool   tmlt_sw;      // Switch value for Tmlt
    double tmlt_fx;      // Fix value for Tmlt [Celsius]
-   bool   std_sw;       // Switch value for STD state
-   int    std_fx;       // Fix value for STD state
+   bool   tboil_sw;     // Switch value for Tboil
+   double tboil_fx;     // Fix value for Tboil [Celsius]
    bool   ttriac_sw;    // Switch value for Ttriac
    double ttriac_fx;    // Fix value for Ttriac
-   bool   vmlt_sw;      // Switch value for Vmlt
-   double vmlt_fx;      // Fix value for Vmlt
+
    bool   vhlt_sw;      // Switch value for Vhlt
    double vhlt_fx;      // Fix value for Vhlt
+   bool   vmlt_sw;      // Switch value for Vmlt
+   double vmlt_fx;      // Fix value for Vmlt
+   bool   vboil_sw;     // Switch value for Vboil
+   double vboil_fx;     // Fix value for Vboil
+   bool   std_sw;       // Switch value for STD state
+   int    std_fx;       // Fix value for STD state
 } swfx_struct;
 
 //---------------------------------------------------------------------------
@@ -552,6 +567,16 @@ __published:	// IDE-managed Components
         TVrGradient *VrGradient13;
         TVrGradient *VrGradient14;
         TVrGradient *VrGradient15;
+        TVrPowerMeter *Boil;
+        TLabel *Gamma_Boil;
+        TLabel *Flow3_cfc;
+        TLabel *Flow3_rate;
+        TLabel *Flow4;
+        TLabel *Flow4_rate;
+        TLabel *Temp_CFC;
+        TLabel *Temp_Boil;
+        TLabel *Val_Tset_Boil;
+        TLabel *PID_dbg2;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -599,22 +624,24 @@ public:		// User declarations
         int    ttriac_hlim;        // P06: Upper-limit for Triac Temp. Protection
         bool   triac_too_hot;      // true = Triac is overheated
 
-        double vhlt_offset;   // P07: Offset to add to Vhlt measurement
-        double vhlt_max;      // P08: Max. Volume for Vhlt
-        double vhlt_slope;    // P09: Slope limiter for Vhlt volume
+        double vhlt_max;         // Max. Volume for Vhlt
+        double vmlt_max;         // Max. Volume for Vmlt
+        double vboil_max;        // Boil Kettle Volume
 
-        double vmlt_offset;   // P10: Offset to add to Vmlt measurement
-        double vmlt_max;      // P11: Max. Volume for Vmlt
-        double vmlt_slope;    // P12: Slope limiter for Vmlt volume
-        double vboil_max;     // Boil Kettle Volume
-        
-        double thlt;          // HLT actual temperature
-        double thlt_offset;   // P13: offset to add to Thlt measurement
-        double thlt_slope;    // P14: Slope limiter for Thlt temperature
-
-        double tmlt;          // MLT actual temperature
-        double tmlt_offset;   // P15: offset to add to Tmlt measurement
-        double tmlt_slope;    // P16: Slope limiter for Tmlt temperature
+        double thlt;             // HLT actual temperature
+        double thlt_offset;      // Offset to add to Thlt measurement
+        double tmlt;             // MLT actual temperature
+        double tmlt_offset;      // Offset to add to Tmlt measurement
+        double tboil;            // Boil-kettle actual temperature
+        double tboil_offset;     // Offset to add to Tboil measurement
+        double tcfc;             // CFC-output actual temperature
+        double tcfc_offset;      // Offset to add to Tcfc measurement
+        double tset_slope_limit; // Slope limiter for Temp. Setpoints
+        double gamma_hlt;        // PID controller output for HLT
+        double gamma_boil;       // PID controller output for Boil-Kettle
+        double tset_hlt;         // HLT reference temperature
+        double tset_mlt;         // MLT reference temperature
+        double tset_boil;        // HLT reference temperature
 
         int    comm_channel_nr;       // Communication channel number
         char   com_port_settings[20]; // Virtual COM Port Settings
@@ -626,25 +653,25 @@ public:		// User declarations
         bool   toggle_led;            // Status of Alive LED
         bool   power_up_flag;         // true = power-up in progress
         bool   hw_debug_logging;      // true = write HW debug info to log-file
-        bool   use_flowsensors;       // true = use flowsensors instead of pressure transducers
         int    flow1_err;             // Flowsensor 1 error compensation (-5% ... +5%)
         int    flow2_err;             // Flowsensor 2 error compensation (-5% ... +5%)
+        int    flow3_err;             // Flowsensor 3 error compensation (-5% ... +5%)
+        int    flow4_err;             // Flowsensor 4 error compensation (-5% ... +5%)
         bool   flow_temp_corr;        // true = compensate flowsensor readings for higher temperatures
         
         volume_struct   volumes;       // Struct for Volumes
         swfx_struct     swfx;          // Switch & Fix settings for tset and gamma
-        pid_params      pid_pars;      // struct containing PID parameters
+        pid_params      pid_pars_hlt;  // struct containing PID parameters for HLT
+        pid_params      pid_pars_boil; // struct containing PID parameters for Boil-Kettle
         sys_id_params   sys_id_pars;   // struct containing system ident. parameters
         maisch_schedule ms[MAX_MS]; // struct containing maisch schedule
         sparge_struct   sp;         // Values for Sparging
         std_struct      std;        // Values for State Transition Diagram
         ma              flow1_ma;   // Moving average filter for flow-rate HLT->MLT
         ma              flow2_ma;   // Moving average filter for flow-rate MLT->Boil
+        ma              flow3_ma;   // Moving average filter for flow-rate CFC-output
+        ma              flow4_ma;   // Moving average filter for flowsensor 4
 
-        double          gamma;          // PID controller output
-        double          tset_hlt;       // HLT reference temperature
-        double          tset_hlt_slope; // Slope limiter for Tset_hlt reference
-        double          tset_mlt;       // MLT reference temperature
         unsigned int    std_out;    // position of valves
                                     // Bit 0 = Pump, Bit 1..7 = V1..V7
                                     // Bit 8..15: 0 = Auto, 1 = Manual Override

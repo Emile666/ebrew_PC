@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.79  2016/01/24 19:36:55  Emile
+// - Valves and Pump now show colours: RED (on) and GREEN (off)
+// - Pipes are now highlighted to show actual direction of fluid movement
+// - Initial delay of tasks changed to multiples of 100 msec. scheduler tick
+// - Mash-rest in new state now set to 5 min. instead of 10 min.
+//
 // Revision 1.78  2015/12/13 14:20:27  Emile
 // - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
 // - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
@@ -546,223 +552,10 @@ COMMTIMEOUTS ctmoNew = {0}, ctmoOld;
 FILE         *fdbg_com; // COM-port debug file-descriptor
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK 01: Read THLT (HLT Temperature) from Ebrew hardware
-  Period-Time: 1 second
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_thlt(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Thlt=";
-    double     temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A3\n"); // A3 = THLT
-    do
-    {
-        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
-        MainForm->comm_port_read(s); // Read HLT temp. from LM92 device
-        temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
-    {
-         MainForm->Val_Thlt->Font->Color = clLime;
-         MainForm->thlt = temp; // update THLT with new value
-    } // if
-    else MainForm->Val_Thlt->Font->Color = clRed; // + do NOT update THLT
-    if (MainForm->swfx.thlt_sw)
-    {  // Switch & Fix
-       MainForm->thlt = (double)(MainForm->swfx.thlt_fx);
-    } // if
-} // task_read_thlt()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK 02: Read TMLT (MLT Temperature) from Ebrew hardware
-  Period-Time: 1 second
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_tmlt(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Tmlt=";
-    double     temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A4\n"); // A4 = TMLT
-    do
-    {
-        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
-        MainForm->comm_port_read(s); // Read MLT temp. from LM92 device
-        temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
-    {
-         MainForm->Val_Tmlt->Font->Color = clLime;
-         MainForm->tmlt = temp; // update TMLT with new value
-    }
-    else MainForm->Val_Tmlt->Font->Color = clRed;
-    if (MainForm->swfx.tmlt_sw)
-    {  // Switch & Fix
-       MainForm->tmlt = (double)(MainForm->swfx.tmlt_fx);
-    } // if
-} // task_read_tmlt()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK 03: Read VHLT (HLT Volume) from Ebrew hardware
-               This task is only active when USE_FLOWSENSORS is false.
-  Period-Time: 1 second
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_vhlt(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Vhlt=";
-    int        x = 0;
-
-    MainForm->comm_port_write("A1\n"); // A1 = VHLT
-    do
-    {
-        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
-        MainForm->comm_port_read(s); // Read HLT Volume from pressure sensor
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if (!strncmp(s,s_exp,5)) MainForm->Vol_HLT->Font->Color = clLime;
-    else                     MainForm->Vol_HLT->Font->Color = clRed;
-    MainForm->volumes.Vhlt  = atof(&s[5]);
-    if (MainForm->swfx.vhlt_sw)
-    {  // Switch & Fix
-       MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
-    } // if
-} // task_read_vhlt()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK 04: Read VMLT (MLT Volume) from Ebrew hardware
-               This task is only active when USE_FLOWSENSORS is false.
-  Period-Time: 1 second
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_vmlt(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Vmlt=";
-    int        x = 0;
-
-    MainForm->comm_port_write("A2\n"); // A2 = VMLT
-    do
-    {
-        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
-        MainForm->comm_port_read(s); // Read MLT Volume from pressure sensor
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if (!strncmp(s,s_exp,5)) MainForm->Vol_MLT->Font->Color = clLime;
-    else                     MainForm->Vol_MLT->Font->Color = clRed;
-    MainForm->volumes.Vmlt  = atof(&s[5]);
-    if (MainForm->swfx.vmlt_sw)
-    {  // Switch & Fix
-       MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
-    } // if
-} // task_read_vmlt()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK 03F: Read flowsensor between HLT and MLT from Ebrew hardware
-               This task is only active when USE_FLOWSENSORS is true.
-  Period-Time: 1 second
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_vhlt_mlt(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Flow1=";
-    double     err, temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A5\n"); // A5 = Flowsensor between HLT and MLT
-    do
-    {
-        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
-        MainForm->comm_port_read(s); // Read flowsensor
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
-
-    if (!strncmp(s,s_exp,6)) MainForm->Flow1_hlt_mlt->Font->Color = clLime;
-    else                     MainForm->Flow1_hlt_mlt->Font->Color = clRed;
-    MainForm->volumes.Flow_hlt_mlt_old = MainForm->volumes.Flow_hlt_mlt;
-    MainForm->volumes.Flow_hlt_mlt     = atof(&s[6]);
-    if (MainForm->flow_temp_corr)
-    {   // Apply correction for increased volume at higher temperatures
-        err = (1.0 + 0.00021 * (MainForm->thlt - 20.0));
-        MainForm->volumes.Flow_hlt_mlt /= err;
-    } // if
-    // Now apply Calibration error correction
-    MainForm->volumes.Flow_hlt_mlt *= 1.0 + 0.01 * MainForm->flow1_err;
-    // Calculate Flow-rate in L per minute
-    temp = 60.0 * (MainForm->volumes.Flow_hlt_mlt - MainForm->volumes.Flow_hlt_mlt_old);
-    MainForm->volumes.Flow_rate_hlt_mlt = moving_average(&MainForm->flow1_ma,temp);
-    // Calculate VHLT volume here
-    MainForm->volumes.Vhlt = MainForm->vhlt_max - MainForm->volumes.Flow_hlt_mlt;
-    if (MainForm->swfx.vhlt_sw)
-    {  // Switch & Fix
-       MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
-    } // if
-} // task_read_vhlt_mlt()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK 04F: Read flowsensor between MLT and Boil-kettle from
-               Ebrew hardware. This task is only active when USE_FLOWSENSORS
-               is true.
-  Period-Time: 1 second
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_vmlt_boil(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Flow2=";
-    double     err, temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A6\n"); // A6 = Flowsensor between MLT and Boil kettle
-    do
-    {
-        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
-        MainForm->comm_port_read(s); // Read flowsensor
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
-
-    if (!strncmp(s,s_exp,6)) MainForm->Flow2_mlt_boil->Font->Color = clLime;
-    else                     MainForm->Flow2_mlt_boil->Font->Color = clRed;
-    MainForm->volumes.Flow_mlt_boil_old = MainForm->volumes.Flow_mlt_boil;
-    MainForm->volumes.Flow_mlt_boil = atof(&s[6]);
-    if (MainForm->flow_temp_corr)
-    {   // Apply correction for increased volume at higher temperatures
-        err = (1.0 + 0.00021 * (MainForm->tmlt - 20.0));
-        MainForm->volumes.Flow_mlt_boil /= err;
-    } // if
-    // Now apply Calibration error correction
-    MainForm->volumes.Flow_mlt_boil *= 1.0 + 0.01 * MainForm->flow2_err;
-    // Calculate Flow-rate in L per minute
-    temp = 60.0 * (MainForm->volumes.Flow_mlt_boil - MainForm->volumes.Flow_mlt_boil_old);
-    MainForm->volumes.Flow_rate_mlt_boil = moving_average(&MainForm->flow2_ma,temp);
-    // Calculate VMLT and VBOIL volumes here
-    MainForm->volumes.Vmlt           = MainForm->volumes.Flow_hlt_mlt -
-                                       MainForm->volumes.Flow_mlt_boil;
-    MainForm->volumes.Vboil          = MainForm->volumes.Flow_mlt_boil;
-    if (MainForm->swfx.vmlt_sw)
-    {  // Switch & Fix
-       MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
-    } // if
-} // task_read_vmlt_boil()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK 05: Read LM35 temperature from Ebrew hardware. Typically
+  Purpose    : TASK: Read LM35 temperature from Ebrew hardware. Typically
                this is the temperature inside the Ebrew hardware and is coupled
                to the Triac Temp. The check for overtemp. is also done here.
-  Period-Time: 1 second
+  Period-Time: 2 seconds
   Variables: -
   Returns  : -
   ---------------------------------------------------------------------------*/
@@ -775,7 +568,6 @@ void task_read_lm35(void)
     MainForm->comm_port_write("A0\n"); // A0 = LM35
     do
     {
-        //::Sleep(WR2RD_SLEEP_TIME);   // give system time to react and send response
         MainForm->comm_port_read(s); // Read LM35 Volume from Ebrew hardware
     } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
 
@@ -800,7 +592,292 @@ void task_read_lm35(void)
 } // task_read_lm35()
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK 06: Run PID Controller and generate Gamma value [0%..100%]
+  Purpose    : TASK: Read THLT (HLT Temperature) from Ebrew hardware
+  Period-Time: 2 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_thlt(void)
+{
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Thlt=";
+    double     temp;
+    int        x = 0;
+
+    MainForm->comm_port_write("A1\n"); // A1 = THLT
+    do
+    {
+        MainForm->comm_port_read(s); // Read HLT temp. from LM92 device
+        temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
+    {
+         MainForm->Val_Thlt->Font->Color = clLime;
+         MainForm->thlt = temp; // update THLT with new value
+    } // if
+    else MainForm->Val_Thlt->Font->Color = clRed; // + do NOT update THLT
+    if (MainForm->swfx.thlt_sw)
+    {  // Switch & Fix
+       MainForm->thlt = (double)(MainForm->swfx.thlt_fx);
+    } // if
+} // task_read_thlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK: Read TMLT (MLT Temperature) from Ebrew hardware
+  Period-Time: 2 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_tmlt(void)
+{
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Tmlt=";
+    double     temp;
+    int        x = 0;
+
+    MainForm->comm_port_write("A2\n"); // A2 = TMLT
+    do
+    {
+        MainForm->comm_port_read(s); // Read MLT temp. from LM92 device
+        temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
+    {
+         MainForm->Val_Tmlt->Font->Color = clLime;
+         MainForm->tmlt = temp; // update TMLT with new value
+    }
+    else MainForm->Val_Tmlt->Font->Color = clRed;
+    if (MainForm->swfx.tmlt_sw)
+    {  // Switch & Fix
+       MainForm->tmlt = (double)(MainForm->swfx.tmlt_fx);
+    } // if
+} // task_read_tmlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK: Read TBoil (Boil-Kettle Temperature) from Ebrew hardware
+  Period-Time: 2 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_tboil(void)
+{
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Tboil=";
+    double     temp;
+    int        x = 0;
+
+    MainForm->comm_port_write("A3\n"); // A3 = TBOIL
+    do
+    {
+        MainForm->comm_port_read(s); // Read MLT temp. from One-Wire device
+        temp = atof(&s[5]);          // Equals 99.99 in case of HW error
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if ((!strncmp(s,s_exp,6)) && (temp < 99.9))
+    {
+         MainForm->Temp_Boil->Font->Color = clLime;
+         MainForm->tboil = temp; // update TBOIL with new value
+    }
+    else MainForm->Temp_Boil->Font->Color = clRed;
+    if (MainForm->swfx.tboil_sw)
+    {  // Switch & Fix
+       MainForm->tboil = (double)(MainForm->swfx.tboil_fx);
+    } // if
+} // task_read_tboil()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK: Read TCFC (CFC-Output Temperature) from Ebrew hardware
+  Period-Time: 2 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_read_tcfc(void)
+{
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Tcfc=";
+    double     temp;
+    int        x = 0;
+
+    MainForm->comm_port_write("A4\n"); // A4 = TCFC
+    do
+    {
+        MainForm->comm_port_read(s); // Read MLT temp. from One-Wire device
+        temp = atof(&s[5]);          // Equals 99.99 in case of HW error
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
+
+    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
+    {
+         MainForm->Temp_CFC->Font->Color = clLime;
+         MainForm->tcfc = temp; // update TCFC with new value
+    }
+    else MainForm->Temp_CFC->Font->Color = clRed;
+    // No switch/fix needed for TCFC
+} // task_read_tcfc()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK: Read flowsensor 1 value between HLT and MLT
+  Period-Time: 2 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_flow_hlt_mlt(void)
+{
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Flow1=";
+    double     err, temp;
+    int        x = 0;
+
+    MainForm->comm_port_write("A5\n"); // A5 = Flowsensor between HLT and MLT
+    do
+    {
+        MainForm->comm_port_read(s); // Read flowsensor
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
+
+    if (!strncmp(s,s_exp,6)) MainForm->Flow1_hlt_mlt->Font->Color = clLime;
+    else                     MainForm->Flow1_hlt_mlt->Font->Color = clRed;
+    MainForm->volumes.Flow_hlt_mlt_old = MainForm->volumes.Flow_hlt_mlt;
+    MainForm->volumes.Flow_hlt_mlt     = atof(&s[6]);
+    if (MainForm->flow_temp_corr)
+    {   // Apply correction for increased volume at higher temperatures
+        err = (1.0 + 0.00021 * (MainForm->thlt - 20.0));
+        MainForm->volumes.Flow_hlt_mlt /= err;
+    } // if
+    // Now apply Calibration error correction
+    MainForm->volumes.Flow_hlt_mlt *= 1.0 + 0.01 * MainForm->flow1_err;
+    // Calculate Flow-rate in L per minute
+    temp = 30.0 * (MainForm->volumes.Flow_hlt_mlt - MainForm->volumes.Flow_hlt_mlt_old);
+    MainForm->volumes.Flow_rate_hlt_mlt = moving_average(&MainForm->flow1_ma,temp);
+    // Calculate VHLT volume here
+    MainForm->volumes.Vhlt = MainForm->vhlt_max - MainForm->volumes.Flow_hlt_mlt;
+    if (MainForm->swfx.vhlt_sw)
+    {  // Switch & Fix
+       MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
+    } // if
+} // task_flow_hlt_mlt()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK: Read flowsensor 2 value between MLT and Boil-kettle
+  Period-Time: 2 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_flow_mlt_boil(void)
+{
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Flow2=";
+    double     err, temp;
+    int        x = 0;
+
+    MainForm->comm_port_write("A6\n"); // A6 = Flowsensor between MLT and Boil kettle
+    do
+    {
+        MainForm->comm_port_read(s); // Read flowsensor
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
+
+    if (!strncmp(s,s_exp,6)) MainForm->Flow2_mlt_boil->Font->Color = clLime;
+    else                     MainForm->Flow2_mlt_boil->Font->Color = clRed;
+    MainForm->volumes.Flow_mlt_boil_old = MainForm->volumes.Flow_mlt_boil;
+    MainForm->volumes.Flow_mlt_boil = atof(&s[6]);
+    if (MainForm->flow_temp_corr)
+    {   // Apply correction for increased volume at higher temperatures
+        err = (1.0 + 0.00021 * (MainForm->tmlt - 20.0));
+        MainForm->volumes.Flow_mlt_boil /= err;
+    } // if
+    // Now apply Calibration error correction
+    MainForm->volumes.Flow_mlt_boil *= 1.0 + 0.01 * MainForm->flow2_err;
+    // Calculate Flow-rate in L per minute
+    temp = 30.0 * (MainForm->volumes.Flow_mlt_boil - MainForm->volumes.Flow_mlt_boil_old);
+    MainForm->volumes.Flow_rate_mlt_boil = moving_average(&MainForm->flow2_ma,temp);
+    // Calculate VMLT volume here
+    MainForm->volumes.Vmlt = MainForm->volumes.Flow_hlt_mlt  -
+                             MainForm->volumes.Flow_mlt_boil;
+    if (MainForm->swfx.vmlt_sw)
+    {  // Switch & Fix
+       MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
+    } // if
+} // task_flow_mlt_boil()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK: Read flowsensor 3 value at CFC-output
+  Period-Time: 2 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_flow_cfc(void)
+{
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Flow3=";
+    double     err, temp;
+    int        x = 0;
+
+    MainForm->comm_port_write("A7\n"); // A7 = Flowsensor at CFC-output
+    do
+    {
+        MainForm->comm_port_read(s); // Read flowsensor
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
+
+    if (!strncmp(s,s_exp,6)) MainForm->Flow3_cfc->Font->Color = clLime;
+    else                     MainForm->Flow3_cfc->Font->Color = clRed;
+    MainForm->volumes.Flow_cfc_out_old = MainForm->volumes.Flow_cfc_out;
+    MainForm->volumes.Flow_cfc_out = atof(&s[6]);
+    if (MainForm->flow_temp_corr)
+    {   // Apply correction for increased volume at higher temperatures
+        err = (1.0 + 0.00021 * (MainForm->tcfc - 20.0));
+        MainForm->volumes.Flow_cfc_out /= err;
+    } // if
+    // Now apply Calibration error correction
+    MainForm->volumes.Flow_cfc_out *= 1.0 + 0.01 * MainForm->flow3_err;
+    // Calculate Flow-rate in L per minute
+    temp = 30.0 * (MainForm->volumes.Flow_cfc_out - MainForm->volumes.Flow_cfc_out_old);
+    MainForm->volumes.Flow_rate_cfc_out = moving_average(&MainForm->flow3_ma,temp);
+    // Calculate VBOIL volume here
+    MainForm->volumes.Vboil = MainForm->volumes.Flow_mlt_boil -
+                              MainForm->volumes.Flow_cfc_out;
+    if (MainForm->swfx.vboil_sw)
+    {  // Switch & Fix
+       MainForm->volumes.Vboil = MainForm->swfx.vboil_fx;
+    } // if
+} // task_flow_cfc()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK: Read flowsensor 4 value
+  Period-Time: 2 seconds
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void task_flow4(void)
+{
+    char       s[MAX_BUF_READ];
+    const char s_exp[] = "Flow4=";
+    double     err, temp;
+    int        x = 0;
+
+    MainForm->comm_port_write("A8\n"); // A8 = Flowsensor 4
+    do
+    {
+        MainForm->comm_port_read(s); // Read flowsensor
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
+
+    if (!strncmp(s,s_exp,6)) MainForm->Flow4->Font->Color = clLime;
+    else                     MainForm->Flow4->Font->Color = clRed;
+    MainForm->volumes.Flow4_old = MainForm->volumes.Flow4;
+    MainForm->volumes.Flow4 = atof(&s[6]);
+    if (MainForm->flow_temp_corr)
+    {   // Apply correction for increased volume at higher temperatures
+        err = (1.0 + 0.00021 * (MainForm->tmlt - 20.0));
+        MainForm->volumes.Flow4 /= err;
+    } // if
+    // Now apply Calibration error correction
+    MainForm->volumes.Flow4 *= 1.0 + 0.01 * MainForm->flow4_err;
+    // Calculate Flow-rate in L per minute
+    temp = 30.0 * (MainForm->volumes.Flow4 - MainForm->volumes.Flow4_old);
+    MainForm->volumes.Flow_rate4 = moving_average(&MainForm->flow4_ma,temp);
+} // task_flow4()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : TASK: Run PID Controller and generate Gamma value [0%..100%]
   Period-Time: Controlled by Parameter TS [sec.]
   Variables  : -
   Returns    : -
@@ -822,41 +899,45 @@ void task_pid_ctrl(void)
     } // if
 
     // PID_Ctrl->Active = true => PID Controller On
-    switch (MainForm->pid_pars.pid_model)
+    switch (MainForm->pid_pars_hlt.pid_model)
     {
-         case 0 : pid_reg2(MainForm->thlt            , &MainForm->gamma,
-                           MainForm->tset_hlt        , &MainForm->pid_pars,
+         case 0 : pid_reg2(MainForm->thlt            , &MainForm->gamma_hlt,
+                           MainForm->tset_hlt        , &MainForm->pid_pars_hlt,
                            MainForm->PID_Ctrl->Active, &MainForm->sys_id_pars);
                   break; // Self-Tuning Takahashi Type C
-         case 1 : pid_reg3(MainForm->thlt     , &MainForm->gamma,
-                           MainForm->tset_hlt , &MainForm->pid_pars,
-                           MainForm->PID_Ctrl->Active);
-                  break; // Type A with filtering of D-action
-         case 2 : pid_reg4(MainForm->thlt     , &MainForm->gamma,
-                           MainForm->tset_hlt , &MainForm->pid_pars,
+         case 1 : pid_reg4(MainForm->thlt            , &MainForm->gamma_hlt,
+                           MainForm->tset_hlt        , &MainForm->pid_pars_hlt,
                            MainForm->PID_Ctrl->Active);
                   break; // Takahashi Type C, NO filtering of D-action
-         default: pid_reg4(MainForm->thlt     , &MainForm->gamma,
-                           MainForm->tset_hlt , &MainForm->pid_pars,
+         default: pid_reg4(MainForm->thlt            , &MainForm->gamma_hlt,
+                           MainForm->tset_hlt        , &MainForm->pid_pars_hlt,
                            MainForm->PID_Ctrl->Active);
                   break; // default to Type C, NO filtering of D-action
     } // switch
-    if (MainForm->swfx.gamma_sw)
+    if (MainForm->swfx.gamma_hlt_sw)
     {
-       MainForm->gamma = MainForm->swfx.gamma_fx; // fix gamma
+       MainForm->gamma_hlt = MainForm->swfx.gamma_hlt_fx; // fix gamma for HLT
     } // if
-
+    //----------------------------------------------------------------------
+    // PID-Controller for Boil-Kettle: only use Takahashi type C 
+    //----------------------------------------------------------------------
+    pid_reg4(MainForm->tboil, &MainForm->gamma_boil, MainForm->tset_boil,
+             &MainForm->pid_pars_boil, MainForm->sp.pid_ctrl_boil_on);
+    if (MainForm->swfx.gamma_boil_sw)
+    {
+       MainForm->gamma_boil = MainForm->swfx.gamma_boil_fx; // fix gamma for Boil-Kettle
+    } // if
     //--------------------------------------------------------------------
     // Now write PID-output (Gamma) as a PWM signal to the Ebrew hardware.
     // This is relevant only when the Modulating Gas-Burner is selected.
     //--------------------------------------------------------------------
-    sprintf(s,"W%d\n", (int)(MainForm->gamma)); // PID-Output Gamma [0%..100%]
+    sprintf(s,"H%d\n", (int)(MainForm->gamma_hlt)); // PID-Output Gamma [0%..100%]
     MainForm->comm_port_write(s); // output to Ebrew hardware
 } // task_pid_ctrl()
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK 07: Run Main State Transition Diagram (STD) that controls
-                        the entire application / Brewing States
+  Purpose    : TASK: Run Main State Transition Diagram (STD) that controls
+                     the entire application / Brewing States
   Period-Time: 1 second
   Variables  : -
   Returns    : -
@@ -866,28 +947,36 @@ void task_update_std(void)
     char   s[MAX_BUF_READ];
     int    std_tmp = -1;
     double old_tset_hlt;  // previous value of tset_hlt
+    double old_tset_boil; // previous value of tset_boil
     int    ui;            // various user commands
 
     if (MainForm->swfx.std_sw)
     {
        std_tmp = MainForm->swfx.std_fx;
     }
-    old_tset_hlt = MainForm->tset_hlt; // Previous value of HLT temp. reference
+    old_tset_hlt  = MainForm->tset_hlt;  // Previous value of HLT Temp. Ref.
+    old_tset_boil = MainForm->tset_boil; // Previous value of Boil-Kettle Temp. Ref.
     ui = (MainForm->PID_Ctrl->Active ? 1 : 0);
     if (MainForm->MaltaddedtoMLT1->Checked)   ui |= UI_MALT_ADDED_TO_MLT;
     if (MainForm->Boilingstarted1->Checked)   ui |= UI_BOILING_STARTED;
     if (MainForm->StartChilling1->Checked)    ui |= UI_START_CHILLING;
     if (MainForm->ChillingFinished1->Checked) ui |= UI_CHILLING_FINISHED;
 
-    update_std(&MainForm->volumes ,  MainForm->tmlt    ,  MainForm->thlt,
-               &MainForm->tset_mlt, &MainForm->tset_hlt, &MainForm->std_out,
-                MainForm->ms      , &MainForm->sp      , &MainForm->std,
-                ui, std_tmp);
+    update_std(&MainForm->volumes , MainForm->thlt, MainForm->tmlt, MainForm->tboil,
+               &MainForm->tset_hlt, &MainForm->tset_mlt, &MainForm->tset_boil,
+               &MainForm->std_out, MainForm->ms, &MainForm->sp, &MainForm->std,
+               ui, std_tmp);
     if (MainForm->swfx.tset_hlt_sw)
-    {
+    {  // Set Temperature Setpoint for HTL to a fixed value
        MainForm->tset_hlt = MainForm->swfx.tset_hlt_fx; // fix tset_hlt
     } // if
-    slope_limiter(MainForm->tset_hlt_slope, old_tset_hlt, &MainForm->tset_hlt);
+    slope_limiter(MainForm->tset_slope_limit, old_tset_hlt, &MainForm->tset_hlt);
+    if (MainForm->swfx.tset_boil_sw)
+    {  // Set Temperature Setpoint for Boil-Kettle to a fixed value
+       MainForm->tset_boil = MainForm->swfx.tset_boil_fx;
+    } // if
+    slope_limiter(MainForm->tset_slope_limit, old_tset_boil, &MainForm->tset_boil);
+
     if (MainForm->PID_Ctrl->Active && (MainForm->tset_hlt < 5.0))
     {   // Disable PID controller when sparging is finished
         MainForm->PID_Ctrl->Active = false;
@@ -914,7 +1003,7 @@ void task_update_std(void)
 } // task_update_std()
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK 08: ALIVE Led toggle
+  Purpose    : TASK: ALIVE Led toggle
   Period-Time: 0.5 second
   Variables  : -
   Returns    : -
@@ -934,7 +1023,7 @@ void task_alive_led(void)
 } // task_alive_led()
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK 09: Write all relevant data to a log-file
+  Purpose    : TASK: Write all relevant data to a log-file
   Period-Time: 5 seconds
   Variables  : -
   Returns    : -
@@ -958,15 +1047,15 @@ void task_log_file(void)
                  MainForm->std.sp_idx,
                  MainForm->std.ms_idx,
                  MainForm->std.ebrew_std,
-                 MainForm->gamma,
+                 MainForm->gamma_hlt,
                  MainForm->volumes.Vhlt);
       fclose(fd);
    } // if
 } // task_log_file()
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK 10: Write all changed parameters to the Ebrew hardware
-  Period-Time: 1 seconds
+  Purpose    : TASK: Write all changed parameters to the Ebrew hardware
+  Period-Time: 5 seconds
   Variables  : -
   Returns    : -
   ---------------------------------------------------------------------------*/
@@ -992,16 +1081,6 @@ void task_write_pars(void)
          case  4: sprintf(s1,"%d\n",MainForm->gas_mod_pwm_hlimit)  ; break;
          case  5: sprintf(s1,"%d\n",MainForm->ttriac_llim * 100)   ; break;
          case  6: sprintf(s1,"%d\n",MainForm->ttriac_hlim * 100)   ; break;
-         case  7: sprintf(s1,"%2.0f\n",MainForm->vhlt_offset * 10) ; break;
-         case  8: sprintf(s1,"%2.0f\n",MainForm->vhlt_max    * 10) ; break;
-         case  9: sprintf(s1,"%2.0f\n",MainForm->vhlt_slope  * 10) ; break;
-         case 10: sprintf(s1,"%2.0f\n",MainForm->vmlt_offset * 10) ; break;
-         case 11: sprintf(s1,"%2.0f\n",MainForm->vmlt_max    * 10) ; break;
-         case 12: sprintf(s1,"%2.0f\n",MainForm->vmlt_slope  * 10) ; break;
-         case 13: sprintf(s1,"%2.0f\n",MainForm->thlt_offset * 128); break; // Q8.7 format
-         case 14: sprintf(s1,"%2.0f\n",MainForm->thlt_slope  * 128); break; // Q8.7 format
-         case 15: sprintf(s1,"%2.0f\n",MainForm->tmlt_offset * 128); break; // Q8.7 format
-         case 16: sprintf(s1,"%2.0f\n",MainForm->tmlt_slope  * 128); break; // Q8.7 format
        } // switch
        strcat(s,s1); // add to existing commands
      } // if
@@ -1013,8 +1092,8 @@ void task_write_pars(void)
 } // task_write_pars()
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK 11: Write HW debug info to a log-file
-  Period-Time: 5 seconds
+  Purpose    : TASK: Write HW debug info to a log-file
+  Period-Time: 1 second
   Variables  : hw_debug_logging: true = write info to log-file
   Returns    : -
   ---------------------------------------------------------------------------*/
@@ -1311,7 +1390,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           //------------------------------------
           // PID Settings Dialog
           //------------------------------------
-          Reg->WriteInteger("PID_Model",2);      // Takahashi PID Controller
+          Reg->WriteInteger("PID_Model",1);      // Takahashi PID Controller
           Reg->WriteFloat("TS",TS_INIT);         // Set Default sample time
           Reg->WriteFloat("Kc",KC_INIT);         // Controller gain
           Reg->WriteFloat("Ti",TI_INIT);         // Ti constant
@@ -1319,11 +1398,12 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("K_LPF",0);            // LPF filter time-constant
           Reg->WriteInteger("STC_N",1);          // order N for system identification
           Reg->WriteInteger("STC_TD",4); // Time-Delay estimate for system identification
-          Reg->WriteFloat("TSET_HLT_SLOPE",1.0); // Slope Limit for Tset_HLT
+          Reg->WriteFloat("TSET_SLOPE_LIM",1.0); // Slope Limit for Temperature Setpoints
           sys_id_pars.stc_adf = 1; // true = use Adaptive directional forgetting
           Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
           cb_pid_dbg       = false; // no PID debug to screen (not a Reg. variable)
           PID_dbg->Visible = false;
+          PID_dbg2->Visible = false;
 
           //------------------------------------
           // Sparge, Mash & STD Settings Dialog
@@ -1331,7 +1411,6 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           // Sparge Settings
           Reg->WriteInteger("SP_BATCHES",4);   // #Sparge Batches
           Reg->WriteInteger("SP_TIME",15);     // Time between sparge batches
-          Reg->WriteInteger("BOIL_TIME",90);   // Total Boil Time (min.)
           Reg->WriteBool("CB_VSP2",1);         // Double Initial Sparge Volume to Boil-Kettle
           // Mash Settings
           Reg->WriteInteger("ms_idx",MAX_MS);  // init. index in mash scheme
@@ -1339,24 +1418,26 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
           Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 5 minutes after Malt is added
+          // Boil-Time Setting
+          Reg->WriteInteger("BOIL_TIME",90);   // Total Boil Time (min.)
+          Reg->WriteInteger("SP_PREBOIL",95);  // Pre-Boil Temperature (Celsius)
+          Reg->WriteInteger("SP_BOIL",105);    // Boil Temperature (Celsius)
 
           //------------------------------------
           // Measurements Dialog
           //------------------------------------
           Reg->WriteFloat("THLT_OFFSET",0.0);  // Offset for Thlt
-          Reg->WriteFloat("THLT_SLOPE",1.0);   // Slope limit for Thlt °C/sec.
           Reg->WriteFloat("TMLT_OFFSET",0.0);  // Offset for Tmlt
-          Reg->WriteFloat("TMLT_SLOPE",1.0);   // Slope limit for Tmlt °C/sec.
-          Reg->WriteFloat("VHLT_OFFSET",0.0);  // Offset for Vhlt
+          Reg->WriteFloat("TBOIL_OFFSET",0.0); // Offset for Tboil
+          Reg->WriteFloat("TCFC_OFFSET",0.0);  // Offset for Tcfc
+
           Reg->WriteFloat("VHLT_MAX",140.0);   // Max. HLT volume
-          Reg->WriteFloat("VHLT_SLOPE",1.0);   // Slope limit for Vhlt L/sec.
-          Reg->WriteFloat("VMLT_OFFSET",0.0);  // Offset for Vmlt
           Reg->WriteFloat("VMLT_MAX",110.0);   // Max. MLT volume
-          Reg->WriteFloat("VMLT_SLOPE",1.0);   // Slope limit for Vmlt L/sec.
           Reg->WriteFloat("VBOIL_MAX",140.0);  // Max. Boil kettle volume
-          Reg->WriteBool("USE_FLOWSENSORS",1); // Use Pressure transducers
           Reg->WriteInteger("FLOW1_ERR",0);    // Error Correction for FLOW1
           Reg->WriteInteger("FLOW2_ERR",0);    // Error Correction for FLOW2
+          Reg->WriteInteger("FLOW3_ERR",0);    // Error Correction for FLOW3
+          Reg->WriteInteger("FLOW4_ERR",0);    // Error Correction for FLOW4
           Reg->WriteBool("FLOW_TEMP_CORR",1);  // Use Temperature Correction
        } // if
        Reg->CloseKey();
@@ -1423,53 +1504,57 @@ void __fastcall TMainForm::Main_Initialisation(void)
          //------------------------------------
          // PID Settings Dialog
          //------------------------------------
-         pid_pars.pid_model  = Reg->ReadInteger("PID_Model"); // [0..3]
-         pid_pars.ts         = Reg->ReadFloat("TS");  // Read TS from registry
-         pid_pars.kc         = Reg->ReadFloat("Kc");  // Read Kc from registry
-         pid_pars.ti         = Reg->ReadFloat("Ti");  // Read Ti from registry
-         pid_pars.td         = Reg->ReadFloat("Td");  // Read Td from registry
-         pid_pars.k_lpf      = Reg->ReadFloat("K_LPF");
+         pid_pars_hlt.pid_model  = Reg->ReadInteger("PID_Model"); // [0..1]
+         pid_pars_hlt.ts         = Reg->ReadFloat("TS");  // Read TS from registry
+         pid_pars_hlt.kc         = Reg->ReadFloat("Kc");  // Read Kc from registry
+         pid_pars_hlt.ti         = Reg->ReadFloat("Ti");  // Read Ti from registry
+         pid_pars_hlt.td         = Reg->ReadFloat("Td");  // Read Td from registry
+         pid_pars_hlt.k_lpf      = Reg->ReadFloat("K_LPF");
+
+         pid_pars_boil.pid_model = 1; // Use Type C Takahashi for Boil-Kettle
+         pid_pars_boil.ts        = Reg->ReadFloat("TS");  // Read TS from registry
+         pid_pars_boil.kc        = Reg->ReadFloat("Kc");  // Read Kc from registry
+         pid_pars_boil.ti        = Reg->ReadFloat("Ti");  // Read Ti from registry
+         pid_pars_boil.td        = Reg->ReadFloat("Td");  // Read Td from registry
+         pid_pars_boil.k_lpf     = Reg->ReadFloat("K_LPF");
+
          sys_id_pars.N       = Reg->ReadInteger("STC_N");     // [1,2,3]
          sys_id_pars.stc_td  = Reg->ReadInteger("STC_TD");    // [0..100]
-         tset_hlt_slope      = Reg->ReadFloat("TSET_HLT_SLOPE");
+         tset_slope_limit    = Reg->ReadFloat("TSET_SLOPE_LIM");
          sys_id_pars.stc_adf = Reg->ReadBool("STC_ADF");      // true = use ADF
 
          //------------------------------------
          // Measurements Dialog
          //------------------------------------
-         thlt_offset = Reg->ReadFloat("THLT_OFFSET"); // offset calibration
-         thlt_slope  = Reg->ReadFloat("THLT_SLOPE");  // Slope limiter for Thlt
-         tmlt_offset = Reg->ReadFloat("TMLT_OFFSET"); // offset calibration
-         tmlt_slope  = Reg->ReadFloat("TMLT_SLOPE");  // Slope limiter for Tmlt
+         thlt_offset  = Reg->ReadFloat("THLT_OFFSET");  // offset calibration
+         tmlt_offset  = Reg->ReadFloat("TMLT_OFFSET");  // offset calibration
+         tboil_offset = Reg->ReadFloat("TBOIL_OFFSET"); // offset calibration
+         tcfc_offset  = Reg->ReadFloat("TCFC_OFFSET");  // offset calibration
 
-         vhlt_offset = Reg->ReadFloat("VHLT_OFFSET"); // Read Vmlt Offset
          vhlt_max    = Reg->ReadFloat("VHLT_MAX");    // Read max. HLT volume
-         vhlt_slope  = Reg->ReadFloat("VHLT_SLOPE");  // Slope limiter for Vhlt
-         vmlt_offset = Reg->ReadFloat("VMLT_OFFSET"); // Read Vmlt Offset
          vmlt_max    = Reg->ReadFloat("VMLT_MAX");    // Read max. MLT volume
-         vmlt_slope  = Reg->ReadFloat("VMLT_SLOPE");  // Slope limiter for Vmlt
          vboil_max   = Reg->ReadFloat("VBOIL_MAX");   // Boil kettle volume
 
-         use_flowsensors = Reg->ReadBool("USE_FLOWSENSORS");
          flow1_err   = Reg->ReadInteger("FLOW1_ERR"); // Compensation error for FLOW1
          flow2_err   = Reg->ReadInteger("FLOW2_ERR"); // Compensation error for FLOW2
+         flow3_err   = Reg->ReadInteger("FLOW3_ERR"); // Compensation error for FLOW3
+         flow4_err   = Reg->ReadInteger("FLOW4_ERR"); // Compensation error for FLOW4
          flow_temp_corr = Reg->ReadBool("FLOW_TEMP_CORR"); // Temp. correction for flowmeters
 
          Reg->SaveKey(REGKEY,"ebrew_reg");
          Reg->CloseKey();      // Close the Registry
-         switch (pid_pars.pid_model)
+         switch (pid_pars_hlt.pid_model)
          {
             case 0 : // Self-Tuning Takahashi, N = 1 .. 3
-                     init_pid2(&pid_pars,&sys_id_pars);
+                     init_pid2(&pid_pars_hlt,&sys_id_pars);
                      break;
-            case 1 : init_pid3(&pid_pars);  // Type A with D-filtering controller
+            case 1 : init_pid4(&pid_pars_hlt);  // Takahashi Type C controller
                      break;
-            case 2 : init_pid4(&pid_pars);  // Takahashi Type C controller
-                     break;
-            default: pid_pars.pid_model = 2; // Takahashi Type C controller
-                     init_pid4(&pid_pars);
+            default: pid_pars_hlt.pid_model = 1; // Takahashi Type C controller
+                     init_pid4(&pid_pars_hlt);
                      break;
          } // switch
+         init_pid4(&pid_pars_boil); // Init. PID-controller for Boil-Kettle
          // Do NOT delete Reg yet, since we need it further on
       } // if
    } // try
@@ -1544,36 +1629,28 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-----------------------------------------
    // Now add all the tasks for the scheduler
    //-----------------------------------------
-   add_task(task_read_thlt     , "read_thlt"    ,   0, 2000); /* task 01 */
-   add_task(task_read_tmlt     , "read_tmlt"    , 100, 2000); /* task 02 */
-   add_task(task_read_vhlt     , "read_vhlt"    , 200, 1000); /* task 03P */
-   add_task(task_read_vmlt     , "read_vmlt"    , 300, 1000); /* task 04P */
-   add_task(task_read_vhlt_mlt , "flow_hlt_mlt" , 200, 1000); /* task 03F */
-   add_task(task_read_vmlt_boil, "flow_mlt_boil", 300, 1000); /* task 04F */
-   add_task(task_read_lm35     , "read_lm35"    , 400, 2000);
-   add_task(task_pid_ctrl      , "pid_control"  , 500, (uint16_t)(pid_pars.ts * 1000));
-   add_task(task_alive_led     , "alive_pump"   , 500,  500);
-   add_task(task_update_std    , "update_std"   , 500, 1000);
-   add_task(task_log_file      , "wr_log_file"  , 500, 5000);
-   add_task(task_write_pars    , "write_pars"   , 600, 5000);
-   add_task(task_hw_debug      , "hw_debug"     , 600, 1000);
+   add_task(task_read_thlt     , "read_thlt"    ,   0, 2000);
+   add_task(task_read_tmlt     , "read_tmlt"    ,  90, 2000);
+   add_task(task_read_tboil    , "read_tboil"   , 180, 2000);
+   add_task(task_read_tcfc     , "read_tcfc"    , 270, 2000);
+   add_task(task_flow_hlt_mlt  , "flow_hlt_mlt" , 360, 2000);
 
-   if (use_flowsensors)
-   { // use flowsensors between HLT-MLT and between MLT-BOIL
-     disable_task("read_vhlt");
-     disable_task("read_vmlt");
-     MainForm->Flow1_rate->Visible = true;
-     MainForm->Flow2_rate->Visible = true;
-     init_ma(&MainForm->flow1_ma,10,0.0); // init moving_average filter for flowrate
-     init_ma(&MainForm->flow2_ma,10,0.0); // init moving_average filter for flowrate
-   }
-   else
-   { // use pressure transducers in HLT and MLT for volume measurement
-     disable_task("flow_hlt_mlt");
-     disable_task("flow_mlt_boil");
-     MainForm->Flow1_rate->Visible = false;
-     MainForm->Flow2_rate->Visible = false;
-   } // else
+   add_task(task_pid_ctrl      , "pid_control"  , 450, (uint16_t)(pid_pars_hlt.ts * 1000));
+   add_task(task_alive_led     , "alive_led"    , 470,  500); /* 470, 970, 1470, 1970 */
+   add_task(task_update_std    , "update_std"   , 490, 1000); /* 490, 1490 */
+   add_task(task_log_file      , "wr_log_file"  , 520, 5000);
+   add_task(task_write_pars    , "write_pars"   , 540, 5000);
+   add_task(task_hw_debug      , "hw_debug"     , 600, 1000); /* 600, 1600 */
+
+   add_task(task_flow_mlt_boil , "flow_mlt_boil",1000, 2000);
+   add_task(task_flow_cfc      , "flow_cfc"     ,1100, 2000);
+   add_task(task_flow4         , "flow4"        ,1200, 2000);
+   add_task(task_read_lm35     , "read_lm35"    ,1300, 2000);
+
+   init_ma(&MainForm->flow1_ma,10,0.0); // init moving_average filter for flowrate
+   init_ma(&MainForm->flow2_ma,10,0.0); // init moving_average filter for flowrate
+   init_ma(&MainForm->flow3_ma,10,0.0); // init moving_average filter for flowrate
+   init_ma(&MainForm->flow4_ma,10,0.0); // init moving_average filter for flowrate
 
    //-----------------------------------------------
    // Set HW and SW rev. numbers in Tstatusbar panel
@@ -1628,13 +1705,12 @@ void __fastcall TMainForm::Main_Initialisation(void)
       getdate(&d1);
       fprintf(fd,"\nDate of brewing: %02d-%02d-%4d\n",d1.da_day,d1.da_mon,d1.da_year);
       fprintf(fd,"Kc:%6.2f, Ti:%6.2f, Td:%6.2f, K_lpf:%6.2f, Ts:%5.2f, ",
-                 pid_pars.kc, pid_pars.ti, pid_pars.td, pid_pars.k_lpf, pid_pars.ts);
-      fprintf(fd,"PID_Model:%2d\n",pid_pars.pid_model);
+                 pid_pars_hlt.kc, pid_pars_hlt.ti, pid_pars_hlt.td, pid_pars_hlt.k_lpf, pid_pars_hlt.ts);
+      fprintf(fd,"PID_Model:%2d\n",pid_pars_hlt.pid_model);
       fprintf(fd,"Version used: %s\n",srev);
       fprintf(fd,"ms_tot:%2d\n", std.ms_tot);
       fprintf(fd,"Temp Offset:%4.1f, Temp Offset2:%4.1f\n",sp.temp_offset,sp.temp_offset2);
-      fprintf(fd,"Vhlt_max:%5.1f, Vhlt_offset:%5.1f, Vmlt_max:%5.1f, Vmlt_offset:%5.1f\n\n",
-                 vhlt_max, vhlt_offset, vmlt_max, vmlt_offset);
+      fprintf(fd,"Vhlt_max:%5.1f, Vmlt_max:%5.1f\n\n", vhlt_max, vmlt_max);
       fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms      Gamma  Vhlt\n");
       fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id STD   [%]    [L]\n");
       fprintf(fd,"-------------------------------------------------------------------------\n");
@@ -1677,7 +1753,6 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         // Sparge Settings
         sp.sp_batches     = Reg->ReadInteger("SP_BATCHES"); // Number of Sparge Batches
         sp.sp_time        = Reg->ReadInteger("SP_TIME");    // Time between two Sparge Batches
-        sp.boil_time      = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
         MainForm->cb_vsp2 = Reg->ReadBool("CB_VSP2");     // Duble Initial Sparge Volume to Boil-Kettle
         sp.sp_vol_batch   = ((double)(sp.sp_vol)) / sp.sp_batches;
         if (MainForm->cb_vsp2)
@@ -1688,6 +1763,11 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.temp_offset2 = Reg->ReadFloat("TOffset2");
         sp.ph_timer     = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_timer is in seconds
         std.mash_rest   = Reg->ReadBool("CB_Mash_Rest");  // Mash rest 5 minutes after malt is added
+        // Boil-Time Settings
+        sp.boil_time    = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
+        sp.sp_preboil   = Reg->ReadInteger("SP_PREBOIL"); // Setpoint Pre-Boil Temperature
+        sp.sp_boil      = Reg->ReadInteger("SP_BOIL");    // Setpoint Boil Temperature
+        sp.pid_ctrl_boil_on = 0;                          // Disable PID-Controller for Boil-Kettle
 
         // STD Settings
         //---------------------------------------------------------------
@@ -1930,7 +2010,7 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
          ptmp->K_LPF_Edit->Text     = AnsiString(Reg->ReadFloat("K_LPF"));
          ptmp->STC_N_Edit->Text     = AnsiString(Reg->ReadInteger("STC_N"));
          ptmp->STC_TD_Edit->Text    = AnsiString(Reg->ReadInteger("STC_TD"));
-         ptmp->Tset_hlt_slope->Text = AnsiString(Reg->ReadFloat("TSET_HLT_SLOPE"));
+         ptmp->Tset_hlt_slope->Text = AnsiString(Reg->ReadFloat("TSET_SLOPE_LIM"));
          ptmp->CB_adf->Checked      = Reg->ReadBool("STC_ADF");
          ptmp->RG2->ItemIndex       = time_switch; // Value of time-switch [off, on]
          ptmp->CB_PID_dbg->Checked  = cb_pid_dbg;   // PID debug info
@@ -1945,19 +2025,19 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
-            pid_pars.pid_model = ptmp->PID_Model->ItemIndex;
-            Reg->WriteInteger("PID_Model",pid_pars.pid_model);
-            pid_pars.ts        = ptmp->TS_edit->Text.ToDouble();
-            Reg->WriteFloat("TS",pid_pars.ts);
-            pid_pars.kc        = ptmp->Kc_Edit->Text.ToDouble();
-            Reg->WriteFloat("Kc",pid_pars.kc);
-            pid_pars.ti        = ptmp->Ti_Edit->Text.ToDouble();
-            Reg->WriteFloat("Ti",pid_pars.ti);
-            pid_pars.td        = ptmp->Td_Edit->Text.ToDouble();
-            Reg->WriteFloat("Td",pid_pars.td);
-            pid_pars.k_lpf     = ptmp->K_LPF_Edit->Text.ToDouble();
-            Reg->WriteFloat("K_LPF",pid_pars.k_lpf);
-            sys_id_pars.N      = ptmp->STC_N_Edit->Text.ToInt();
+            pid_pars_hlt.pid_model = ptmp->PID_Model->ItemIndex;
+            Reg->WriteInteger("PID_Model",pid_pars_hlt.pid_model);
+            pid_pars_hlt.ts        = ptmp->TS_edit->Text.ToDouble();
+            Reg->WriteFloat("TS",pid_pars_hlt.ts);
+            pid_pars_hlt.kc        = ptmp->Kc_Edit->Text.ToDouble();
+            Reg->WriteFloat("Kc",pid_pars_hlt.kc);
+            pid_pars_hlt.ti        = ptmp->Ti_Edit->Text.ToDouble();
+            Reg->WriteFloat("Ti",pid_pars_hlt.ti);
+            pid_pars_hlt.td        = ptmp->Td_Edit->Text.ToDouble();
+            Reg->WriteFloat("Td",pid_pars_hlt.td);
+            pid_pars_hlt.k_lpf     = ptmp->K_LPF_Edit->Text.ToDouble();
+            Reg->WriteFloat("K_LPF",pid_pars_hlt.k_lpf);
+            sys_id_pars.N          = ptmp->STC_N_Edit->Text.ToInt();
             if ((sys_id_pars.N < 1) || (sys_id_pars.N > 3))
             {
                 sys_id_pars.N = 1;
@@ -1969,29 +2049,28 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
                 sys_id_pars.stc_td = 0;
             } // if
             Reg->WriteInteger("STC_TD",sys_id_pars.stc_td);
-            tset_hlt_slope     = ptmp->Tset_hlt_slope->Text.ToDouble();
-            Reg->WriteFloat("TSET_HLT_SLOPE",tset_hlt_slope);
+            tset_slope_limit = ptmp->Tset_hlt_slope->Text.ToDouble();
+            Reg->WriteFloat("TSET_HLT_SLOPE",tset_slope_limit);
             if (ptmp->CB_adf->Checked)
                  sys_id_pars.stc_adf = 1; // use adaptive directional forgetting
             else sys_id_pars.stc_adf = 0; // NO ADF
             Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
             cb_pid_dbg         = ptmp->CB_PID_dbg->Checked; // PID debug info
-            PID_dbg->Visible = cb_pid_dbg;
-
-            switch (pid_pars.pid_model)
+            PID_dbg->Visible   = cb_pid_dbg;
+            PID_dbg2->Visible  = cb_pid_dbg;
+            switch (pid_pars_hlt.pid_model)
             {
                case 0 : // Self-Tuning Takahashi, N = 1 .. 3
-                        init_pid2(&pid_pars,&sys_id_pars);
+                        init_pid2(&pid_pars_hlt,&sys_id_pars);
                         break;
-               case 1 : init_pid3(&pid_pars);   // Type A with D-filtering
+               case 1 : init_pid4(&pid_pars_hlt);   // Takahashi Type C
                         break;
-               case 2 : init_pid4(&pid_pars);   // Takahashi Type C
-                        break;
-               default: pid_pars.pid_model = 2; // Takahashi Type C
-                        init_pid4(&pid_pars);
+               default: pid_pars_hlt.pid_model = 1; // Takahashi Type C
+                        init_pid4(&pid_pars_hlt);
                         break;
             } // switch
-
+            pid_pars_boil.pid_model = 1; // always use Takahashi Type C for Boil-Kettle
+            init_pid4(&pid_pars_boil);   // Init. PID parameters for Boil-Kettle PID-controller
             time_switch = ptmp->RG2->ItemIndex; // 0 = off, 1 = on
             if (time_switch)
             {
@@ -2143,20 +2222,22 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         // Sparge Settings
         ptmp->EBatches->Text    = AnsiString(sp.sp_batches); // Number of Sparge Batches
         ptmp->EBTime->Text      = AnsiString(sp.sp_time);    // Time between two Sparge Batches
-        ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);  // Total Boil Time (min.)
         ptmp->CB_VSp2->Checked  = MainForm->cb_vsp2;         // Double the Initial Sparge Volume to Boil-kettle
         // Mash Settings
         ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
         ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
-        ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60);   // PREHEAT_TIME [minutes]
-        ptmp->CB_mash_rest->Checked = std.mash_rest;         // Mash rest for 5 min after malt is added
+        ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60);  // PREHEAT_TIME [minutes]
+        ptmp->CB_mash_rest->Checked = std.mash_rest;           // Mash rest for 5 min after malt is added
+        // Boil-Time Settings
+        ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);  // Total Boil Time (min.)
+        ptmp->SP_PreBoil->Text  = AnsiString(sp.sp_preboil); // Setpoint Temperature for pre-boil
+        ptmp->SP_Boil->Text     = AnsiString(sp.sp_boil);    // Setpoint Temperature during boiling
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
            // Sparge Settings
            Reg->WriteInteger("SP_BATCHES",  ptmp->EBatches->Text.ToInt());
            Reg->WriteInteger("SP_TIME",     ptmp->EBTime->Text.ToInt());
-           Reg->WriteInteger("BOIL_TIME",   ptmp->EBoilTime->Text.ToInt());
            Reg->WriteBool("CB_VSP2",        ptmp->CB_VSp2->Checked);
            MainForm->cb_vsp2 = ptmp->CB_VSp2->Checked;
 
@@ -2166,7 +2247,12 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());
            Reg->WriteBool("CB_Mash_Rest",   ptmp->CB_mash_rest->Checked);
            std.mash_rest = ptmp->CB_mash_rest->Checked;
-           
+
+           // Boil-Time Settings
+           Reg->WriteInteger("BOIL_TIME",   ptmp->EBoilTime->Text.ToInt());
+           Reg->WriteInteger("SP_PREBOIL",  ptmp->SP_PreBoil->Text.ToInt());
+           Reg->WriteInteger("SP_BOIL",     ptmp->SP_Boil->Text.ToInt());
+
            Init_Sparge_Settings(); // Init. struct with new sparge settings
         } // if
         delete ptmp;
@@ -2183,14 +2269,6 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
   } // catch
 } // TMainForm::SpargeSettings1Click()
 //---------------------------------------------------------------------------
-
-#define CH_F_PAR(nr, par, par_gui, reg)      \
-        if (!SameValue(par, par_gui, 0.001)) \
-        {                                    \
-           par = par_gui;                    \
-           pars_changed[nr] = true;          \
-           Reg->WriteFloat(reg, par);        \
-        }
 
 void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
 /*------------------------------------------------------------------
@@ -2211,107 +2289,68 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
       if (Reg->KeyExists(REGKEY))
       {
          Reg->OpenKey(REGKEY,FALSE);
-         //------------------
-         // HLT Temperature
-         //------------------
-         ptmp->Thlt_Offset_Edit->Text   = Reg->ReadFloat("THLT_OFFSET");
-         ptmp->Thlt_Slope_Edit->Text    = Reg->ReadFloat("THLT_SLOPE");
-         //------------------
-         // MLT Temperature
-         //------------------
-         ptmp->Tmlt_Offset_Edit->Text   = Reg->ReadFloat("TMLT_OFFSET");
-         ptmp->Tmlt_Slope_Edit->Text    = Reg->ReadFloat("TMLT_SLOPE");
-         //------------------
-         // HLT Volume
-         //------------------
-         ptmp->Vhlt_Max_Edit->Text      = Reg->ReadFloat("VHLT_MAX");
-         ptmp->Vhlt_Offset_Edit->Text   = Reg->ReadFloat("VHLT_OFFSET");
-         ptmp->Vhlt_Slope_Edit->Text    = Reg->ReadFloat("VHLT_SLOPE");
-         //------------------
-         // MLT Volume
-         //------------------
-         ptmp->Vmlt_Max_Edit->Text      = Reg->ReadFloat("VMLT_MAX");
-         ptmp->Vmlt_Offset_Edit->Text   = Reg->ReadFloat("VMLT_OFFSET");
-         ptmp->Vmlt_Slope_Edit->Text    = Reg->ReadFloat("VMLT_SLOPE");
+         //--------------------------
+         // Temperature Measurements
+         //--------------------------
+         ptmp->Thlt_Offset_Edit->Text  = Reg->ReadFloat("THLT_OFFSET");
+         ptmp->Tmlt_Offset_Edit->Text  = Reg->ReadFloat("TMLT_OFFSET");
+         ptmp->Tboil_Offset_Edit->Text = Reg->ReadFloat("TBOIL_OFFSET");
+         ptmp->Tcfc_Offset_Edit->Text  = Reg->ReadFloat("TCFC_OFFSET");
 
-         ptmp->Boil_Max_Edit->Text      = Reg->ReadFloat("VBOIL_MAX"); // For Screen only
-         //-------------------
-         // Volume Measurement
-         //-------------------
-         ptmp->Use_Flowsensors->Checked = use_flowsensors;
-         ptmp->Flow1_Err->Text = flow1_err;
-         ptmp->Flow2_Err->Text = flow2_err;
+         //--------------------------
+         // Volume Measurements
+         //--------------------------
+         ptmp->Vhlt_Max_Edit->Text     = Reg->ReadFloat("VHLT_MAX");
+         ptmp->Vmlt_Max_Edit->Text     = Reg->ReadFloat("VMLT_MAX");
+         ptmp->Boil_Max_Edit->Text     = Reg->ReadFloat("VBOIL_MAX"); // For Screen only
+         ptmp->Flow1_Err->Text         = flow1_err;
+         ptmp->Flow2_Err->Text         = flow2_err;
+         ptmp->Flow3_Err->Text         = flow3_err;
+         ptmp->Flow4_Err->Text         = flow4_err;
          ptmp->Flow_Temp_Corr->Checked = flow_temp_corr;
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
-            //------------------
-            // HLT Temperature
-            //------------------
-            CH_F_PAR(13,thlt_offset,ptmp->Thlt_Offset_Edit->Text.ToDouble(),"THLT_OFFSET");
-            CH_F_PAR(14,thlt_slope ,ptmp->Thlt_Slope_Edit->Text.ToDouble() ,"THLT_SLOPE");
-            //------------------
-            // MLT Temperature
-            //------------------
-            CH_F_PAR(15,tmlt_offset,ptmp->Tmlt_Offset_Edit->Text.ToDouble(),"TMLT_OFFSET");
-            CH_F_PAR(16,tmlt_slope ,ptmp->Tmlt_Slope_Edit->Text.ToDouble() ,"TMLT_SLOPE");
-            //------------------
-            // HLT Volume
-            //------------------
-            CH_F_PAR( 7,vhlt_offset,ptmp->Vhlt_Offset_Edit->Text.ToDouble(),"VHLT_OFFSET");
-            CH_F_PAR( 8,vhlt_max   ,ptmp->Vhlt_Max_Edit->Text.ToDouble()   ,"VHLT_MAX");
-            CH_F_PAR( 9,vhlt_slope ,ptmp->Vhlt_Slope_Edit->Text.ToDouble() ,"VHLT_SLOPE");
-            //------------------
-            // MLT Volume
-            //------------------
-            CH_F_PAR(10,vmlt_offset,ptmp->Vmlt_Offset_Edit->Text.ToDouble(),"VMLT_OFFSET");
-            CH_F_PAR(11,vmlt_max   ,ptmp->Vmlt_Max_Edit->Text.ToDouble()   ,"VMLT_MAX");
-            CH_F_PAR(12,vmlt_slope ,ptmp->Vmlt_Slope_Edit->Text.ToDouble() ,"VMLT_SLOPE");
+            //--------------------------
+            // Temperature Measurements
+            //--------------------------
+            thlt_offset  = ptmp->Thlt_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("THLT_OFFSET", thlt_offset);
+            tmlt_offset  = ptmp->Tmlt_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("TMLT_OFFSET", tmlt_offset);
+            tboil_offset = ptmp->Tboil_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("TBOIL_OFFSET", tboil_offset);
+            tcfc_offset  = ptmp->Tcfc_Offset_Edit->Text.ToDouble();
+            Reg->WriteFloat("TCFC_OFFSET", tcfc_offset);
+
+            //--------------------------
+            // Volume Measurements
+            //--------------------------
+            vhlt_max     = ptmp->Vhlt_Max_Edit->Text.ToDouble();
+            Reg->WriteFloat("VHLT_MAX", vhlt_max);
+            sprintf(tmp_str,"HLT %dL", ptmp->Vhlt_Max_Edit->Text.ToInt());    // HLT
+            HLT_Label->Caption = tmp_str;
+            Tank_HLT->Max = ptmp->Vhlt_Max_Edit->Text.ToInt();
+
+            vmlt_max     = ptmp->Vmlt_Max_Edit->Text.ToDouble();
+            Reg->WriteFloat("VMLT_MAX", vmlt_max);
+            sprintf(tmp_str,"MLT %dL", ptmp->Vmlt_Max_Edit->Text.ToInt());    // MLT
+            MLT_Label->Caption = tmp_str;
+            Tank_MLT->Max = ptmp->Vmlt_Max_Edit->Text.ToInt();
 
             Reg->WriteFloat("VBOIL_MAX",ptmp->Boil_Max_Edit->Text.ToDouble()); // Boil Kettle
             sprintf(tmp_str,"Boil %dL", ptmp->Boil_Max_Edit->Text.ToInt());
             Boil_Label->Caption = tmp_str;
             Tank_Boil->Max = ptmp->Boil_Max_Edit->Text.ToInt();
-            sprintf(tmp_str,"HLT %dL", ptmp->Vhlt_Max_Edit->Text.ToInt());    // HLT
-            HLT_Label->Caption = tmp_str;
-            Tank_HLT->Max = ptmp->Vhlt_Max_Edit->Text.ToInt();
-            sprintf(tmp_str,"MLT %dL", ptmp->Vmlt_Max_Edit->Text.ToInt());    // MLT
-            MLT_Label->Caption = tmp_str;
-            Tank_MLT->Max = ptmp->Vmlt_Max_Edit->Text.ToInt();
 
-            //-------------------
-            // Volume Measurement
-            //-------------------
-            use_flowsensors = ptmp->Use_Flowsensors->Checked;
-            Reg->WriteBool("USE_FLOWSENSORS",use_flowsensors);
-            if (use_flowsensors)
-            { // use flowsensors between HLT-MLT and between MLT-BOIL
-              enable_task("flow_hlt_mlt");
-              enable_task("flow_mlt_boil");
-              disable_task("read_vhlt");
-              disable_task("read_vmlt");
-              MainForm->Vol_MLT->Font->Color = clRed;
-              MainForm->Vol_HLT->Font->Color = clRed;
-              MainForm->Flow1_rate->Visible = true;
-              MainForm->Flow2_rate->Visible = true;
-              init_ma(&MainForm->flow1_ma,10,0.0); // init moving_average filter for flowrate
-              init_ma(&MainForm->flow2_ma,10,0.0); // init moving_average filter for flowrate
-            }
-            else
-            { // use pressure transducers in HLT and MLT for volume measurement
-              enable_task("read_vhlt");
-              enable_task("read_vmlt");
-              disable_task("flow_hlt_mlt");
-              disable_task("flow_mlt_boil");
-              MainForm->Flow1_hlt_mlt->Font->Color  = clRed;
-              MainForm->Flow2_mlt_boil->Font->Color = clRed;
-              MainForm->Flow1_rate->Visible = false;
-              MainForm->Flow2_rate->Visible = false;
-            } // else
             flow1_err = ptmp->Flow1_Err->Text.ToInt();
             Reg->WriteInteger("FLOW1_ERR",flow1_err);
             flow2_err = ptmp->Flow2_Err->Text.ToInt();
             Reg->WriteInteger("FLOW2_ERR",flow2_err);
+            flow3_err = ptmp->Flow3_Err->Text.ToInt();
+            Reg->WriteInteger("FLOW3_ERR",flow3_err);
+            flow4_err = ptmp->Flow4_Err->Text.ToInt();
+            Reg->WriteInteger("FLOW4_ERR",flow4_err);
             flow_temp_corr = ptmp->Flow_Temp_Corr->Checked;
             Reg->WriteBool("FLOW_TEMP_CORR",flow_temp_corr);
          } // if
@@ -2410,10 +2449,10 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
       ptmp->Tset_MEdit->Text = AnsiString(swfx.tset_hlt_fx); // Set fix value
    } // if
    //-------------------------------------------------------------------------
-   ptmp->CB_Gamma->Checked = swfx.gamma_sw; // Set Checkbox for Gamma
-   if (swfx.gamma_sw)
+   ptmp->CB_Gamma->Checked = swfx.gamma_hlt_sw; // Set Checkbox for Gamma
+   if (swfx.gamma_hlt_sw)
    {
-      ptmp->Gamma_MEdit->Text = AnsiString(swfx.gamma_fx); // Set fix value
+      ptmp->Gamma_MEdit->Text = AnsiString(swfx.gamma_hlt_fx); // Set fix value
    } // if
    //-------------------------------------------------------------------------
    ptmp->CB_Tad1->Checked = swfx.thlt_sw; // Set Checkbox for Thlt
@@ -2686,21 +2725,28 @@ void __fastcall TMainForm::Update_GUI(void)
    int  p;             // temp. variable
    int  i;             // temp. variable
 
-   sprintf(tmp_str,"%4.2f",thlt);   // Display Thlt value on screen
+   //---------------------
+   // Actual Temperatures
+   //---------------------
+   sprintf(tmp_str,"%4.2f°C",thlt);   // Display Thlt value on screen
    Val_Thlt->Caption    = tmp_str;
-   tm_hlt->Value->Value = thlt;     // update HLT thermometer object
+   tm_hlt->Value->Value = thlt;       // update HLT thermometer object
 
-   sprintf(tmp_str,"%4.2f",tmlt);   // Display Tmlt value on screen
+   sprintf(tmp_str,"%4.2f°C",tmlt);   // Display Tmlt value on screen
    Val_Tmlt->Caption    = tmp_str;
-   tm_mlt->Value->Value = tmlt;     // update MLT thermometer object
+   tm_mlt->Value->Value = tmlt;       // update MLT thermometer object
 
-   tm_triac->Value->Value = ttriac; // Update thermometer object
-   sprintf(tmp_str,"%3.1f",ttriac);
+   sprintf(tmp_str,"%4.2f°C",tboil);  // Display Tboil on screen
+   Temp_Boil->Caption     = tmp_str;
+
+   sprintf(tmp_str,"%4.2f°C",tcfc);  // Display Tcfc on screen
+   Temp_CFC->Caption      = tmp_str;
+
+   tm_triac->Value->Value = ttriac;   // Update Ttriac object
+   sprintf(tmp_str,"%3.1f°C",ttriac);
    Ttriac_lbl->Caption    = tmp_str;
 
-   //---------------------------------------------------
    // Triac Temperature Protection: hysteresis function
-   //---------------------------------------------------
    if (triac_too_hot)
    {
       tm_triac->ColorAfter  = clMaroon;
@@ -2712,22 +2758,65 @@ void __fastcall TMainForm::Update_GUI(void)
       tm_triac->ColorBefore = clGreen;
    }
 
-   sprintf(tmp_str,"%4.1f",volumes.Vmlt); // Display MA filter output on screen
-   Vol_MLT->Caption   = tmp_str;          // AD4 = Pressure Transducer
+   //------------------------
+   // Temperature Setpoints
+   //------------------------
+   sprintf(tmp_str,"SP %4.1f°C",tset_hlt);  // Setpoint HLT Temperature
+   Val_Tset_hlt->Caption = tmp_str;
+   tm_hlt->SetPoint->Value = tset_hlt;      // update HLT thermometer object
+
+   sprintf(tmp_str,"SP %3.0f°C",tset_mlt);  // Setpoint MLT Temperature
+   Val_Tset_mlt->Caption   = tmp_str;
+   tm_mlt->SetPoint->Value = tset_mlt;      // Update MLT thermometer object
+
+   sprintf(tmp_str,"SP %3.0f°C",tset_boil); // Setpoint Boil-Kettle Temperature
+   Val_Tset_Boil->Caption = tmp_str;
+
+   //--------------------------
+   // Actual Volumes and Flows
+   //--------------------------
+   Tank_HLT->Position  = volumes.Vhlt;      // Actual Volume HLT
+   sprintf(tmp_str,"%4.1f L",volumes.Vhlt);
+   Vol_HLT->Caption = tmp_str;
+
+   sprintf(tmp_str,"%4.1f L",volumes.Vmlt); // Actual Volume MLT
+   Vol_MLT->Caption   = tmp_str;
    Tank_MLT->Position = volumes.Vmlt;
 
-   // Heater object shows %
-   Heater->Value = gamma; // Update object on screen
-   sprintf(tmp_str,"%d %%",(int)gamma);
-   Gamma_Perc->Caption = tmp_str;
-   
-   sprintf(tmp_str,"%4.1f",tset_mlt);
-   Val_Tset_mlt->Caption   = tmp_str;
-   tm_mlt->SetPoint->Value = tset_mlt; // Update MLT thermometer object
+   Tank_Boil->Position = volumes.Vboil;     // Actual Volume Boil-Kettle
+   sprintf(tmp_str,"%4.1f L",volumes.Vboil);
+   Vol_Boil->Caption = tmp_str;
 
-   sprintf(tmp_str,"%4.1f",tset_hlt);
-   Val_Tset_hlt->Caption = tmp_str;
-   tm_hlt->SetPoint->Value = tset_hlt; // update HLT thermometer object
+   sprintf(tmp_str,"%4.1f L",volumes.Flow_hlt_mlt);            // Display flow from HLT -> MLT
+   Flow1_hlt_mlt->Caption = tmp_str;
+   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_hlt_mlt);  // Display flowrate from HLT -> MLT
+   Flow1_rate->Caption = tmp_str;
+
+   sprintf(tmp_str,"%4.1f L",volumes.Flow_mlt_boil);           // Display flow from MLT -> Boil
+   Flow2_mlt_boil->Caption = tmp_str;
+   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_mlt_boil); // Display flowrate from MLT -> Boil
+   Flow2_rate->Caption = tmp_str;
+
+   sprintf(tmp_str,"%4.1f L",volumes.Flow_cfc_out);            // Display flow from CFC-output
+   Flow3_cfc->Caption = tmp_str;
+   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_cfc_out);  // Display flowrate from CFC-output
+   Flow3_rate->Caption = tmp_str;
+
+   sprintf(tmp_str,"%4.1f L",volumes.Flow4);                   // Display flow from CFC-output
+   Flow4->Caption = tmp_str;
+   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate4);         // Display flowrate4
+   Flow4_rate->Caption = tmp_str;
+
+   //------------------------
+   // PID-Controller Outputs
+   //------------------------
+   Heater->Value = gamma_hlt; // PID-output for HLT
+   sprintf(tmp_str,"%d %%",(int)gamma_hlt);
+   Gamma_Perc->Caption = tmp_str;
+
+   Boil->Value = gamma_boil; // PID-output for Boil-Kettle
+   sprintf(tmp_str,"%d %%",(int)gamma_boil);
+   Gamma_Boil->Caption = tmp_str;
 
    switch (std.ebrew_std)
    {
@@ -2752,26 +2841,6 @@ void __fastcall TMainForm::Update_GUI(void)
       case 18: Std_State->Caption = "18. Mash Rest (10 minutes)"           ; break;
       default: break;
    } // switch
-   //----------------------------------------------------------------------
-   // Now update tank objects (volumes). MLT is already done (time-slice 1)
-   //----------------------------------------------------------------------
-   Tank_HLT->Position  = volumes.Vhlt;
-   sprintf(tmp_str,"%4.1f",volumes.Vhlt);
-   Vol_HLT->Caption = tmp_str;
-
-   Tank_Boil->Position = volumes.Vboil;
-   sprintf(tmp_str,"%4.1f",volumes.Vboil);
-   Vol_Boil->Caption = tmp_str;
-
-   sprintf(tmp_str,"%4.1f",volumes.Flow_hlt_mlt);      // Display flow from HLT -> MLT
-   Flow1_hlt_mlt->Caption = tmp_str;
-   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_hlt_mlt); // Display flowrate from HLT -> MLT
-   Flow1_rate->Caption = tmp_str;
-
-   sprintf(tmp_str,"%4.1f",volumes.Flow_mlt_boil);      // Display flow from MLT -> Boil
-   Flow2_mlt_boil->Caption = tmp_str;
-   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_mlt_boil); // Display flowrate from MLT -> Boil
-   Flow2_rate->Caption = tmp_str;
 
    //--------------------------------------------------------------------------
    // Update the Captions for all valves (they might have
@@ -2835,11 +2904,11 @@ void __fastcall TMainForm::Update_GUI(void)
    //-------------------------------------------
    if (cb_pid_dbg)
    {
-      if (pid_pars.pid_model == 0)
+      if (pid_pars_hlt.pid_model == 0)
       {  // pid_model = 0: Self-Tuning controllers
-         sprintf(tmp_str,"%6.2f %6.2f %6.2f %6.2f %6.2f (%6.2f %6.2f %6.2f)",
-                         pid_pars.pp, pid_pars.pi, pid_pars.pd,
-                         pid_pars.pp + pid_pars.pi + pid_pars.pd, gamma,
+         sprintf(tmp_str,"%6.2f %6.2f %6.2f T=%6.2f G=%6.2f (%6.2f %6.2f %6.2f)",
+                         pid_pars_hlt.pp, pid_pars_hlt.pi, pid_pars_hlt.pd,
+                         pid_pars_hlt.pp + pid_pars_hlt.pi + pid_pars_hlt.pd, gamma_hlt,
                          sys_id_pars.kc, sys_id_pars.ti, sys_id_pars.td);
          switch (sys_id_pars.N)
          {
@@ -2856,11 +2925,15 @@ void __fastcall TMainForm::Update_GUI(void)
       } // if
       else
       {  // pid_model = 1 or 2, PID controllers with fixed parameters
-         sprintf(tmp_str,"%6.2f %6.2f %6.2f %6.2f %6.2f",
-                         pid_pars.pp, pid_pars.pi, pid_pars.pd,
-                         pid_pars.pp + pid_pars.pi + pid_pars.pd, gamma);
+         sprintf(tmp_str,"%6.2f %6.2f %6.2f T=%6.2f G=%6.2f",
+                         pid_pars_hlt.pp, pid_pars_hlt.pi, pid_pars_hlt.pd,
+                         pid_pars_hlt.pp + pid_pars_hlt.pi + pid_pars_hlt.pd, gamma_hlt);
       } // else
       PID_dbg->Caption = tmp_str;
+      sprintf(tmp_str,"%6.2f %6.2f %6.2f T=%6.2f G=%6.2f",
+                      pid_pars_boil.pp, pid_pars_boil.pi, pid_pars_boil.pd,
+                      pid_pars_boil.pp + pid_pars_boil.pi + pid_pars_boil.pd, gamma_boil);
+      PID_dbg2->Caption = tmp_str;
    } // if
 
    bool any_input_on  = std_out & (V1b | V2b | V3b);
@@ -2977,14 +3050,6 @@ void __fastcall TMainForm::Update_GUI(void)
    sprintf(tmp_str,"sp_idx = %d",std.sp_idx);
    StatusBar->Panels->Items[PANEL_SPIDX]->Text = AnsiString(tmp_str);
    sprintf(tmp_str,"Mash: %dL, Sparge: %dL",sp.mash_vol,sp.sp_vol);
-/*   p = 128;
-   for (i = 7; i > 0; i--)
-   {  // cycle through the 7 valve bits V7..V1
-      std_out & p ? strcat(tmp_str,"1") : strcat(tmp_str,"0");
-      p = p / 2; // decrease power of 2
-   } // for
-   strcat(tmp_str,"] V1");
-*/
    StatusBar->Panels->Items[PANEL_VALVE]->Text = AnsiString(tmp_str);
 } // Update_GUI()
 
@@ -3026,14 +3091,14 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
    } // else if
    else if (UpCase(Key) == 'H')
    {
-      swfx.gamma_sw = true; // Set switch for gamma
-      if (swfx.gamma_fx > 99.9)
+      swfx.gamma_hlt_sw = true; // Set switch for gamma
+      if (swfx.gamma_hlt_fx > 99.9)
       {
-         swfx.gamma_fx = 0.0; // fix gamma to 0 %
+         swfx.gamma_hlt_fx = 0.0; // fix gamma to 0 %
       } // if
       else
       {
-         swfx.gamma_fx = 100.0; // fix gamma to 100 %
+         swfx.gamma_hlt_fx = 100.0; // fix gamma to 100 %
       } // else
    } // else if
    else if ((Key >= '1') && (Key <= '7'))
@@ -3046,7 +3111,7 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
    {
       // Auto All
       std_out &= ~(P0M | V1M | V2M | V3M | V4M | V5M | V6M | V7M);
-      swfx.gamma_sw = false; // Release switch for gamma
+      swfx.gamma_hlt_sw = false; // Release switch for gamma
    } // else if
 } // FormKeyPress()
 //---------------------------------------------------------------------------

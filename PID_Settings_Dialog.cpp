@@ -5,6 +5,11 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2013/07/23 09:42:46  Emile
+// - Fourth intermediate version: several Registry Settings added / removed.
+// - Dialog Screens updated: better lay-out and matches new Registry Settings
+// - Source-code improved for readability
+//
 // Revision 1.9  2013/07/21 22:32:47  Emile
 // - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
 // - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
@@ -128,18 +133,7 @@ void __fastcall TPID_Settings::update_pid_gui(void)
         Label20->Enabled = true; STC_TD_Edit->Enabled = true; Label21->Enabled = true; // stc_TD
         CB_adf->Enabled = true; // STC_ADF
         break;
-      case 1: // Type A PID with D-filtering
-        // Enable Kc, Ti, Td, lpfC. Disable stc_N, stc_TD, stc_adf
-        Label1->Enabled  = true; Kc_Edit->Enabled    = true; Label6->Enabled  = true; // Kc
-        Label2->Enabled  = true; Ti_Edit->Enabled    = true; Label7->Enabled  = true; // Ti
-        Label3->Enabled  = true; Td_Edit->Enabled    = true; Label8->Enabled  = true; // Td
-        Label4->Enabled  = true; K_LPF_Edit->Enabled = true; Label9->Enabled  = true; // Clpf
-
-        Label18->Enabled = false; STC_N_Edit->Enabled  = false; Label19->Enabled = false; // stc_N
-        Label20->Enabled = false; STC_TD_Edit->Enabled = false; Label21->Enabled = false; // stc_TD
-        CB_adf->Enabled  = false; // STC_ADF
-        break;
-      case 2: // Takahashi ype C PID, NO D-filtering
+      case 1: // Takahashi ype C PID, NO D-filtering
         // Enable Kc, Ti, Td. Disable lpfC, stc_N, stc_TD, stc_adf
         Label1->Enabled  = true; Kc_Edit->Enabled = true; Label6->Enabled  = true; // Kc
         Label2->Enabled  = true; Ti_Edit->Enabled = true; Label7->Enabled  = true; // Ti

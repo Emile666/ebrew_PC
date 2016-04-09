@@ -7,6 +7,10 @@
   Purpose : This is the header-file for scheduler.c
   ------------------------------------------------------------------
   $Log$
+  Revision 1.2  2015/11/21 10:36:38  Emile
+  - Task-time was > 50 msec. resulting in inaccurate timing. All sleeps(20)
+    removed in communication routines.
+
   Revision 1.1  2015/03/21 11:12:51  Emile
   - Bugfix W command (PWM output), W0 was always sent
   - V command enabled (Valves output)
@@ -24,7 +28,7 @@ extern "C" {
 #include <string.h>
 #include "misc.h"
 
-#define MAX_TASKS        (15)
+#define MAX_TASKS        (20)
 #define MAX_MSEC      (60000)
 #define TICKS_PER_SEC   (10L)
 #define NAME_LEN         (30)

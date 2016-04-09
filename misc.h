@@ -6,6 +6,12 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.29  2016/01/24 19:36:55  Emile
+// - Valves and Pump now show colours: RED (on) and GREEN (off)
+// - Pipes are now highlighted to show actual direction of fluid movement
+// - Initial delay of tasks changed to multiples of 100 msec. scheduler tick
+// - Mash-rest in new state now set to 5 min. instead of 10 min.
+//
 // Revision 1.28  2015/12/13 14:20:27  Emile
 // - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
 // - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
@@ -276,11 +282,15 @@ typedef struct _sparge_struct
    int    sp_time;         // Time between two sparge batches in minutes
    int    mash_vol;        // Total mashing volume in litres
    int    sp_vol;          // Total sparge volume in litres
-   int    boil_time;       // Total boiling time in minutes
    int    sp_time_ticks;   // sp_time in TS ticks
    int    boil_time_ticks; // boil_time in TS ticks
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
    double sp_vol_batch0;   // Sparge volume of first batch
+   /* Sparge Settings */
+   int    boil_time;       // Total boiling time in minutes
+   int    sp_preboil;      // Setpoint Preboil Temperature
+   int    sp_boil;         // Setpoint Boil Temperature
+   int    pid_ctrl_boil_on;// 1= enable PID-controller for Boil-Kettle 
    /* Time-stamps for Sparge, Boil and Chilling*/
    char   mlt2boil[MAX_SP][40]; // MAX_SP strings for time-stamp moment of MLT -> BOIL
    char   hlt2mlt[MAX_SP][40];  // MAX_SP strings for time-stamp moment of HLT -> MLT
@@ -320,12 +330,18 @@ typedef struct _volume_struct
    double Vhlt_old;   // Prev. value of Vhlt, used in STD
    double Vmlt_old;   // Prev. value of Vmlt, used in STD
    double Vboil_old;  // Prev. value of Vboil, used in STD
-   double Flow_hlt_mlt;
-   double Flow_mlt_boil;
+   double Flow_hlt_mlt;       // Flow1
+   double Flow_mlt_boil;      // Flow2
+   double Flow_cfc_out;       // Flow3
+   double Flow4;              // Flow4: Future Use
    double Flow_hlt_mlt_old;
    double Flow_mlt_boil_old;
+   double Flow_cfc_out_old;
+   double Flow4_old;
    double Flow_rate_hlt_mlt;
    double Flow_rate_mlt_boil;
+   double Flow_rate_cfc_out;
+   double Flow_rate4;
 } volume_struct;
 
 //------------------------------
@@ -434,8 +450,9 @@ typedef struct _volume_struct
 void add_seconds(char *s, int seconds);
 int decode_log_file(FILE *fd, log_struct p[]);
 int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int init, int *vmash, int *vsparge);
-int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
-               double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
+int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
+               double *tset_hlt, double *tset_mlt, double *tset_boil,
+               unsigned int *kleppen, maisch_schedule ms[],
                sparge_struct *sps, std_struct *std, int ui, int std_fx);
 void   init_ma(ma *p, int N, double init_val);
 double moving_average(ma *p, double x);

@@ -5,6 +5,10 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.4  2015/06/05 19:18:40  Emile
+// - STD optimized for new solenoid valves. User Interaction dialog added
+// - Calibration & Temp. correction added for flowsensors
+//
 // Revision 1.3  2013/07/21 22:32:47  Emile
 // - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
 // - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
@@ -56,6 +60,7 @@ void __fastcall TMeasurements::Help_ButtonClick(TObject *Sender)
    Application->HelpContext(IDH_MEASUREMENTS);
 }
 //---------------------------------------------------------------------------
+
 
 
 

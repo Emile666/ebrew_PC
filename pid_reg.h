@@ -5,6 +5,13 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.13  2013/07/24 14:00:00  Emile
+  - Version ready for Integration Testing with Ebrew HW R1.07!
+  - Writing parameters to Ebrew HW now works with new task writing_pars
+  - HW Revision is now displayed in statusbar if comm. is established
+  - Task hw_debug added to display S1, S2 & S3 command info from Ebrew HW.
+  - Key-press 'D' now initiates hw_debug task
+
   Revision 1.12  2011/05/29 20:56:26  Emile
   - New Registry variables added: STC_N, STC_TD and STC_ADF
   - PID Settings Dialog screen extended with new parameters for self-tuning
@@ -167,8 +174,7 @@ typedef struct _sys_id_params
 //--------------------
 void init_pid2(pid_params *p, sys_id_params *psi); // Takahashi with Self-Tuning
 void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg, sys_id_params *psys_id);
-void init_pid3(pid_params *p);        // Type A PID with filtering of D-action
-void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg);
+void init_pid3(pid_params *p);
 void init_pid4(pid_params *p);        // Type C Takahashi PID, no filtering of D-action
 void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg);
 

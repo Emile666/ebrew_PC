@@ -6,6 +6,12 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.30  2016/01/24 19:36:55  Emile
+  - Valves and Pump now show colours: RED (on) and GREEN (off)
+  - Pipes are now highlighted to show actual direction of fluid movement
+  - Initial delay of tasks changed to multiples of 100 msec. scheduler tick
+  - Mash-rest in new state now set to 5 min. instead of 10 min.
+
   Revision 1.29  2015/12/13 14:20:27  Emile
   - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
   - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
@@ -847,8 +853,9 @@ int flow_rate_low(double flow_rate)
    return retv;
 } // flow_rate_low()
 
-int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
-               double *tset_hlt, unsigned int *kleppen, maisch_schedule ms[],
+int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
+               double *tset_hlt, double *tset_mlt, double *tset_boil,
+               unsigned int *kleppen, maisch_schedule ms[],
                sparge_struct *sps, std_struct *std, int ui, int std_fx)
 /*------------------------------------------------------------------
   Purpose  : This function contains the State Transition Diagram (STD)
@@ -857,11 +864,13 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
              Then: the settings of the valves are calculated and returned
              in 'kleppen'. It uses various static variables (see begin of file).
   Variables:
-      *vol : Struct containing all volume variables
-      tmlt : The actual temperature of the MLT
-      thlt : The actual temperature of the HLT
- *tset_mlt : The reference temperature for the MLT
- *tset_hlt : The reference temperature for the HLT
+      *vol  : Struct containing all volume variables
+      thlt  : The actual temperature of the HLT
+      tmlt  : The actual temperature of the MLT
+      tboil : The actual temperature of the Boil-Kettle
+ *tset_hlt  : The reference temperature for the HLT
+ *tset_mlt  : The reference temperature for the MLT
+ *tset_boil : The reference temperature for the Boil-Kettle
   *kleppen : Every bit represent a valve (1=ON, 0=OFF):
              Bits 15..8: 0 = Auto, 1 = Manual Override for valves V7-V1 + Pump
              Bits  7..1: Valves V7-V1
@@ -925,6 +934,8 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
            std->ms_idx = 0; // init. index in mash schem
            *tset_mlt   = ms[std->ms_idx].temp;
            *tset_hlt   = *tset_mlt + 2 * sps->temp_offset;
+           *tset_boil  = 0.0; // Setpoint Temp. for Boil-Kettle
+           sps->pid_ctrl_boil_on = 0; // Disable PID-Controller for Boil-Kettle
            if (ui & UI_PID_ON)
            {
               std->ebrew_std = S01_WAIT_FOR_HLT_TEMP;
@@ -935,8 +946,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // - If Thlt > Tset_hlt, goto S14_PUMP_PREFILL
       //---------------------------------------------------------------------------
       case S01_WAIT_FOR_HLT_TEMP:
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = *tset_mlt + 2 * sps->temp_offset;
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = *tset_mlt + 2 * sps->temp_offset;
+           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (thlt >= *tset_hlt) // HLT TEMP is OK
            {
               vol->Vhlt_old  = vol->Vhlt; // remember old value
@@ -949,8 +961,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // the pump with water for a minute, then goto S02_FILL_MLT
       //---------------------------------------------------------------------------
       case S14_PUMP_PREFILL:
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = *tset_mlt + 2 * sps->temp_offset;
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = *tset_mlt + 2 * sps->temp_offset;
+           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (++std->timer3 >= TMR_PREFILL_PUMP) // Stay-here timer timeout?
            {
               std->ebrew_std = S02_FILL_MLT;
@@ -962,8 +975,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // - If Vmlt > dough-in volume, goto S03_MASH_IN_PROGRESS
       //---------------------------------------------------------------------------
       case S02_FILL_MLT:
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = *tset_mlt + 2 * sps->temp_offset;
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = *tset_mlt + 2 * sps->temp_offset;
+           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (vol->Vmlt >= sps->mash_vol)
            {
               std->ebrew_std = S03_WAIT_FOR_MLT_TEMP;
@@ -978,8 +992,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       case S03_WAIT_FOR_MLT_TEMP:
            // Add double offset as long as Tmlt < Tset_mlt + Offset2
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = *tset_mlt + 2 * sps->temp_offset;
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = *tset_mlt + 2 * sps->temp_offset;
+           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (tmlt >= ms[std->ms_idx].temp + sps->temp_offset2)
            {  // Tmlt has reached Tset_mlt + Offset2, start mash timer
               if (std->ms_idx == 0)
@@ -1018,8 +1033,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       case S04_MASH_TIMER_RUNNING:
            ms[std->ms_idx].timer++; // increment mash timer
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = *tset_mlt + sps->temp_offset;  // Single offset
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = *tset_mlt + sps->temp_offset;  // Single offset
+           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (std->ms_idx < std->ms_tot - 1)
            {
               // There's next mash phase
@@ -1050,8 +1066,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       case S13_MASH_PREHEAT_HLT:
            ms[std->ms_idx].timer++; // increment mash timer
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = ms[std->ms_idx + 1].temp + 2 * sps->temp_offset;
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = ms[std->ms_idx + 1].temp + 2 * sps->temp_offset;
+           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (ms[std->ms_idx].timer >= ms[std->ms_idx].time) // time-out?
            {
               std->ms_idx++; // increment index in mash scheme
@@ -1069,8 +1086,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       case S18_MASH_REST_5_MIN:
            ms[std->ms_idx].timer++; // increment mash timer
            std->mrest_tmr++;        // increment mash-rest timer
-           *tset_mlt = ms[std->ms_idx].temp;
-           *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
+           *tset_mlt  = ms[std->ms_idx].temp;
+           *tset_hlt  = *tset_mlt + sps->temp_offset; // Single offset
+           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (std->ms_idx < std->ms_tot - 1)
            {
               // There's a next mash phase
@@ -1107,6 +1125,11 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       case S05_SPARGE_TIMER_RUNNING:
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
+           if (tboil > 60.0)
+           {  // There is sufficient wort in the Boil-Kettle
+              *tset_boil = sps->sp_preboil; // PreBoil Temperature Setpoint
+              sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
+           }
            if (++std->timer1 >= sps->sp_time_ticks)
            {
               vol->Vmlt_old  = vol->Vmlt;  // save Vmlt for state 6 & 9
@@ -1174,7 +1197,9 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       case S09_EMPTY_MLT:
            *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = 0.0; // disable heating element
+           *tset_hlt  = 0.0;          // Disable HLT PID-Controller
+           *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
+           sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
            vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            if (flow_rate_low(vol->Flow_rate_mlt_boil))
            //if (vol->Vmlt < sps->vmlt_empty)
@@ -1189,6 +1214,8 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       case S10_WAIT_FOR_BOIL:
            *tset_hlt  = 0.0; // disable heating element
+           *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
+           sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
            if (ui & UI_BOILING_STARTED)
            {
               std->timer5    = 0; // init. timer for boiling time
@@ -1199,6 +1226,8 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // S11_BOILING: Boiling has started, remain here for BOIL_TIME minutes
       //---------------------------------------------------------------------------
       case S11_BOILING:
+           *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
+           sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
            if (++std->timer5 >= sps->boil_time_ticks)
            {
               std->ebrew_std = S12_BOILING_FINISHED;
@@ -1207,8 +1236,12 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       //---------------------------------------------------------------------------
       // S12_BOILING_FINISHED: Boiling has finished, remain here until the user
       // has set up everything for chilling, then goto S15_CHILL_PUMP_FERMENTOR
+      // Continu with boiling in this state, so that the brewer can manually control
+      // a longer boiling time, to achieve final gravity of the wort.
       //---------------------------------------------------------------------------
       case S12_BOILING_FINISHED:
+           *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
+           sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
            if (ui & UI_START_CHILLING)
            {
               std->ebrew_std = S16_CHILL_PUMP_FERMENTOR;
@@ -1219,6 +1252,8 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // chiller and directly into the fermentation bin.
       //---------------------------------------------------------------------------
       case S16_CHILL_PUMP_FERMENTOR:
+           *tset_boil = 0.0;  // Boil Temperature Setpoint
+           sps->pid_ctrl_boil_on = 0; // Disable PID-Controller for Boil-Kettle
            if (ui & UI_CHILLING_FINISHED)
            {
               std->ebrew_std = S17_FINISHED;
@@ -1229,6 +1264,8 @@ int update_std(volume_struct *vol, double tmlt, double thlt, double *tset_mlt,
       // session is finished. This is the end-state.
       //---------------------------------------------------------------------------
       case S17_FINISHED:
+           *tset_boil = 0.0;  // Boil Temperature Setpoint
+           sps->pid_ctrl_boil_on = 0; // Disable PID-Controller for Boil-Kettle
            // Remain in this state until Program Exit.
            break;
       default:

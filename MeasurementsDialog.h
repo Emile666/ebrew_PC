@@ -5,6 +5,14 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2015/12/13 14:20:26  Emile
+// - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
+// - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
+//   CB_Mash_Rest. New state 18 'Mast Rest (10 minutes)' added to STD.
+// - Pump and Valves are now all off in state 'Add Malt to MLT'.
+// - Statusbar now also shows mash and sparge litres (valves indicators removed).
+// - Auto-All option added to set all valves and the pump to Auto when 'A' pressed.
+//
 // Revision 1.7  2015/06/05 19:18:40  Emile
 // - STD optimized for new solenoid valves. User Interaction dialog added
 // - Calibration & Temp. correction added for flowsensors
@@ -89,41 +97,32 @@ __published:	// IDE-managed Components
         TButton *Button1;
         TButton *Button2;
         TButton *Help_Button;
-        TCheckBox *Use_Flowsensors;
         TLabel *Label8;
         TEdit *Vhlt_Max_Edit;
         TLabel *Label1;
         TLabel *Label2;
-        TLabel *Label5;
-        TLabel *Label6;
-        TLabel *Label9;
-        TLabel *Label12;
-        TEdit *Thlt_Offset_Edit;
         TLabel *Label13;
         TEdit *Tmlt_Offset_Edit;
         TLabel *Label17;
         TEdit *Vmlt_Max_Edit;
-        TLabel *Label18;
-        TEdit *Vmlt_Offset_Edit;
-        TLabel *Label19;
-        TEdit *Vhlt_Offset_Edit;
-        TLabel *Label7;
-        TLabel *Label22;
-        TEdit *Thlt_Slope_Edit;
-        TEdit *Tmlt_Slope_Edit;
-        TLabel *Label23;
-        TEdit *Vhlt_Slope_Edit;
-        TLabel *Label24;
-        TEdit *Vmlt_Slope_Edit;
-        TLabel *Label3;
         TCheckBox *Flow_Temp_Corr;
         TLabel *Cal_Temp;
         TLabel *Label10;
         TLabel *Label11;
         TEdit *Flow1_Err;
         TEdit *Flow2_Err;
+        TEdit *Flow3_Err;
+        TEdit *Flow4_Err;
         TLabel *Label4;
         TEdit *Boil_Max_Edit;
+        TLabel *Label3;
+        TEdit *Thlt_Offset_Edit;
+        TLabel *Label5;
+        TLabel *Label6;
+        TLabel *Label7;
+        TEdit *Tcfc_Offset_Edit;
+        TLabel *Label9;
+        TEdit *Tboil_Offset_Edit;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

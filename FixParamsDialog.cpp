@@ -5,6 +5,15 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.9  2015/07/21 19:42:45  Emile
+// - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
+// - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
+// - Transition from 'Empty MLT' to 'Wait for Boil' now detected automatically with
+//   new function flow_rate_low().
+// - Registry vars VMLT_EMPTY, MASH_VOL and SPARGE_VOL removed.
+// - Functionality and Checkbox for 'Double initial Sparge Volume' added.
+// - Registry var CB_VSP2 added.
+//
 // Revision 1.8  2015/06/05 19:18:39  Emile
 // - STD optimized for new solenoid valves. User Interaction dialog added
 // - Calibration & Temp. correction added for flowsensors
@@ -189,35 +198,79 @@ void __fastcall TFix_Params::Help_ButtonClick(TObject *Sender)
 
 void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
 {
-      // Get Ref. Temp (Tset_hlt)
+      // HLT Setpoint Temperature
       MainForm->swfx.tset_hlt_sw = CB_Tset->Checked;
       if (MainForm->swfx.tset_hlt_sw)
       {
          MainForm->swfx.tset_hlt_fx = Tset_MEdit->Text.ToDouble();
       } // if
-      // Get PID Output (Gamma)
-      MainForm->swfx.gamma_sw = CB_Gamma->Checked;
-      if (MainForm->swfx.gamma_sw)
+      // Boil-Kettle Setpoint Temperature
+      MainForm->swfx.tset_boil_sw = CheckBox1->Checked;
+      if (MainForm->swfx.tset_boil_sw)
       {
-         MainForm->swfx.gamma_fx = Gamma_MEdit->Text.ToDouble();
+         MainForm->swfx.tset_boil_fx = MaskEdit1->Text.ToDouble();
       } // if
-      // Get Thlt
+      // Set Gamma HLT (PID Output)
+      MainForm->swfx.gamma_hlt_sw = CB_Gamma->Checked;
+      if (MainForm->swfx.gamma_hlt_sw)
+      {
+         MainForm->swfx.gamma_hlt_fx = Gamma_MEdit->Text.ToDouble();
+      } // if
+      // Set Gamma Boil-Kettle (PID Output)
+      MainForm->swfx.gamma_boil_sw = CheckBox2->Checked;
+      if (MainForm->swfx.gamma_boil_sw)
+      {
+         MainForm->swfx.gamma_boil_fx = MaskEdit2->Text.ToDouble();
+      } // if
+      //--------------------------------------------------------------
+      // Set HLT Temperature (Thlt)
       MainForm->swfx.thlt_sw = CB_Tad1->Checked;
       if (MainForm->swfx.thlt_sw)
       {
         MainForm->swfx.thlt_fx = Tad1_MEdit->Text.ToDouble();
       } // if
-      // Get Tmlt
+      // Set MLT Temperature (Tmlt)
       MainForm->swfx.tmlt_sw = CB_Tad2->Checked;
       if (MainForm->swfx.tmlt_sw)
       {
          MainForm->swfx.tmlt_fx = Tad2_MEdit->Text.ToDouble();
       } // if
-      // Get STD state
+      // Set Boil-Kettle Temperature (Tboil)
+      MainForm->swfx.tboil_sw = CheckBox3->Checked;
+      if (MainForm->swfx.tboil_sw)
+      {
+         MainForm->swfx.tboil_fx = MaskEdit3->Text.ToDouble();
+      } // if
+      // Set Triac Temperature (TTriac)
+      MainForm->swfx.ttriac_sw = CB_ttriac->Checked;
+      if (MainForm->swfx.ttriac_sw)
+      {
+         MainForm->swfx.ttriac_fx = Ttriac_MEdit->Text.ToDouble();
+      } // if
+      //--------------------------------------------------------------
+      // Set HLT Volume (Vhlt)
+      MainForm->swfx.vhlt_sw = CB_vhlt->Checked;
+      if (MainForm->swfx.vhlt_sw)
+      {
+         MainForm->swfx.vhlt_fx = Vhlt_MEdit->Text.ToDouble();
+      } // if
+      // Set MLT Volume (Vmlt)
+      MainForm->swfx.vmlt_sw = CB_vmlt->Checked;
+      if (MainForm->swfx.vmlt_sw)
+      {
+         MainForm->swfx.vmlt_fx = Vmlt_MEdit->Text.ToDouble();
+      } // if
+      // Set Boil-Kettle Volume (Vboil)
+      MainForm->swfx.vboil_sw = CheckBox4->Checked;
+      if (MainForm->swfx.vboil_sw)
+      {
+         MainForm->swfx.vboil_fx = MaskEdit4->Text.ToDouble();
+      } // if
+      // Set STD state
       MainForm->swfx.std_sw = CB_std->Checked;
       if (MainForm->swfx.std_sw)
       {
-         // Value must be between 0 and 13
+         // Value must be between 0 and 17
          MainForm->swfx.std_fx = STD_MEdit->Text.ToInt();
          if (MainForm->swfx.std_fx < 0 ||
              MainForm->swfx.std_fx > S17_FINISHED)
@@ -225,26 +278,30 @@ void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
             MainForm->swfx.std_fx = 0; // reset to a safe value
          }
       } // if
-      // Get Ttriac value
-      MainForm->swfx.ttriac_sw = CB_ttriac->Checked;
-      if (MainForm->swfx.ttriac_sw)
-      {
-         MainForm->swfx.ttriac_fx = Ttriac_MEdit->Text.ToDouble();
-      } // if
-      // Get Vhlt value
-      MainForm->swfx.vhlt_sw = CB_vhlt->Checked;
-      if (MainForm->swfx.vhlt_sw)
-      {
-         MainForm->swfx.vhlt_fx = Vhlt_MEdit->Text.ToDouble();
-      } // if
-      // Get Vmlt value
-      MainForm->swfx.vmlt_sw = CB_vmlt->Checked;
-      if (MainForm->swfx.vmlt_sw)
-      {
-         MainForm->swfx.vmlt_fx = Vmlt_MEdit->Text.ToDouble();
-      } // if
 } // TFix_Params::Apply_ButtonClick()
 //---------------------------------------------------------------------------
 
+void __fastcall TFix_Params::CheckBox1Click(TObject *Sender)
+{
+   MaskEdit1->Enabled = CheckBox1->Checked;
+}
+//---------------------------------------------------------------------------
 
+void __fastcall TFix_Params::CheckBox2Click(TObject *Sender)
+{
+   MaskEdit2->Enabled = CheckBox2->Checked;        
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TFix_Params::CheckBox3Click(TObject *Sender)
+{
+   MaskEdit3->Enabled = CheckBox3->Checked;        
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TFix_Params::CheckBox4Click(TObject *Sender)
+{
+   MaskEdit4->Enabled = CheckBox4->Checked;
+}
+//---------------------------------------------------------------------------
 
