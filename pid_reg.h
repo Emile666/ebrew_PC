@@ -5,6 +5,13 @@
   Purpose : This file contains the defines for the PID controller.
   ------------------------------------------------------------------
   $Log$
+  Revision 1.14  2016/04/09 12:58:50  Emile
+  - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+    and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+    parameters and scheduler/tasks.
+  - Only 6 parameters left to send to HW. In line with firmware R1.23.
+  - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+
   Revision 1.13  2013/07/24 14:00:00  Emile
   - Version ready for Integration Testing with Ebrew HW R1.07!
   - Writing parameters to Ebrew HW now works with new task writing_pars
@@ -110,15 +117,8 @@
 extern "C" {
 #endif
 
-// These defines are needed for loop timing and PID controller timing
-#define SIXTY_SECONDS (1200)
-#define TEN_SECONDS    (200)
-#define FIVE_SECONDS   (100)
-#define ONE_SECOND      (20)
-// Period time of TTimer in msec.
-#define T_50MSEC        (50)
-#define PI             (3.141592654)
-#define NODF            (1)
+#define PI    (3.141592654)
+#define NODF  (1)
 
 // PID controller upper & lower limit [%]
 #define GMA_HLIM (100.0)
@@ -141,11 +141,15 @@ typedef struct _pid_params
    double k3; // k3 value for PID controller
    double lpf1; // value for LPF filter
    double lpf2; // value for LPF filter
-   int    ts_ticks;  // ticks for timer
+   double lpf_1; // LPF output[k-1]
+   double lpf_2; // LPF output[k-2]
    int    pid_model; // PID Controller type [0..3]
    double pp; // debug
    double pi; // debug
    double pd; // debug
+   double xk_1; // x[k-1]
+   double xk_2; // x[k-2]
+   double ek_1; // e[k-1]
 } pid_params; // struct pid_params
 
 //------------------------------------------------------------------

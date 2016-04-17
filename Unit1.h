@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.50  2016/04/09 12:58:50  Emile
+// - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+//   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+//   parameters and scheduler/tasks.
+// - Only 6 parameters left to send to HW. In line with firmware R1.23.
+// - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+//
 // Revision 1.49  2016/01/24 19:36:55  Emile
 // - Valves and Pump now show colours: RED (on) and GREEN (off)
 // - Pipes are now highlighted to show actual direction of fluid movement
@@ -444,7 +451,7 @@
 // MAX_READ_RETRIES * (WR2RD_SLEEP_TIME + WAIT_READ_TIMEOUT).
 //-----------------------------------------------------------
 #define MAX_READ_RETRIES     (2)
-#define WAIT_READ_TIMEOUT    (30)
+#define WAIT_READ_TIMEOUT    (40)
 #define MAX_BUF_WRITE        (255)
 #define MAX_BUF_READ         (255)
 #define COM_PORT_DEBUG_FNAME "_com_port_dbg.txt"
@@ -515,7 +522,7 @@ __published:	// IDE-managed Components
         TLabel *V6;
         TLabel *V7;
         TLabel *Std_State;
-        TAnimTimer *T50msec;
+        TAnimTimer *T100msec;
         TMenuItem *MenuViewMash_progress;
         TMenuItem *MenuOptionsI2CSettings;
         TMenuItem *SpargeSettings1;
@@ -582,7 +589,7 @@ __published:	// IDE-managed Components
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
         void __fastcall MenuOptionsI2CSettingsClick(TObject *Sender);
         void __fastcall MenuHelpAboutClick(TObject *Sender);
-        void __fastcall T50msecTimer(TObject *Sender);
+        void __fastcall T100msecTimer(TObject *Sender);
         void __fastcall MenuEditMashSchemeClick(TObject *Sender);
         void __fastcall MenuViewMash_progressClick(TObject *Sender);
         void __fastcall SpargeSettings1Click(TObject *Sender);

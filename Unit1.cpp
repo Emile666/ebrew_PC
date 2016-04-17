@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.80  2016/04/09 12:58:50  Emile
+// - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+//   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+//   parameters and scheduler/tasks.
+// - Only 6 parameters left to send to HW. In line with firmware R1.23.
+// - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+//
 // Revision 1.79  2016/01/24 19:36:55  Emile
 // - Valves and Pump now show colours: RED (on) and GREEN (off)
 // - Pipes are now highlighted to show actual direction of fluid movement
@@ -552,28 +559,42 @@ COMMTIMEOUTS ctmoNew = {0}, ctmoOld;
 FILE         *fdbg_com; // COM-port debug file-descriptor
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read LM35 temperature from Ebrew hardware. Typically
-               this is the temperature inside the Ebrew hardware and is coupled
-               to the Triac Temp. The check for overtemp. is also done here.
+  Purpose    : TASK: Read all 5 Temperature values from hardware
   Period-Time: 2 seconds
   Variables: -
   Returns  : -
   ---------------------------------------------------------------------------*/
-void task_read_lm35(void)
+void task_read_temps(void)
 {
     char       s[MAX_BUF_READ];
-    const char s_exp[] = "Lm35=";
+    const char s_exp[] = "T=";
     int        x = 0;
+    bool       str_ok;
+    char       *p;
+    double     temp1, temp2, temp3, temp4, temp5;
 
-    MainForm->comm_port_write("A0\n"); // A0 = LM35
+    MainForm->comm_port_write("A0\n"); // A0 = Read All Temperatures
     do
     {
-        MainForm->comm_port_read(s); // Read LM35 Volume from Ebrew hardware
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if (!strncmp(s,s_exp,5)) MainForm->Ttriac_lbl->Font->Color = clLime;
-    else                     MainForm->Ttriac_lbl->Font->Color = clRed;
-    MainForm->ttriac  = atof(&s[5]);
+        MainForm->comm_port_read(s); // Read Temperatures from Ebrew hardware
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,2));
+    // Check string received for header and length "T=0.00,0.00,0.00,0.00,0.00"
+    if ((!strncmp(s,s_exp,2)) && (strlen(s) >= 26)) str_ok = true;
+    if (str_ok)
+    {
+        p = strtok(&s[2],","); temp1 = atof(p); // Ttriac
+        p = strtok(NULL ,","); temp2 = atof(p); // Thlt
+        p = strtok(NULL ,","); temp3 = atof(p); // Tmlt
+        p = strtok(NULL ,","); temp4 = atof(p); // Tboil
+        p = strtok(NULL ,","); temp5 = atof(p); // Tcfc
+    } // if
+    //------------------ TEMP1 (LM35) -----------------------------------------
+    if (str_ok)
+    {
+         MainForm->Ttriac_lbl->Font->Color = clLime;
+         MainForm->ttriac = temp1; // Update Ttriac with new value
+    }
+    else MainForm->Ttriac_lbl->Font->Color = clRed;
     if (MainForm->swfx.ttriac_sw)
     {  // Switch & Fix
        MainForm->ttriac = MainForm->swfx.ttriac_fx;
@@ -589,157 +610,87 @@ void task_read_lm35(void)
     { // set if temp. >= upper-limit
       MainForm->triac_too_hot = (MainForm->ttriac >= MainForm->ttriac_hlim);
     } // else
-} // task_read_lm35()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read THLT (HLT Temperature) from Ebrew hardware
-  Period-Time: 2 seconds
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_thlt(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Thlt=";
-    double     temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A1\n"); // A1 = THLT
-    do
-    {
-        MainForm->comm_port_read(s); // Read HLT temp. from LM92 device
-        temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
+    //------------------ TEMP2 (THLT) -----------------------------------------
+    if (str_ok && (temp2 < 99.9))
     {
          MainForm->Val_Thlt->Font->Color = clLime;
-         MainForm->thlt = temp; // update THLT with new value
+         MainForm->thlt = temp2; // update THLT with new value
     } // if
     else MainForm->Val_Thlt->Font->Color = clRed; // + do NOT update THLT
     if (MainForm->swfx.thlt_sw)
     {  // Switch & Fix
        MainForm->thlt = (double)(MainForm->swfx.thlt_fx);
     } // if
-} // task_read_thlt()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read TMLT (MLT Temperature) from Ebrew hardware
-  Period-Time: 2 seconds
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_tmlt(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Tmlt=";
-    double     temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A2\n"); // A2 = TMLT
-    do
-    {
-        MainForm->comm_port_read(s); // Read MLT temp. from LM92 device
-        temp = atof(&s[5]);          // Equals 99.99 in case of i2c HW error
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
+    //------------------ TEMP3 (TMLT) -----------------------------------------
+    if (str_ok && (temp3 < 99.9))
     {
          MainForm->Val_Tmlt->Font->Color = clLime;
-         MainForm->tmlt = temp; // update TMLT with new value
+         MainForm->tmlt = temp3; // update TMLT with new value
     }
     else MainForm->Val_Tmlt->Font->Color = clRed;
     if (MainForm->swfx.tmlt_sw)
     {  // Switch & Fix
        MainForm->tmlt = (double)(MainForm->swfx.tmlt_fx);
     } // if
-} // task_read_tmlt()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read TBoil (Boil-Kettle Temperature) from Ebrew hardware
-  Period-Time: 2 seconds
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_tboil(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Tboil=";
-    double     temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A3\n"); // A3 = TBOIL
-    do
-    {
-        MainForm->comm_port_read(s); // Read MLT temp. from One-Wire device
-        temp = atof(&s[5]);          // Equals 99.99 in case of HW error
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if ((!strncmp(s,s_exp,6)) && (temp < 99.9))
+    //------------------ TEMP4 (TBOIL) ----------------------------------------
+    if (str_ok && (temp4 < 99.9))
     {
          MainForm->Temp_Boil->Font->Color = clLime;
-         MainForm->tboil = temp; // update TBOIL with new value
+         MainForm->tboil = temp4; // update TBOIL with new value
     }
     else MainForm->Temp_Boil->Font->Color = clRed;
     if (MainForm->swfx.tboil_sw)
     {  // Switch & Fix
        MainForm->tboil = (double)(MainForm->swfx.tboil_fx);
     } // if
-} // task_read_tboil()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read TCFC (CFC-Output Temperature) from Ebrew hardware
-  Period-Time: 2 seconds
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_read_tcfc(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Tcfc=";
-    double     temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A4\n"); // A4 = TCFC
-    do
-    {
-        MainForm->comm_port_read(s); // Read MLT temp. from One-Wire device
-        temp = atof(&s[5]);          // Equals 99.99 in case of HW error
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,5));
-
-    if ((!strncmp(s,s_exp,5)) && (temp < 99.9))
+    //------------------ TEMP5 (TCFC) -----------------------------------------
+    if (str_ok && (temp5 < 99.9))
     {
          MainForm->Temp_CFC->Font->Color = clLime;
-         MainForm->tcfc = temp; // update TCFC with new value
+         MainForm->tcfc = temp5; // update TCFC with new value
     }
     else MainForm->Temp_CFC->Font->Color = clRed;
     // No switch/fix needed for TCFC
-} // task_read_tcfc()
+} // task_read_temps()
 
 /*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read flowsensor 1 value between HLT and MLT
+  Purpose    : TASK: Read all 4 flowsensor values from hardware
   Period-Time: 2 seconds
   Variables  : -
   Returns    : -
   ---------------------------------------------------------------------------*/
-void task_flow_hlt_mlt(void)
+void task_read_flows(void)
 {
     char       s[MAX_BUF_READ];
-    const char s_exp[] = "Flow1=";
+    const char s_exp[] = "F=";
     double     err, temp;
     int        x = 0;
+    char       *p;
+    bool       str_ok = false;
 
-    MainForm->comm_port_write("A5\n"); // A5 = Flowsensor between HLT and MLT
+    MainForm->comm_port_write("A9\n"); // A9 = Read all Flowsensor values
     do
     {
         MainForm->comm_port_read(s); // Read flowsensor
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
-
-    if (!strncmp(s,s_exp,6)) MainForm->Flow1_hlt_mlt->Font->Color = clLime;
-    else                     MainForm->Flow1_hlt_mlt->Font->Color = clRed;
-    MainForm->volumes.Flow_hlt_mlt_old = MainForm->volumes.Flow_hlt_mlt;
-    MainForm->volumes.Flow_hlt_mlt     = atof(&s[6]);
-    if (MainForm->flow_temp_corr)
+    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,2));
+    // Check string received for header and length "F=0.00,0.00,0.00,0.00"
+    if ((!strncmp(s,s_exp,2)) && (strlen(s) >= 21)) str_ok = true;
+    MainForm->volumes.Flow_hlt_mlt_old  = MainForm->volumes.Flow_hlt_mlt;
+    MainForm->volumes.Flow_mlt_boil_old = MainForm->volumes.Flow_mlt_boil;
+    MainForm->volumes.Flow_cfc_out_old  = MainForm->volumes.Flow_cfc_out;
+    MainForm->volumes.Flow4_old         = MainForm->volumes.Flow4;
+    if (str_ok)
+    {
+        p = strtok(&s[2],","); MainForm->volumes.Flow_hlt_mlt  = atof(p);
+        p = strtok(NULL ,","); MainForm->volumes.Flow_mlt_boil = atof(p);
+        p = strtok(NULL ,","); MainForm->volumes.Flow_cfc_out  = atof(p);
+        p = strtok(NULL ,","); MainForm->volumes.Flow4         = atof(p);
+    } // if
+    //------------------ FLOW1 ------------------------------------------------
+    if (str_ok && (MainForm->volumes.Flow_hlt_mlt < 99.9))
+         MainForm->Flow1_hlt_mlt->Font->Color = clLime;
+    else MainForm->Flow1_hlt_mlt->Font->Color = clRed;
+    if ((MainForm->flow_temp_corr) && (MainForm->thlt < 99.9))
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->thlt - 20.0));
         MainForm->volumes.Flow_hlt_mlt /= err;
@@ -755,32 +706,11 @@ void task_flow_hlt_mlt(void)
     {  // Switch & Fix
        MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
     } // if
-} // task_flow_hlt_mlt()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read flowsensor 2 value between MLT and Boil-kettle
-  Period-Time: 2 seconds
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_flow_mlt_boil(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Flow2=";
-    double     err, temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A6\n"); // A6 = Flowsensor between MLT and Boil kettle
-    do
-    {
-        MainForm->comm_port_read(s); // Read flowsensor
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
-
-    if (!strncmp(s,s_exp,6)) MainForm->Flow2_mlt_boil->Font->Color = clLime;
-    else                     MainForm->Flow2_mlt_boil->Font->Color = clRed;
-    MainForm->volumes.Flow_mlt_boil_old = MainForm->volumes.Flow_mlt_boil;
-    MainForm->volumes.Flow_mlt_boil = atof(&s[6]);
-    if (MainForm->flow_temp_corr)
+    //------------------ FLOW2 ------------------------------------------------
+    if (str_ok && (MainForm->volumes.Flow_mlt_boil < 99.9))
+         MainForm->Flow2_mlt_boil->Font->Color = clLime;
+    else MainForm->Flow2_mlt_boil->Font->Color = clRed;
+    if ((MainForm->flow_temp_corr) && (MainForm->tmlt < 99.9))
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->tmlt - 20.0));
         MainForm->volumes.Flow_mlt_boil /= err;
@@ -797,32 +727,11 @@ void task_flow_mlt_boil(void)
     {  // Switch & Fix
        MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
     } // if
-} // task_flow_mlt_boil()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read flowsensor 3 value at CFC-output
-  Period-Time: 2 seconds
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_flow_cfc(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Flow3=";
-    double     err, temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A7\n"); // A7 = Flowsensor at CFC-output
-    do
-    {
-        MainForm->comm_port_read(s); // Read flowsensor
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
-
-    if (!strncmp(s,s_exp,6)) MainForm->Flow3_cfc->Font->Color = clLime;
-    else                     MainForm->Flow3_cfc->Font->Color = clRed;
-    MainForm->volumes.Flow_cfc_out_old = MainForm->volumes.Flow_cfc_out;
-    MainForm->volumes.Flow_cfc_out = atof(&s[6]);
-    if (MainForm->flow_temp_corr)
+    //------------------ FLOW3 ------------------------------------------------
+    if (str_ok && (MainForm->volumes.Flow_cfc_out < 99.9))
+         MainForm->Flow3_cfc->Font->Color = clLime;
+    else MainForm->Flow3_cfc->Font->Color = clRed;
+    if ((MainForm->flow_temp_corr) && (MainForm->tcfc < 99.9))
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->tcfc - 20.0));
         MainForm->volumes.Flow_cfc_out /= err;
@@ -839,32 +748,11 @@ void task_flow_cfc(void)
     {  // Switch & Fix
        MainForm->volumes.Vboil = MainForm->swfx.vboil_fx;
     } // if
-} // task_flow_cfc()
-
-/*-----------------------------------------------------------------------------
-  Purpose    : TASK: Read flowsensor 4 value
-  Period-Time: 2 seconds
-  Variables  : -
-  Returns    : -
-  ---------------------------------------------------------------------------*/
-void task_flow4(void)
-{
-    char       s[MAX_BUF_READ];
-    const char s_exp[] = "Flow4=";
-    double     err, temp;
-    int        x = 0;
-
-    MainForm->comm_port_write("A8\n"); // A8 = Flowsensor 4
-    do
-    {
-        MainForm->comm_port_read(s); // Read flowsensor
-    } while ((++x < MAX_READ_RETRIES) && strncmp(s,s_exp,6));
-
-    if (!strncmp(s,s_exp,6)) MainForm->Flow4->Font->Color = clLime;
-    else                     MainForm->Flow4->Font->Color = clRed;
-    MainForm->volumes.Flow4_old = MainForm->volumes.Flow4;
-    MainForm->volumes.Flow4 = atof(&s[6]);
-    if (MainForm->flow_temp_corr)
+    //------------------ FLOW4 ------------------------------------------------
+    if (str_ok && (MainForm->volumes.Flow4 < 99.9))
+         MainForm->Flow4->Font->Color = clLime;
+    else MainForm->Flow4->Font->Color = clRed;
+    if ((MainForm->flow_temp_corr) && (MainForm->tmlt < 99.9))
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->tmlt - 20.0));
         MainForm->volumes.Flow4 /= err;
@@ -874,7 +762,7 @@ void task_flow4(void)
     // Calculate Flow-rate in L per minute
     temp = 30.0 * (MainForm->volumes.Flow4 - MainForm->volumes.Flow4_old);
     MainForm->volumes.Flow_rate4 = moving_average(&MainForm->flow4_ma,temp);
-} // task_flow4()
+} // task_read_flows()
 
 /*-----------------------------------------------------------------------------
   Purpose    : TASK: Run PID Controller and generate Gamma value [0%..100%]
@@ -918,8 +806,11 @@ void task_pid_ctrl(void)
     {
        MainForm->gamma_hlt = MainForm->swfx.gamma_hlt_fx; // fix gamma for HLT
     } // if
+    sprintf(s,"H%d\n", (int)(MainForm->gamma_hlt)); // PID-Output [0%..100%]
+    MainForm->comm_port_write(s); // output Hxxx to Ebrew hardware
+
     //----------------------------------------------------------------------
-    // PID-Controller for Boil-Kettle: only use Takahashi type C 
+    // PID-Controller for Boil-Kettle: only use Takahashi type C
     //----------------------------------------------------------------------
     pid_reg4(MainForm->tboil, &MainForm->gamma_boil, MainForm->tset_boil,
              &MainForm->pid_pars_boil, MainForm->sp.pid_ctrl_boil_on);
@@ -927,12 +818,8 @@ void task_pid_ctrl(void)
     {
        MainForm->gamma_boil = MainForm->swfx.gamma_boil_fx; // fix gamma for Boil-Kettle
     } // if
-    //--------------------------------------------------------------------
-    // Now write PID-output (Gamma) as a PWM signal to the Ebrew hardware.
-    // This is relevant only when the Modulating Gas-Burner is selected.
-    //--------------------------------------------------------------------
-    sprintf(s,"H%d\n", (int)(MainForm->gamma_hlt)); // PID-Output Gamma [0%..100%]
-    MainForm->comm_port_write(s); // output to Ebrew hardware
+    sprintf(s,"B%d\n", (int)(MainForm->gamma_boil)); // PID-Output [0%..100%]
+    MainForm->comm_port_write(s); // output Bxxx to Ebrew hardware
 } // task_pid_ctrl()
 
 /*-----------------------------------------------------------------------------
@@ -986,7 +873,7 @@ void task_update_std(void)
     // NOTE: The pump bit is sent using the P0/P1 command
     //-----------------------------------------------------------------
     sprintf(s,"V%d\n",(MainForm->std_out & 0x00FE)>>1); // Output valves except Pump (bit 0)
-    MainForm->comm_port_write(s); // output to Ebrew hardware
+    MainForm->comm_port_write(s); // output Vxxx to Ebrew hardware
 
     //--------------------------------------------
     // Send Pump On/Off signal to ebrew hardware.
@@ -999,7 +886,7 @@ void task_update_std(void)
     {    // New PUMP bit should be 0
          strcpy(s,"P0\n");
     } // else
-    MainForm->comm_port_write(s); // Send command to ebrew hardware
+    MainForm->comm_port_write(s); // Send P1/P0 command to ebrew hardware
 } // task_update_std()
 
 /*-----------------------------------------------------------------------------
@@ -1019,7 +906,7 @@ void task_alive_led(void)
         strcpy(s,"L1\n");
    else strcpy(s,"L0\n");
    MainForm->toggle_led = !(MainForm->toggle_led);
-   MainForm->comm_port_write(s); // Send command to ebrew hardware
+   MainForm->comm_port_write(s); // Send L1/L0 command to ebrew hardware
 } // task_alive_led()
 
 /*-----------------------------------------------------------------------------
@@ -1087,7 +974,7 @@ void task_write_pars(void)
    } // for
    if (strlen(s) > 0)
    {
-      MainForm->comm_port_write(s); // Send command to ebrew hardware
+      MainForm->comm_port_write(s); // Send Nxx yy command to ebrew hardware
    } // if
 } // task_write_pars()
 
@@ -1629,23 +1516,14 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-----------------------------------------
    // Now add all the tasks for the scheduler
    //-----------------------------------------
-   add_task(task_read_thlt     , "read_thlt"    ,   0, 2000);
-   add_task(task_read_tmlt     , "read_tmlt"    ,  90, 2000);
-   add_task(task_read_tboil    , "read_tboil"   , 180, 2000);
-   add_task(task_read_tcfc     , "read_tcfc"    , 270, 2000);
-   add_task(task_flow_hlt_mlt  , "flow_hlt_mlt" , 360, 2000);
-
-   add_task(task_pid_ctrl      , "pid_control"  , 450, (uint16_t)(pid_pars_hlt.ts * 1000));
-   add_task(task_alive_led     , "alive_led"    , 470,  500); /* 470, 970, 1470, 1970 */
-   add_task(task_update_std    , "update_std"   , 490, 1000); /* 490, 1490 */
-   add_task(task_log_file      , "wr_log_file"  , 520, 5000);
-   add_task(task_write_pars    , "write_pars"   , 540, 5000);
-   add_task(task_hw_debug      , "hw_debug"     , 600, 1000); /* 600, 1600 */
-
-   add_task(task_flow_mlt_boil , "flow_mlt_boil",1000, 2000);
-   add_task(task_flow_cfc      , "flow_cfc"     ,1100, 2000);
-   add_task(task_flow4         , "flow4"        ,1200, 2000);
-   add_task(task_read_lm35     , "read_lm35"    ,1300, 2000);
+   add_task(task_alive_led     , "alive_led"    ,   0,  500); /* 0, 500, 1000, 1500 */
+   add_task(task_read_temps    , "read_temps"   , 100, 2000);
+   add_task(task_pid_ctrl      , "pid_control"  , 300, (uint16_t)(pid_pars_hlt.ts * 1000));
+   add_task(task_update_std    , "update_std"   , 400, 1000); /* 400, 1400 */
+   add_task(task_hw_debug      , "hw_debug"     , 600, 2000);
+   add_task(task_read_flows    , "read_flows"   ,1100, 2000);
+   add_task(task_log_file      , "wr_log_file"  ,1600, 5000);
+   add_task(task_write_pars    , "write_pars"   ,1700, 5000);
 
    init_ma(&MainForm->flow1_ma,10,0.0); // init moving_average filter for flowrate
    init_ma(&MainForm->flow2_ma,10,0.0); // init moving_average filter for flowrate
@@ -1722,10 +1600,10 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //----------------------------------
    // We came all the way! Start Timers
    //----------------------------------
-   if (T50msec)
+   if (T100msec)
    {
-      T50msec->Interval = (int)(1000 / TICKS_PER_SEC); /* scheduler.h */
-      T50msec->Enabled  = true; // start Interrupt Timer
+      T100msec->Interval = (int)(1000 / TICKS_PER_SEC); /* scheduler.h */
+      T100msec->Enabled  = true; // start Interrupt Timer
    } // if
    if (ViewMashProgress) ViewMashProgress->UpdateTimer->Enabled = true; // Start Mash Progress Update timer
    PID_Ctrl->Enabled = true;
@@ -1798,10 +1676,10 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
              of the task-scheduler.
   Returns  : None
   ------------------------------------------------------------------*/
-void __fastcall TMainForm::T50msecTimer(TObject *Sender)
+void __fastcall TMainForm::T100msecTimer(TObject *Sender)
 {
    scheduler_isr(); // Scheduler for all tasks
-} // TMainForm::T50msecTimer()
+} // TMainForm::T100msecTimer()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Restore_Settings(void)
@@ -2388,7 +2266,7 @@ void __fastcall TMainForm::exit_ebrew(void)
 {
    TRegistry *Reg = new TRegistry();
 
-   if (T50msec) T50msec->Enabled = false; // Disable Interrupt Timer
+   if (T100msec) T100msec->Enabled = false; // Disable Interrupt Timer
    if (ViewMashProgress)
    {
       ViewMashProgress->UpdateTimer->Enabled = false; // Stop Mash Progress Update timer

@@ -15,6 +15,13 @@
             Ts: The sample period [seconds]
   ------------------------------------------------------------------
   $Log$
+  Revision 1.12  2016/04/09 12:58:50  Emile
+  - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+    and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+    parameters and scheduler/tasks.
+  - Only 6 parameters left to send to HW. In line with firmware R1.23.
+  - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+
   Revision 1.11  2013/07/23 09:42:46  Emile
   - Fourth intermediate version: several Registry Settings added / removed.
   - Dialog Screens updated: better lay-out and matches new Registry Settings
@@ -86,15 +93,6 @@
 #include "pid_reg.h"
 #include "misc.h"
 #include <math.h>
-
-static double ek_1;  // e[k-1]  = SP[k-1] - PV[k-1] = Tset_hlt[k-1] - Thlt[k-1]
-//static double ek_2;  // e[k-2]  = SP[k-2] - PV[k-2] = Tset_hlt[k-2] - Thlt[k-2]
-static double xk_1;  // PV[k-1] = Thlt[k-1]
-static double xk_2;  // PV[k-2] = Thlt[k-1]
-//static double yk_1;  // y[k-1]  = Gamma[k-1]
-//static double yk_2;  // y[k-2]  = Gamma[k-1]
-static double lpf_1; // lpf[k-1] = LPF output[k-1]
-static double lpf_2; // lpf[k-2] = LPF output[k-2]
 
 // The following variables are needed for the system identification
 vector theta;    // parameter estimate vector {a1,a2,a3,b1,b2,b3}
@@ -193,15 +191,15 @@ void pid_reg2(double xk, double *yk, double tset, pid_params *p, int vrg,
       //
       // Use internal parameters Kc, Ki, Kd calc. from calc_pid_parameters()
       //--------------------------------------------------------------------------------
-      p->pp = psi->kc * (xk_1 - xk);              // Kc.(x[k-1]-x[k])
-      p->pi = psi->ki * (tset - xk);              // (Kc.Ts/Ti).e[k]
-      p->pd = psi->kd * (2.0 * xk_1 - xk - xk_2); // (Kc.Td/Ts).(2.x[k-1]-x[k]-x[k-2])
-      *yk  += p->pp + p->pi + p->pd;          // add y[k-1] + P, I & D actions to y[k]
+      p->pp = psi->kc * (p->xk_1 - xk);                 // Kc.(x[k-1]-x[k])
+      p->pi = psi->ki * (tset - xk);                    // (Kc.Ts/Ti).e[k]
+      p->pd = psi->kd * (2.0 * p->xk_1 - xk - p->xk_2); // (Kc.Td/Ts).(2.x[k-1]-x[k]-x[k-2])
+      *yk  += p->pp + p->pi + p->pd;                // add y[k-1] + P, I & D actions to y[k]
    }
    else { *yk = p->pp = p->pi = p->pd = 0.0; }
 
-   xk_2  = xk_1;
-   xk_1  = xk;    // PV[k-1] = PV[k]
+   p->xk_2  = p->xk_1;
+   p->xk_1  = xk;    // PV[k-1] = PV[k]
 
    // limit y[k] to GMA_HLIM and GMA_LLIM
    if (*yk > GMA_HLIM)
@@ -231,15 +229,10 @@ void init_pid3(pid_params *p)
              The parameters for lowpass-filtering of the D-action
              are also initialised here:
              lpf[k] = lpf1 * lpf[k-1] + lpf2 * lpf[k-2]
-             
+
   Returns  : No values are returned
   ------------------------------------------------------------------*/
 {
-   p->ts_ticks = (int)((p->ts * 1000.0) / T_50MSEC);
-   if (p->ts_ticks > SIXTY_SECONDS)
-   {
-      p->ts_ticks = SIXTY_SECONDS;
-   } // if
    if (p->ti == 0.0)
    {
       p->k0 = 0.0;
@@ -275,7 +268,7 @@ void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg)
    //--------------------------------------
    // Calculate Lowpass Filter for D-term
    //--------------------------------------
-   lpf = p->lpf1 * lpf_1 + p->lpf2 * (ek + ek_1);
+   lpf = p->lpf1 * p->lpf_1 + p->lpf2 * (ek + p->ek_1);
 
    if (vrg)
    {
@@ -289,16 +282,16 @@ void pid_reg3(double xk, double *yk, double tset, pid_params *p, int vrg)
       // lpf[k] is the lowpass filtered version of e[k]
       //
       //-----------------------------------------------------------------------------------
-      p->pp = p->kc * (ek - ek_1);                 // Kc.(e[k]-e[k-1])
+      p->pp = p->kc * (ek - p->ek_1);              // Kc.(e[k]-e[k-1])
       p->pi = p->k0 * ek;                          // (Kc.Ts/Ti).e[k]
-      p->pd = p->k1 * (lpf - 2.0 * lpf_1 + lpf_2); // (Kc.Td/Ts).(lpf[k]-2.lpf[k-1]+lpf[k-2])
+      p->pd = p->k1 * (lpf - 2.0 * p->lpf_1 + p->lpf_2); // (Kc.Td/Ts).(lpf[k]-2.lpf[k-1]+lpf[k-2])
       *yk  += p->pp + p->pi + p->pd;               // add y[k-1] + P, I & D actions to y[k]
    }
    else { *yk = p->pp = p->pi = p->pd = 0.0; }
 
-   ek_1  = ek;    // e[k-1] = e[k]
-   lpf_2 = lpf_1; // update stores for LPF
-   lpf_1 = lpf;
+   p->ek_1  = ek;       // e[k-1] = e[k]
+   p->lpf_2 = p->lpf_1; // update stores for LPF
+   p->lpf_1 = lpf;
 
    // limit y[k] to GMA_HLIM and GMA_LLIM
    if (*yk > GMA_HLIM)
@@ -324,7 +317,7 @@ void init_pid4(pid_params *p)
 
 void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
 /*------------------------------------------------------------------
-  Purpose  : This function implements the Takahashi Type C PID 
+  Purpose  : This function implements the Takahashi Type C PID
              controller: the P and D term are no longer dependent
              on the set-point, only on PV (which is Thlt).
              The D term is NOT low-pass filtered.
@@ -348,15 +341,15 @@ void pid_reg4(double xk, double *yk, double tset, pid_params *p, int vrg)
       //                                      Ti           Ts
       //
       //--------------------------------------------------------------------------------
-      p->pp = p->kc * (xk_1 - xk);              // Kc.(x[k-1]-x[k])
-      p->pi = p->k0 * (tset - xk);              // (Kc.Ts/Ti).e[k]
-      p->pd = p->k1 * (2.0 * xk_1 - xk - xk_2); // (Kc.Td/Ts).(2.x[k-1]-x[k]-x[k-2])
-      *yk  += p->pp + p->pi + p->pd;            // add y[k-1] + P, I & D actions to y[k]
+      p->pp = p->kc * (p->xk_1 - xk);                 // Kc.(x[k-1]-x[k])
+      p->pi = p->k0 * (tset - xk);                    // (Kc.Ts/Ti).e[k]
+      p->pd = p->k1 * (2.0 * p->xk_1 - xk - p->xk_2); // (Kc.Td/Ts).(2.x[k-1]-x[k]-x[k-2])
+      *yk  += p->pp + p->pi + p->pd;                  // add y[k-1] + P, I & D actions to y[k]
    } // if
    else { *yk = p->pp = p->pi = p->pd = 0.0; }
 
-   xk_2  = xk_1;  // x[k-2] = x[k-1]
-   xk_1  = xk;    // x[k-1] = x[k]
+   p->xk_2  = p->xk_1; // x[k-2] = x[k-1]
+   p->xk_1  = xk;      // x[k-1] = x[k]
 
    // limit y[k] to GMA_HLIM and GMA_LLIM
    if (*yk > GMA_HLIM)
