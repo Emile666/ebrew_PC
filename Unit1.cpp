@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.81  2016/04/17 13:00:54  Emile
+// - Version after Integration Testing. Works with firmware R1.26.
+// - Bug-fix PID-controller.
+// - Temps (A0) and Flows (A9) now combined instead of separate tasks.
+//
 // Revision 1.80  2016/04/09 12:58:50  Emile
 // - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
 //   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
@@ -569,7 +574,7 @@ void task_read_temps(void)
     char       s[MAX_BUF_READ];
     const char s_exp[] = "T=";
     int        x = 0;
-    bool       str_ok;
+    bool       str_ok = false;
     char       *p;
     double     temp1, temp2, temp3, temp4, temp5;
 
@@ -924,7 +929,7 @@ void task_log_file(void)
    {
       gettime(&t1);
       fprintf(fd,"%02d:%02d:%02d,",t1.ti_hour,t1.ti_min,t1.ti_sec);
-      fprintf(fd,"%6.2f,%6.2f,%6.2f,%6.2f,%5.1f,%6.1f,%2d,%2d,%3d, %5.1f,%6.1f\n",
+      fprintf(fd,"%5.2f,%5.2f,%5.2f,%5.2f,%4.1f,%5.1f,%1d,%1d,%2d,%5.1f,%5.1f,%5.1f,%5.1f,%4.1f,%5.1f\n",
                  MainForm->tset_mlt,
                  MainForm->tset_hlt,
                  MainForm->thlt,
@@ -935,7 +940,11 @@ void task_log_file(void)
                  MainForm->std.ms_idx,
                  MainForm->std.ebrew_std,
                  MainForm->gamma_hlt,
-                 MainForm->volumes.Vhlt);
+                 MainForm->volumes.Vhlt,
+                 MainForm->volumes.Vboil,
+                 MainForm->tboil,
+                 MainForm->tcfc,
+                 MainForm->gamma_boil);
       fclose(fd);
    } // if
 } // task_log_file()
@@ -988,6 +997,7 @@ void task_hw_debug(void)
 {
    FILE *fd;
    struct time t1;
+   struct date d1;
    char   s1[255];
    static time_slice = 0;
 
@@ -1007,7 +1017,9 @@ void task_hw_debug(void)
         {
           case 0: MainForm->comm_port_write("S1\n"); // List all parameters
                   gettime(&t1);
-                  fprintf(fd,"%02d:%02d:%02d\n",t1.ti_hour,t1.ti_min,t1.ti_sec);
+                  getdate(&d1);
+                  fprintf(fd,"%02d-%02d-%d, %02d:%02d:%02d\n",d1.da_day,d1.da_mon,
+                          d1.da_year,t1.ti_hour,t1.ti_min,t1.ti_sec);
                   list_all_tasks(fd); // print SW tasks (PC program)
                   MainForm->comm_port_read(s1);
                   fprintf(fd,"\n%s\n",s1);
@@ -1046,7 +1058,9 @@ void __fastcall TMainForm::comm_port_set_read_timeout(DWORD msec)
 {
      if (comm_channel_nr == 0) // Ethernet UDP
      {
-        //UDP_Server->ReceiveTimeout = msec;
+        UDP_Server->Active         = false;
+        UDP_Server->ReceiveTimeout = msec;
+        UDP_Server->Active         = true;
      } // if
      else
      {
@@ -1102,9 +1116,11 @@ void __fastcall TMainForm::comm_port_open(void)
    else
    {
         udp_read[0] = '\0';
-        UDP_Server->Active = true;
+        UDP_Server->Active = true; // Use OnUDPRead() to receive data
+        UDP_Client->Active = true; // Use Send() to send string
         com_port_is_open   = true;
    } // else
+   com_port_opened  = comm_channel_nr; // remember communication channel
    if ((fdbg_com = fopen(COM_PORT_DEBUG_FNAME,"a")) == NULL)
    {  // Open COM-port debugging file
       MessageBox(NULL,"Could not open COM-port debug log-file","Error during Initialisation",MB_OK);
@@ -1112,8 +1128,11 @@ void __fastcall TMainForm::comm_port_open(void)
    else if (cb_debug_com_port)
    {
       struct time t1;
+      struct date d1;
       gettime(&t1);
-      fprintf(fdbg_com,"\nFile opened (%02d:%02d:%02d)\n",t1.ti_hour,t1.ti_min,t1.ti_sec);
+      getdate(&d1);
+      fprintf(fdbg_com,"\nFile opened (%02d-%02d-%d, %02d:%02d:%02d)\n",
+                       d1.da_day,d1.da_mon,d1.da_year,t1.ti_hour,t1.ti_min,t1.ti_sec);
    } // else if
 } // comm_port_open()
 
@@ -1125,7 +1144,7 @@ void __fastcall TMainForm::comm_port_open(void)
   ---------------------------------------------------------------------------*/
 void __fastcall TMainForm::comm_port_close(void)
 {
-   if (comm_channel_nr > 0) // any of the USB Virtual COM ports
+   if (com_port_opened > 0) // any of the USB Virtual COM ports
    {
       PurgeComm(hComm, PURGE_RXABORT);
       SetCommTimeouts(hComm, &ctmoOld);
@@ -1134,6 +1153,7 @@ void __fastcall TMainForm::comm_port_close(void)
    if (cb_debug_com_port) fprintf(fdbg_com,"\nFile closed\n\n");
    fclose(fdbg_com);   // close COM-port debugging file
    UDP_Server->Active = false;
+   UDP_Client->Active = false;
    com_port_is_open   = false; // set flag to 'not open'
 } // comm_port_close()
 
@@ -1181,7 +1201,7 @@ void __fastcall TMainForm::comm_port_read(char *s)
          } // if
       } // if
       rbuf[j] = '\0';
-      fprintf(fdbg_com,"R%02d.%03d[%s]",t1.ti_sec,t1.ti_hund*10,rbuf);
+      fprintf(fdbg_com,"R%1d.%02d.%03d[%s]",comm_channel_nr,t1.ti_sec,t1.ti_hund*10,rbuf);
    } // if
 } // comm_port_read()
 
@@ -1589,9 +1609,9 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fprintf(fd,"ms_tot:%2d\n", std.ms_tot);
       fprintf(fd,"Temp Offset:%4.1f, Temp Offset2:%4.1f\n",sp.temp_offset,sp.temp_offset2);
       fprintf(fd,"Vhlt_max:%5.1f, Vmlt_max:%5.1f\n\n", vhlt_max, vmlt_max);
-      fprintf(fd," Time   TsetMLT TsetHLT  Thlt   Tmlt  TTriac  Vmlt sp ms      Gamma  Vhlt\n");
-      fprintf(fd,"[h:m:s]    [°C]   [°C]   [°C]   [°C]   [°C]   [L]  id id STD   [%]    [L]\n");
-      fprintf(fd,"-------------------------------------------------------------------------\n");
+      fprintf(fd," Time    TsetM TsetH  Thlt  Tmlt Telc  Vmlt s m st  GmaH  Vhlt VBoil TBoil  Tcfc GmaB\n");
+      fprintf(fd,"[h:m:s]   [°C]  [°C]  [°C]  [°C] [°C]   [L] p s  d   [%]   [L]   [L]  [°C]  [°C]  [%]\n");
+      fprintf(fd,"-------------------------------------------------------------------------------------\n");
       fclose(fd);
    } // else
 
@@ -2059,7 +2079,15 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                //--------------------------------------------------------
                if (com_port_is_open)
                {
-                  comm_port_close();
+                  if (com_port_opened > 0)
+                  {  // Virtual COMx port was open
+                     comm_port_write("E1\n"); // enable ethernet communication
+                  }
+                  else
+                  {  // Ethernet (UDP) was open
+                     comm_port_write("E0\n"); // enable USB communication
+                  } // else
+                  comm_port_close(); // Close current communication channel
                } // if
                comm_port_open(); // Open COM-port with new settings
             } // if
@@ -3035,6 +3063,7 @@ void __fastcall TMainForm::ChillingFinished1Click(TObject *Sender)
 //---------------------------------------------------------------------------
 // TMainForm::PID_CtrlClick()
 //---------------------------------------------------------------------------
+
 
 
 

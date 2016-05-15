@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.51  2016/04/17 13:00:54  Emile
+// - Version after Integration Testing. Works with firmware R1.26.
+// - Bug-fix PID-controller.
+// - Temps (A0) and Flows (A9) now combined instead of separate tasks.
+//
 // Revision 1.50  2016/04/09 12:58:50  Emile
 // - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
 //   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
@@ -654,6 +659,7 @@ public:		// User declarations
         char   com_port_settings[20]; // Virtual COM Port Settings
         char   udp_ip_port[30];       // UDP IP Port Number
         bool   com_port_is_open;      // true = COM-port is open for Read/Write
+        int    com_port_opened;       // remember communication channel
         bool   cb_debug_com_port;     // true = file-logging for COM port communication
         bool   cb_pid_dbg;            // true = Show PID Debug label
         bool   cb_vsp2;               // true = Double the initial Sparge volume to Boil-kettle
