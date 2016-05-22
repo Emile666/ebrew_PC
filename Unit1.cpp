@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.82  2016/05/15 14:20:45  Emile
+// - Logfile updated with new volumes and temperatures + date added.
+//
 // Revision 1.81  2016/04/17 13:00:54  Emile
 // - Version after Integration Testing. Works with firmware R1.26.
 // - Bug-fix PID-controller.
@@ -616,7 +619,7 @@ void task_read_temps(void)
       MainForm->triac_too_hot = (MainForm->ttriac >= MainForm->ttriac_hlim);
     } // else
     //------------------ TEMP2 (THLT) -----------------------------------------
-    if (str_ok && (temp2 < 99.9))
+    if (str_ok && (temp2 > SENSOR_VAL_LIM_OK))
     {
          MainForm->Val_Thlt->Font->Color = clLime;
          MainForm->thlt = temp2; // update THLT with new value
@@ -627,7 +630,7 @@ void task_read_temps(void)
        MainForm->thlt = (double)(MainForm->swfx.thlt_fx);
     } // if
     //------------------ TEMP3 (TMLT) -----------------------------------------
-    if (str_ok && (temp3 < 99.9))
+    if (str_ok && (temp3 > SENSOR_VAL_LIM_OK))
     {
          MainForm->Val_Tmlt->Font->Color = clLime;
          MainForm->tmlt = temp3; // update TMLT with new value
@@ -638,7 +641,7 @@ void task_read_temps(void)
        MainForm->tmlt = (double)(MainForm->swfx.tmlt_fx);
     } // if
     //------------------ TEMP4 (TBOIL) ----------------------------------------
-    if (str_ok && (temp4 < 99.9))
+    if (str_ok && (temp4 > SENSOR_VAL_LIM_OK))
     {
          MainForm->Temp_Boil->Font->Color = clLime;
          MainForm->tboil = temp4; // update TBOIL with new value
@@ -649,7 +652,7 @@ void task_read_temps(void)
        MainForm->tboil = (double)(MainForm->swfx.tboil_fx);
     } // if
     //------------------ TEMP5 (TCFC) -----------------------------------------
-    if (str_ok && (temp5 < 99.9))
+    if (str_ok && (temp5 > SENSOR_VAL_LIM_OK))
     {
          MainForm->Temp_CFC->Font->Color = clLime;
          MainForm->tcfc = temp5; // update TCFC with new value
@@ -690,19 +693,27 @@ void task_read_flows(void)
         p = strtok(NULL ,","); MainForm->volumes.Flow_mlt_boil = atof(p);
         p = strtok(NULL ,","); MainForm->volumes.Flow_cfc_out  = atof(p);
         p = strtok(NULL ,","); MainForm->volumes.Flow4         = atof(p);
+        MainForm->Flow1_hlt_mlt->Font->Color  = clLime;
+        MainForm->Flow2_mlt_boil->Font->Color = clLime;
+        MainForm->Flow3_cfc->Font->Color      = clLime;
+        MainForm->Flow4->Font->Color          = clLime;
     } // if
+    else
+    {
+        MainForm->Flow1_hlt_mlt->Font->Color  = clRed;
+        MainForm->Flow2_mlt_boil->Font->Color = clRed;
+        MainForm->Flow3_cfc->Font->Color      = clRed;
+        MainForm->Flow4->Font->Color          = clRed;
+    } // else
     //------------------ FLOW1 ------------------------------------------------
-    if (str_ok && (MainForm->volumes.Flow_hlt_mlt < 99.9))
-         MainForm->Flow1_hlt_mlt->Font->Color = clLime;
-    else MainForm->Flow1_hlt_mlt->Font->Color = clRed;
-    if ((MainForm->flow_temp_corr) && (MainForm->thlt < 99.9))
+    if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->thlt - 20.0));
         MainForm->volumes.Flow_hlt_mlt /= err;
     } // if
     // Now apply Calibration error correction
     MainForm->volumes.Flow_hlt_mlt *= 1.0 + 0.01 * MainForm->flow1_err;
-    // Calculate Flow-rate in L per minute
+    // Calculate Flow-rate in L per minute ; this task is called once per 2 seconds
     temp = 30.0 * (MainForm->volumes.Flow_hlt_mlt - MainForm->volumes.Flow_hlt_mlt_old);
     MainForm->volumes.Flow_rate_hlt_mlt = moving_average(&MainForm->flow1_ma,temp);
     // Calculate VHLT volume here
@@ -712,17 +723,14 @@ void task_read_flows(void)
        MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
     } // if
     //------------------ FLOW2 ------------------------------------------------
-    if (str_ok && (MainForm->volumes.Flow_mlt_boil < 99.9))
-         MainForm->Flow2_mlt_boil->Font->Color = clLime;
-    else MainForm->Flow2_mlt_boil->Font->Color = clRed;
-    if ((MainForm->flow_temp_corr) && (MainForm->tmlt < 99.9))
+    if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->tmlt - 20.0));
         MainForm->volumes.Flow_mlt_boil /= err;
     } // if
     // Now apply Calibration error correction
     MainForm->volumes.Flow_mlt_boil *= 1.0 + 0.01 * MainForm->flow2_err;
-    // Calculate Flow-rate in L per minute
+    // Calculate Flow-rate in L per minute ; this task is called once per 2 seconds
     temp = 30.0 * (MainForm->volumes.Flow_mlt_boil - MainForm->volumes.Flow_mlt_boil_old);
     MainForm->volumes.Flow_rate_mlt_boil = moving_average(&MainForm->flow2_ma,temp);
     // Calculate VMLT volume here
@@ -733,17 +741,16 @@ void task_read_flows(void)
        MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
     } // if
     //------------------ FLOW3 ------------------------------------------------
-    if (str_ok && (MainForm->volumes.Flow_cfc_out < 99.9))
-         MainForm->Flow3_cfc->Font->Color = clLime;
-    else MainForm->Flow3_cfc->Font->Color = clRed;
-    if ((MainForm->flow_temp_corr) && (MainForm->tcfc < 99.9))
+    if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->tcfc - 20.0));
         MainForm->volumes.Flow_cfc_out /= err;
     } // if
     // Now apply Calibration error correction
     MainForm->volumes.Flow_cfc_out *= 1.0 + 0.01 * MainForm->flow3_err;
-    // Calculate Flow-rate in L per minute
+    // Set Flow_cfc_out to 0 by subtracting reset value (set in STD when Boiling is finished)
+    MainForm->volumes.Flow_cfc_out -= MainForm->volumes.Flow_cfc_out_reset_value;
+    // Calculate Flow-rate in L per minute ; this task is called once per 2 seconds
     temp = 30.0 * (MainForm->volumes.Flow_cfc_out - MainForm->volumes.Flow_cfc_out_old);
     MainForm->volumes.Flow_rate_cfc_out = moving_average(&MainForm->flow3_ma,temp);
     // Calculate VBOIL volume here
@@ -754,10 +761,7 @@ void task_read_flows(void)
        MainForm->volumes.Vboil = MainForm->swfx.vboil_fx;
     } // if
     //------------------ FLOW4 ------------------------------------------------
-    if (str_ok && (MainForm->volumes.Flow4 < 99.9))
-         MainForm->Flow4->Font->Color = clLime;
-    else MainForm->Flow4->Font->Color = clRed;
-    if ((MainForm->flow_temp_corr) && (MainForm->tmlt < 99.9))
+    if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
         err = (1.0 + 0.00021 * (MainForm->tmlt - 20.0));
         MainForm->volumes.Flow4 /= err;
@@ -1398,7 +1402,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          strcpy(udp_ip_port,Reg->ReadString("UDP_IP_PORT").c_str()); // UDP IP & Port number settings
          cb_debug_com_port = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
 
-         comm_port_open(); // Start Communication with Ebrew Hardware
+         comm_port_open();  // Start Communication with Ebrew Hardware
 
          gas_non_mod_llimit = Reg->ReadInteger("GAS_NON_MOD_LLIMIT");
          gas_non_mod_hlimit = Reg->ReadInteger("GAS_NON_MOD_HLIMIT");
@@ -1553,7 +1557,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
    //-----------------------------------------------
    // Set HW and SW rev. numbers in Tstatusbar panel
    //-----------------------------------------------
-   ::Sleep(1000);  // Give E-brew HW (Arduino) time to power up
+   ::Sleep(1600);  // Give E-brew HW (Arduino) time to power up
    strcpy(srev,"SW r");
    strncat(srev,&ebrew_revision[11],4); // extract the CVS revision number
    srev[9] = '\0';
@@ -1591,6 +1595,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
    sprintf(s,"MLT %3.0fL", vmlt_max); // MLT
    MLT_Label->Caption = s;
    Tank_MLT->Max = vmlt_max;
+
+   MainForm->volumes.Flow_cfc_out_reset_value = 0.0; // Init. reset value for Flow_cfc_out
 
    // Init logfile
    if ((fd = fopen(LOGFILE,"a")) == NULL)
@@ -2636,11 +2642,9 @@ void __fastcall TMainForm::Update_GUI(void)
    //---------------------
    sprintf(tmp_str,"%4.2f°C",thlt);   // Display Thlt value on screen
    Val_Thlt->Caption    = tmp_str;
-   tm_hlt->Value->Value = thlt;       // update HLT thermometer object
 
    sprintf(tmp_str,"%4.2f°C",tmlt);   // Display Tmlt value on screen
    Val_Tmlt->Caption    = tmp_str;
-   tm_mlt->Value->Value = tmlt;       // update MLT thermometer object
 
    sprintf(tmp_str,"%4.2f°C",tboil);  // Display Tboil on screen
    Temp_Boil->Caption     = tmp_str;
@@ -2669,11 +2673,9 @@ void __fastcall TMainForm::Update_GUI(void)
    //------------------------
    sprintf(tmp_str,"SP %4.1f°C",tset_hlt);  // Setpoint HLT Temperature
    Val_Tset_hlt->Caption = tmp_str;
-   tm_hlt->SetPoint->Value = tset_hlt;      // update HLT thermometer object
 
    sprintf(tmp_str,"SP %3.0f°C",tset_mlt);  // Setpoint MLT Temperature
    Val_Tset_mlt->Caption   = tmp_str;
-   tm_mlt->SetPoint->Value = tset_mlt;      // Update MLT thermometer object
 
    sprintf(tmp_str,"SP %3.0f°C",tset_boil); // Setpoint Boil-Kettle Temperature
    Val_Tset_Boil->Caption = tmp_str;
@@ -2744,7 +2746,7 @@ void __fastcall TMainForm::Update_GUI(void)
       case 15: Std_State->Caption = "15. Add Malt to MLT (M)"              ; break;
       case 16: Std_State->Caption = "16. Chill && Pump to Fermentor (M)"   ; break;
       case 17: Std_State->Caption = "17. Finished!"                        ; break;
-      case 18: Std_State->Caption = "18. Mash Rest (10 minutes)"           ; break;
+      case 18: Std_State->Caption = "18. Mash Rest (5 minutes)"            ; break;
       default: break;
    } // switch
 
@@ -3040,7 +3042,7 @@ void __fastcall TMainForm::UDP_ServerUDPRead(TObject *Sender,
 
 void __fastcall TMainForm::MaltaddedtoMLT1Click(TObject *Sender)
 {
-    MaltaddedtoMLT1->Checked = True;   
+    MaltaddedtoMLT1->Checked = True;
 }
 //---------------------------------------------------------------------------
 

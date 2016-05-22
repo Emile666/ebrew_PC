@@ -6,6 +6,13 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.31  2016/04/09 12:58:50  Emile
+  - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+    and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+    parameters and scheduler/tasks.
+  - Only 6 parameters left to send to HW. In line with firmware R1.23.
+  - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+
   Revision 1.30  2016/01/24 19:36:55  Emile
   - Valves and Pump now show colours: RED (on) and GREEN (off)
   - Pipes are now highlighted to show actual direction of fluid movement
@@ -1018,7 +1025,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            {  // malt is added to MLT, start mash timer
               ms[std->ms_idx].timer = 0; // start the corresponding mash timer
               if (std->mash_rest)
-              {    // Start with mash rest for 10 min. after malt is added
+              {    // Start with mash rest for 5 min. after malt is added
                    std->mrest_tmr = 0; // init mash rest timer
                    std->ebrew_std = S18_MASH_REST_5_MIN;
               }
@@ -1097,7 +1104,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
                  std->ebrew_std = S13_MASH_PREHEAT_HLT;
               } // if
               else if (!std->mash_rest || (std->mrest_tmr >= TMR_MASH_REST_5_MIN))
-              {  // after 10 min., goto normal mashing phase and switch pump on
+              {  // after 5 min., goto normal mashing phase and switch pump on
                  std->ebrew_std = S04_MASH_TIMER_RUNNING;
               } // if
               // else remain in this state (timer is incremented)
@@ -1153,7 +1160,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       case S06_PUMP_FROM_MLT_TO_BOIL:
            *tset_mlt  = ms[std->ms_idx].temp;
            *tset_hlt  = *tset_mlt + sps->temp_offset; // Single offset
-           vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
+           //vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            if (vol->Vmlt <= vol->Vmlt_old - (std->sp_idx == 0 ? sps->sp_vol_batch0 : sps->sp_vol_batch))
            {
               std->timer2    = 0;          // init. x sec. timer
@@ -1200,7 +1207,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            *tset_hlt  = 0.0;          // Disable HLT PID-Controller
            *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
            sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
-           vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
+           //vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            if (flow_rate_low(vol->Flow_rate_mlt_boil))
            //if (vol->Vmlt < sps->vmlt_empty)
            {
@@ -1230,6 +1237,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
            if (++std->timer5 >= sps->boil_time_ticks)
            {
+              vol->Flow_cfc_out_reset_value = vol->Flow_cfc_out; // reset Flow_cfc_out
               std->ebrew_std = S12_BOILING_FINISHED;
            } // if
            break;

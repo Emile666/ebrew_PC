@@ -6,6 +6,13 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.30  2016/04/09 12:58:50  Emile
+// - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+//   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+//   parameters and scheduler/tasks.
+// - Only 6 parameters left to send to HW. In line with firmware R1.23.
+// - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+//
 // Revision 1.29  2016/01/24 19:36:55  Emile
 // - Valves and Pump now show colours: RED (on) and GREEN (off)
 // - Pipes are now highlighted to show actual direction of fluid movement
@@ -307,7 +314,7 @@ typedef struct _std_struct
    int    timer1;    // Timer for state 'Sparging Rest'
    int    timer2;    // Timer for state 'Delay_xSEC'
    int    timer3;    // Timer for state 'Pump Pre-Fill'
-   int    mrest_tmr; // Timer for state 'Mast Rest 10 Min.'
+   int    mrest_tmr; // Timer for state 'Mast Rest 5 Min.'
    int    timer5;    // Timer for state 'Boiling'
    int    mash_rest; // 1 = mash rest after malt is added
 } std_struct;
@@ -342,6 +349,7 @@ typedef struct _volume_struct
    double Flow_rate_mlt_boil;
    double Flow_rate_cfc_out;
    double Flow_rate4;
+   double Flow_cfc_out_reset_value;
 } volume_struct;
 
 //------------------------------

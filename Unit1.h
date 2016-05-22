@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.52  2016/05/15 14:20:45  Emile
+// - Logfile updated with new volumes and temperatures + date added.
+//
 // Revision 1.51  2016/04/17 13:00:54  Emile
 // - Version after Integration Testing. Works with firmware R1.26.
 // - Bug-fix PID-controller.
@@ -464,6 +467,8 @@
 #define EBREW_HW_ID          "E-Brew"
 #define MAX_PARS             (7)
 
+#define SENSOR_VAL_LIM_OK    (-99.9)
+
 typedef struct _swfx_struct
 {
    bool   tset_hlt_sw;   // Switch value for tset_hlt
@@ -535,9 +540,7 @@ __published:	// IDE-managed Components
         TMenuItem *OFF1;
         TMenuItem *ON1;
         TMenuItem *ReadLogFile1;
-        TvrThermoMeter *tm_mlt;
         TVrTank *Tank_MLT;
-        TvrThermoMeter *tm_hlt;
         TVrTank *Tank_HLT;
         TVrTank *Tank_Boil;
         TvrThermoMeter *tm_triac;

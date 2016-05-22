@@ -5,6 +5,14 @@
 //               be monitored.  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.15  2015/12/13 14:20:27  Emile
+// - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
+// - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
+//   CB_Mash_Rest. New state 18 'Mast Rest (10 minutes)' added to STD.
+// - Pump and Valves are now all off in state 'Add Malt to MLT'.
+// - Statusbar now also shows mash and sparge litres (valves indicators removed).
+// - Auto-All option added to set all valves and the pump to Auto when 'A' pressed.
+//
 // Revision 1.14  2015/07/21 19:42:46  Emile
 // - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
 // - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
@@ -244,7 +252,7 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       ViewMashProgress->Memo1->Lines->Add(s);
       sprintf(s,"Timer3 (state 'Pump Pre-Fill')       : %02d/%02d sec.",MainForm->std.timer3,TMR_PREFILL_PUMP);
       ViewMashProgress->Memo1->Lines->Add(s);
-      sprintf(s,"Timer4 (state 'Mash Rest 10 Min.')   : %02d/600 sec.",MainForm->std.mrest_tmr);
+      sprintf(s,"Timer4 (state 'Mash Rest 5 Min.')    : %02d/300 sec.",MainForm->std.mrest_tmr);
       ViewMashProgress->Memo1->Lines->Add(s);
       sprintf(s,"Timer5 (state 'Now Boiling')         : %d/%d min.",MainForm->std.timer5/60,MainForm->sp.boil_time);
       ViewMashProgress->Memo1->Lines->Add(s);
