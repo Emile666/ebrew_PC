@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.53  2016/05/22 13:51:16  Emile
+// Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
+// - Temp.sensor error value is now '-99.99'
+// - Double updates to Vboil removed in std
+// - HLT and MLT thermometer objects removed
+//
 // Revision 1.52  2016/05/15 14:20:45  Emile
 // - Logfile updated with new volumes and temperatures + date added.
 //
@@ -398,21 +404,10 @@
 #include "VrTank.hpp"
 #include "VrThermoMeter.hpp"
 #include "VrPowerMeter.hpp"
-//#include <ScktComp.hpp>
 #include "VrLeds.hpp"
-//#include <IdBaseComponent.hpp>
-//#include <IdComponent.hpp>
-//#include <IdUDPBase.hpp>
-//#include <IdUDPClient.hpp>
-//#include <IdUDPServer.hpp>
-//#include <Sockets.hpp>
-#include <IdBaseComponent.hpp>
-#include <IdComponent.hpp>
-#include <IdUDPBase.hpp>
-#include <IdUDPClient.hpp>
-#include <IdUDPServer.hpp>
 #include "VrButtons.hpp"
 #include "VrGradient.hpp"
+#include <winsock2.h>
 
 #define TS_INIT   (20.0)
 #define KC_INIT   (80.0)
@@ -453,13 +448,14 @@
 //-----------------------------------------------------------
 // Defines for COM Port Communication.
 // The longest task on ebrew HW is the one-wire task,
-// this task lasts max. 24 msec.
-// Set WAIT_READ_TIMEOUT > 24 msec.
+// this task lasts max. 22 msec.
+// Set WAIT_READ_TIMEOUT > 22 msec.
 // The max. duration for a task in this program is then:
 // MAX_READ_RETRIES * (WR2RD_SLEEP_TIME + WAIT_READ_TIMEOUT).
 //-----------------------------------------------------------
-#define MAX_READ_RETRIES     (2)
-#define WAIT_READ_TIMEOUT    (40)
+#define MAX_READ_RETRIES       (2)
+#define NORMAL_READ_TIMEOUT   (40)
+#define LONG_READ_TIMEOUT    (115)
 #define MAX_BUF_WRITE        (255)
 #define MAX_BUF_READ         (255)
 #define COM_PORT_DEBUG_FNAME "_com_port_dbg.txt"
@@ -550,8 +546,6 @@ __published:	// IDE-managed Components
         TMenuItem *N2;
         TLabel *PID_dbg;
         TLabel *Ttriac_lbl;
-        TIdUDPClient *UDP_Client;
-        TIdUDPServer *UDP_Server;
         TLabel *Flow1_hlt_mlt;
         TLabel *Flow2_mlt_boil;
         TImage *Image1;
@@ -612,8 +606,6 @@ __published:	// IDE-managed Components
         void __fastcall Contents1Click(TObject *Sender);
         void __fastcall HowtoUseHelp1Click(TObject *Sender);
         void __fastcall FormKeyPress(TObject *Sender, char &Key);
-        void __fastcall UDP_ServerUDPRead(TObject *Sender, TStream *AData,
-          TIdSocketHandle *ABinding);
         void __fastcall MaltaddedtoMLT1Click(TObject *Sender);
         void __fastcall Boilingstarted1Click(TObject *Sender);
         void __fastcall StartChilling1Click(TObject *Sender);
@@ -660,7 +652,8 @@ public:		// User declarations
 
         int    comm_channel_nr;       // Communication channel number
         char   com_port_settings[20]; // Virtual COM Port Settings
-        char   udp_ip_port[30];       // UDP IP Port Number
+        int    udp_wait_msec_before_read; // Time-out value for UDP-reads
+        char   udp_ip_port[30];       // UDP IP  & Port Number of ebrew hardware
         bool   com_port_is_open;      // true = COM-port is open for Read/Write
         int    com_port_opened;       // remember communication channel
         bool   cb_debug_com_port;     // true = file-logging for COM port communication
@@ -694,9 +687,16 @@ public:		// User declarations
         unsigned int    time_switch;// 1: PID is controlled by a time-switch
         TDateTime       dt_time_switch;   // object holding date and time
         char            *ebrew_revision;  // contains CVS revision number
-        char            udp_read[MAX_BUF_READ]; // contains bytes read from UDP
-        char            srev[50];        // String for building SW+HW revision numbers
+        char            srev[50];   // String for building SW+HW revision numbers
+        SOCKET          sock_udp;   // Transmit & Receive socket for UDP communication
+        SOCKADDR_IN     local_ip;
+        SOCKADDR_IN     ebrew_hw;
 
+        void __fastcall split_ip_port(int *port, char *ip);
+        int  __fastcall udp_init(void);
+        int  __fastcall udp_read(char *s, int *bytes);
+        int  __fastcall udp_write(char *s);
+        void __fastcall udp_close(void);
         void __fastcall comm_port_open(void);           // Init. Comm. Port
         void __fastcall comm_port_close(void);          // Close Comm. Port
         void __fastcall comm_port_write(const char *s); // Write Comm. Port

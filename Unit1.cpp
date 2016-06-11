@@ -6,6 +6,12 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.83  2016/05/22 13:51:16  Emile
+// Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
+// - Temp.sensor error value is now '-99.99'
+// - Double updates to Vboil removed in std
+// - HLT and MLT thermometer objects removed
+//
 // Revision 1.82  2016/05/15 14:20:45  Emile
 // - Logfile updated with new volumes and temperatures + date added.
 //
@@ -991,6 +997,27 @@ void task_write_pars(void)
    } // if
 } // task_write_pars()
 
+void decode_S3_response(FILE *fd, char *s)
+{
+   char *p, *q;
+   char s2[100];
+
+   for (p = strtok(s,"\n"); p != NULL; p = strtok(p+strlen(p)+1,"\n"))
+   {
+      strncpy(s2, p, sizeof(s2));
+      q = strtok(s2,",");
+      if (q) fprintf(fd,"%-11s ",q);
+      q = strtok(q+strlen(q)+1, ",");
+      if (q) fprintf(fd,"%5d ",atoi(q));
+      q = strtok(q+strlen(q)+1, ",");
+      if (q) fprintf(fd,"0x%02x   ",atoi(q));
+      q = strtok(q+strlen(q)+1, ",");
+      if (q) fprintf(fd,"%03d   ",atoi(q));
+      q = strtok(q+strlen(q)+1, ",");
+      if (q) fprintf(fd,"%03d\n",atoi(q));
+   } // for
+} // decode_S3_response()
+
 /*-----------------------------------------------------------------------------
   Purpose    : TASK: Write HW debug info to a log-file
   Period-Time: 1 second
@@ -1008,12 +1035,11 @@ void task_hw_debug(void)
    if (MainForm->hw_debug_logging)
    {
       //---------------------------------------------------------------
-      // At 19200 Baud ; 1 char. takes approx. 0.52 msec.
-      // 255 characters takse 133 msec.; 220 char. take 115 msec.
+      // At 38400 Baud ; 1 char. takes approx. 0.26 msec.
+      // 200 characters take approx. 52 msec.
       // Max. time to use for this task before disturbing other tasks
       // is approx. 300 msec. So stay below this!
       //---------------------------------------------------------------
-      MainForm->comm_port_set_read_timeout(115);
       s1[0] = '\0';
       if ((fd = fopen("_debug_ebrew_hw.txt","a")) != NULL)
       {
@@ -1022,36 +1048,192 @@ void task_hw_debug(void)
           case 0: MainForm->comm_port_write("S1\n"); // List all parameters
                   gettime(&t1);
                   getdate(&d1);
-                  fprintf(fd,"%02d-%02d-%d, %02d:%02d:%02d\n",d1.da_day,d1.da_mon,
+                  fprintf(fd,"\n%02d-%02d-%d, %02d:%02d:%02d\n",d1.da_day,d1.da_mon,
                           d1.da_year,t1.ti_hour,t1.ti_min,t1.ti_sec);
                   list_all_tasks(fd); // print SW tasks (PC program)
                   MainForm->comm_port_read(s1);
                   fprintf(fd,"\n%s\n",s1);
                   time_slice = 1; // goto next time-slice
                   break;
-          case 1: MainForm->comm_port_write("S2\n"); // List all I2C devices
-                  ::Sleep(250); // Give Arduino time for I2C-scan
+          case 1: // Reading 5 I2C-channels (128 addresses / channel) at 400 kHz
+                  // takes 5 x 11 msec. = 55 msec. total, which is < LONG_READ_TIMEOUT
+                  MainForm->comm_port_write("S2\n"); // List all I2C devices
+                  MainForm->comm_port_set_read_timeout(LONG_READ_TIMEOUT);
                   MainForm->comm_port_read(s1);
-                  fprintf(fd,"%s",s1);
-                  ::Sleep(200); // Give Arduino time for I2C-scan
-                  MainForm->comm_port_read(s1);     
                   fprintf(fd,"%s\n",s1);
                   time_slice = 2;
                   break;
-          case 2: MainForm->comm_port_write("S3\n"); // List all tasks
-                  MainForm->comm_port_read(s1);      // takes approx. 115 msec.
-                  fprintf(fd,"%s",s1);
-                  MainForm->comm_port_read(s1);      // total time: 230 msec.
-                  fprintf(fd,"%s\n",s1);
+          case 2: MainForm->comm_port_write("S3\n"); // List all tasks (approx. 200 chars)
+                  fprintf(fd,"Task-Name   T(ms) Stat T(ms) M(ms)\n");
+                  fprintf(fd,"----------------------------------\n");
+                  MainForm->comm_port_set_read_timeout(LONG_READ_TIMEOUT);
+                  MainForm->comm_port_read(s1); // takes approx. 50 msec.
+                  decode_S3_response(fd,s1);    // print formatted
                   time_slice = 0;
                   MainForm->hw_debug_logging = false; // disable flag
                   break;
         } // time_slice
         fclose(fd); // close file again
       } // if
-      MainForm->comm_port_set_read_timeout(WAIT_READ_TIMEOUT); // back to normal timeout
+      MainForm->comm_port_set_read_timeout(NORMAL_READ_TIMEOUT); // back to normal timeout
    } // if
 } // task_hw_debug()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : Split Registry string with IP:Port into IP string and Port number
+  Variables  :
+         port: the port number (0-65535)
+           ip: string containing IP address (e.g.'"192.168.1.1")
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void __fastcall TMainForm::split_ip_port(int *port, char *ip)
+{
+   char *p;
+
+   p     = strtok(udp_ip_port,":");
+   strcpy(ip,p); // copy ebrew IP address
+   p     = strtok(NULL,":");
+   *port = atoi(p); // copy ebrew port number
+} // split_ip_port()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : Initialize UDP communication with time-out (non-blocking)
+               A time udp_wait_msec_before_read is waited before the call to
+               udp_read() is made. In the case that no data is received, udp_read()
+               times out 10 msec. after this time-out. This is initialized here.
+  Variables  : --
+  Returns    : 1=error, 0=OK
+  ---------------------------------------------------------------------------*/
+int __fastcall TMainForm::udp_init(void)
+{
+   WSADATA        wsd;
+   int            udp_port; // local Port and ebrew-hw port number
+   char           ebrew_hw_ip[30],namebuf[50];
+   struct hostent *local = NULL;
+   int    timeout = 10; // On Windows: timeout in milliseconds!
+
+   if (WSAStartup(MAKEWORD(2,2), &wsd) != 0)
+   {
+       MessageBox(NULL,"WSAStartup failed!","UDP_init() ERROR:",MB_OK);
+       return 1;
+   } // if
+   sock_udp = socket(AF_INET, SOCK_DGRAM, 0); // create the socket
+   if (sock_udp == INVALID_SOCKET)
+   {
+       MessageBox(NULL,"socket failed!","UDP_init() ERROR:",MB_OK);
+       return 1;
+   } // if
+   if (setsockopt(sock_udp,SOL_SOCKET,SO_RCVTIMEO,(char *)&timeout,sizeof(timeout)) != 0)
+   {
+       MessageBox(NULL,"setsockopt() failed!","UDP_init() ERROR:",MB_OK);
+       return 1;
+   } // if
+   // Get ebrew hardware IP address and Port number
+   split_ip_port(&udp_port,ebrew_hw_ip);
+   ebrew_hw.sin_family      = AF_INET;
+   ebrew_hw.sin_port        = htons((short)udp_port);
+   ebrew_hw.sin_addr.s_addr = inet_addr(ebrew_hw_ip);
+
+   // Resolve the local IP address (the machine where this program runs)
+   local_ip.sin_family      = AF_INET;
+   local_ip.sin_port        = htons((short)udp_port);
+   gethostname(namebuf,sizeof(namebuf)); // get local IP address
+   local = gethostbyname(namebuf);
+   if (local)
+   {
+      CopyMemory(&local_ip.sin_addr,local->h_addr_list[0],local->h_length);
+      //MessageBox(NULL,inet_ntoa(local_ip.sin_addr),"UDP_init()",MB_OK);
+   } // if
+   if (bind(sock_udp,(SOCKADDR *)&local_ip, sizeof(local_ip)) == SOCKET_ERROR)
+   {
+      MessageBox(NULL,"bind() failed","UDP_init() ERROR:",MB_OK);
+      WSACleanup();
+      return 1;
+   } // if
+   return 0;
+} // udp_init()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : Read from UDP socket. This routine should be called after a
+               specific time. In case no-data is received, this routine
+               times out after 10 msec.
+  Variables  :
+            s: string that contains the read result
+        bytes: Number of bytes read
+  Returns    : 1=error, 0=OK
+  ---------------------------------------------------------------------------*/
+int __fastcall TMainForm::udp_read(char *s, int *bytes)
+{
+   int         err = 0, ret;
+   SOCKADDR_IN sender;
+   int         sender_size,lerr;
+   char        spr[30];
+
+   if (sock_udp)
+   {
+      sender_size = sizeof(sender);
+      ret = recvfrom(sock_udp,s,MAX_BUF_READ,0,(SOCKADDR *)&sender,&sender_size);
+      if (ret == SOCKET_ERROR)
+      {  // In Windows 2000 and later, if no data arrives within the period specified
+         // in SO_RCVTIMEO, the recv function returns WSAETIMEDOUT, and if data is
+         // received, recv returns SUCCESS.
+         lerr   = WSAGetLastError();
+         if (lerr == WSAETIMEDOUT)
+         {  // nothing was received, no error
+            s[0] = '\0';
+            *bytes = 0;
+         } // if
+         else
+         {
+            sprintf(spr,"recvfrom() failed: %d",lerr);
+            MessageBox(NULL,spr,"udp_read() ERROR:",MB_OK);
+            err    = 1;
+            *bytes = 0;
+         } // else
+      } // if
+      else
+      {
+         s[ret] = '\0';
+         *bytes = ret;
+      } // else
+   } // if
+   else err = 1;
+   return err;
+} // udp_read()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : Write to UDP socket
+  Variables  :
+            s: string to write to ebrew-hardware
+  Returns    : 1=error, 0=OK
+  ---------------------------------------------------------------------------*/
+int __fastcall TMainForm::udp_write(char *s)
+{
+   int err = 0, ret;
+
+   if (sock_udp)
+   {
+      ret = sendto(sock_udp,s,strlen(s),0,(SOCKADDR *)&ebrew_hw,sizeof(ebrew_hw));
+      if (ret == SOCKET_ERROR)
+      {
+         MessageBox(NULL,"sendto() failed","udp_write() ERROR:",MB_OK);
+         err = 1;
+      } // if
+   } // if
+   else err = 1;
+   return err;
+} // udp_write()
+
+/*-----------------------------------------------------------------------------
+  Purpose    : Close UDP socket
+  Variables  : -
+  Returns    : -
+  ---------------------------------------------------------------------------*/
+void __fastcall TMainForm::udp_close(void)
+{
+   closesocket(sock_udp);
+   WSACleanup();
+} // udp_close()
 
 /*-----------------------------------------------------------------------------
   Purpose    : Set the COM Port Read Time-out value
@@ -1062,13 +1244,13 @@ void __fastcall TMainForm::comm_port_set_read_timeout(DWORD msec)
 {
      if (comm_channel_nr == 0) // Ethernet UDP
      {
-        UDP_Server->Active         = false;
-        UDP_Server->ReceiveTimeout = msec;
-        UDP_Server->Active         = true;
+        udp_wait_msec_before_read = msec;
      } // if
      else
      {
         // Set the Communication Timeouts
+        // ReadTotalTimeoutConstant: A constant used to calculate the total time-out
+        //                           period for read operations, in milliseconds.
         GetCommTimeouts(hComm,&ctmoOld);
         ctmoNew.ReadTotalTimeoutConstant    = msec;
         ctmoNew.ReadTotalTimeoutMultiplier  =   0;
@@ -1103,7 +1285,7 @@ void __fastcall TMainForm::comm_port_open(void)
         } // if
         else
         {
-           comm_port_set_read_timeout(100); // Set the Communication Timeouts
+           comm_port_set_read_timeout(LONG_READ_TIMEOUT); // Set the Communication Timeouts
 
            // Set Baud-rate, Parity, wordsize and stop-bits.
            // There are other ways of doing these setting, but this is the easiest way.
@@ -1112,17 +1294,15 @@ void __fastcall TMainForm::comm_port_open(void)
            // BuildCommDCB() defaults to NO Handshaking.
            dcbCommPort.DCBlength = sizeof(DCB);
            GetCommState(hComm, &dcbCommPort);
-           BuildCommDCB(com_port_settings, &dcbCommPort); // "19200,N,8,1"
+           BuildCommDCB(com_port_settings, &dcbCommPort); // "38400,N,8,1"
            SetCommState(hComm, &dcbCommPort);
            com_port_is_open = true;
         } // else
    } // if
    else
-   {
-        udp_read[0] = '\0';
-        UDP_Server->Active = true; // Use OnUDPRead() to receive data
-        UDP_Client->Active = true; // Use Send() to send string
-        com_port_is_open   = true;
+   {    // Ethernet UDP communication
+        com_port_is_open = (udp_init() == 0); // Ethernet: returns 0 if all is well
+        comm_port_set_read_timeout(LONG_READ_TIMEOUT); // Set the Communication Timeouts
    } // else
    com_port_opened  = comm_channel_nr; // remember communication channel
    if ((fdbg_com = fopen(COM_PORT_DEBUG_FNAME,"a")) == NULL)
@@ -1154,10 +1334,12 @@ void __fastcall TMainForm::comm_port_close(void)
       SetCommTimeouts(hComm, &ctmoOld);
       CloseHandle(hComm); // close Virtual USB COM-port
    } // if
+   else if (com_port_is_open)
+   {  // UDP communication and udp_init() was OK
+      udp_close();
+   } // else if
    if (cb_debug_com_port) fprintf(fdbg_com,"\nFile closed\n\n");
    fclose(fdbg_com);   // close COM-port debugging file
-   UDP_Server->Active = false;
-   UDP_Client->Active = false;
    com_port_is_open   = false; // set flag to 'not open'
 } // comm_port_close()
 
@@ -1170,6 +1352,7 @@ void __fastcall TMainForm::comm_port_read(char *s)
 {
    char rbuf[MAX_BUF_READ]; // contains string read from RS232 port
    DWORD i, j, dwBytesRead = 0;
+   int   ok, udp_bytes;
    struct time t1;
 
    if (comm_channel_nr == 0) // Use Ethernet UDP as communication channel
@@ -1178,16 +1361,12 @@ void __fastcall TMainForm::comm_port_read(char *s)
         // If data is available, it is stored in the array udp_read[]
         // This function is normally called after a comm_port_write(),
         // so introduce a little delay here, to give the uC time to respond
-        ::Sleep(20); // give system time to react and send response
-        dwBytesRead = strlen(udp_read);
-        if (dwBytesRead > 0)
-        {
-           strcpy(s, udp_read); // copy string
-           udp_read[0] = '\0';  // clear string
-        } // if
+        ::Sleep(udp_wait_msec_before_read); // give ebrew HW time to react and send response
+        ok = (udp_read(s,&udp_bytes) == 0);
+        dwBytesRead = udp_bytes;
    } // if
    else if (com_port_is_open)
-   {
+   { // Virtual COM-port and port is opened
      ReadFile(hComm, s, MAX_BUF_READ-1, &dwBytesRead, NULL);
      if(dwBytesRead)
      {
@@ -1196,7 +1375,6 @@ void __fastcall TMainForm::comm_port_read(char *s)
    } // else if
    if (cb_debug_com_port)
    {
-      gettime(&t1);
       for (i = j = 0; i < dwBytesRead; i++)
       {
          if ((s[i] != '\r') && (s[i] != '\n'))
@@ -1205,6 +1383,7 @@ void __fastcall TMainForm::comm_port_read(char *s)
          } // if
       } // if
       rbuf[j] = '\0';
+      gettime(&t1);
       fprintf(fdbg_com,"R%1d.%02d.%03d[%s]",comm_channel_nr,t1.ti_sec,t1.ti_hund*10,rbuf);
    } // if
 } // comm_port_read()
@@ -1219,7 +1398,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
    char send_buffer[MAX_BUF_WRITE]; // contains string to send to RS232 port
    char s2[MAX_BUF_WRITE];          // contains string for debugging
    int  bytes_to_send = 0;          // Number of bytes to send
-   int  i, j, bytes_sent = 0;       // Number of bytes sent to COM port
+   int  ok, i, j, bytes_sent = 0;   // Number of bytes sent to COM port
    struct time t1;
    int    xmit_err = 0;
 
@@ -1227,10 +1406,10 @@ void __fastcall TMainForm::comm_port_write(const char *s)
    bytes_to_send = strlen(send_buffer);
    if (comm_channel_nr == 0) // Use Ethernet UDP as communication channel
    {
-        UDP_Client->Send(s);
+        ok = (udp_write((char *)s) == 0);
    } // if
    else if (com_port_is_open)
-   {
+   { // Virtual COM-port and port is opened
      bytes_sent    = 0;
      while ((bytes_sent < bytes_to_send) && (xmit_err < 3))
      {
@@ -1243,7 +1422,6 @@ void __fastcall TMainForm::comm_port_write(const char *s)
    } // else if
    if (cb_debug_com_port)
    {
-      gettime(&t1);
       j = 0;
       for (i = 0; i < bytes_to_send; i++)
       {
@@ -1253,6 +1431,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
          } // else
       } // for i
       s2[j] = '\0'; // terminate string
+      gettime(&t1);
       fprintf(fdbg_com,"\nW%02d.%03d[%s]",t1.ti_sec,t1.ti_hund*10,s2);
       if (xmit_err >= 3)
       {
@@ -1287,7 +1466,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           //------------------------------------
           Reg->WriteInteger("SYSTEM_MODE",GAS_MODULATING);
           Reg->WriteInteger("COMM_CHANNEL",0);   // Select Ethernet as Comm. Channel
-          Reg->WriteString("COM_PORT_SETTINGS","19200,N,8,1"); // COM port settings
+          Reg->WriteString("COM_PORT_SETTINGS","38400,N,8,1"); // COM port settings
           Reg->WriteString("UDP_IP_PORT","192.168.1.177:8888"); // IP & Port number
           Reg->WriteBool("CB_DEBUG_COM_PORT",true);
 
@@ -1621,7 +1800,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
       fclose(fd);
    } // else
 
-   comm_port_set_read_timeout(WAIT_READ_TIMEOUT); // Now change Read time-out to default value
+   comm_port_set_read_timeout(NORMAL_READ_TIMEOUT); // Now change Read time-out to default value
 
    //----------------------------------
    // We came all the way! Start Timers
@@ -2085,12 +2264,12 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
                //--------------------------------------------------------
                if (com_port_is_open)
                {
-                  if (com_port_opened > 0)
-                  {  // Virtual COMx port was open
+                  if ((com_port_opened > 0) && (comm_channel_nr == 0))
+                  {  // Virtual COMx port was open && now ethernet selected
                      comm_port_write("E1\n"); // enable ethernet communication
                   }
-                  else
-                  {  // Ethernet (UDP) was open
+                  else if ((com_port_opened == 0) && (comm_channel_nr > 0))
+                  {  // Ethernet (UDP) was open && now virtual COMx port selected
                      comm_port_write("E0\n"); // enable USB communication
                   } // else
                   comm_port_close(); // Close current communication channel
@@ -2312,9 +2491,10 @@ void __fastcall TMainForm::exit_ebrew(void)
       ViewMashProgress = 0;     // null the pointer
    }
    // Disable Gas-Burner PWM, Heater and Alive LEDs
-   comm_port_write("L0\n");
-   comm_port_write("W0\n");
-   comm_port_write("P0\n");
+   comm_port_write("L0\n"); // Disable Alive-LED
+   comm_port_write("B0\n"); // Disable Boil-kettle gas-burner
+   comm_port_write("H0\n"); // Disable HLT gas-burner
+   comm_port_write("P0\n"); // Disable Pump
    if (com_port_is_open)
    {
         comm_port_close();
@@ -3022,22 +3202,6 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
       swfx.gamma_hlt_sw = false; // Release switch for gamma
    } // else if
 } // FormKeyPress()
-//---------------------------------------------------------------------------
-
-void __fastcall TMainForm::UDP_ServerUDPRead(TObject *Sender,
-      TStream *AData, TIdSocketHandle *ABinding)
-{
-    try
-    {
-        int BufSize = AData->Size;
-        if (BufSize > 0)
-        {
-                AData->Read(udp_read,BufSize);
-                udp_read[BufSize] = '\0';
-        }
-    }
-    catch(const Exception &) { ; }
-} // UDP_ServerUDPRead()
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::MaltaddedtoMLT1Click(TObject *Sender)
