@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.54  2016/06/11 16:57:28  Emile
+// - Indy UDP components removed. udp routines added.
+// - Ethernet / UDP communication now works.
+//
 // Revision 1.53  2016/05/22 13:51:16  Emile
 // Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
 // - Temp.sensor error value is now '-99.99'
@@ -586,6 +590,8 @@ __published:	// IDE-managed Components
         TLabel *Temp_Boil;
         TLabel *Val_Tset_Boil;
         TLabel *PID_dbg2;
+        TLabel *P1;
+        TLabel *V8;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);

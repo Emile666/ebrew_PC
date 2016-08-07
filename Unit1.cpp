@@ -6,6 +6,10 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.84  2016/06/11 16:57:28  Emile
+// - Indy UDP components removed. udp routines added.
+// - Ethernet / UDP communication now works.
+//
 // Revision 1.83  2016/05/22 13:51:16  Emile
 // Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
 // - Temp.sensor error value is now '-99.99'
@@ -851,6 +855,7 @@ void task_update_std(void)
     double old_tset_hlt;  // previous value of tset_hlt
     double old_tset_boil; // previous value of tset_boil
     int    ui;            // various user commands
+    int    pump_bits;     // Bits for Pump
 
     if (MainForm->swfx.std_sw)
     {
@@ -887,21 +892,17 @@ void task_update_std(void)
     // Now output all valve bits to Ebrew hardware.
     // NOTE: The pump bit is sent using the P0/P1 command
     //-----------------------------------------------------------------
-    sprintf(s,"V%d\n",(MainForm->std_out & 0x00FE)>>1); // Output valves except Pump (bit 0)
+    sprintf(s,"V%d\n",(MainForm->std_out & ALL_VALVES)); // Output all valves
     MainForm->comm_port_write(s); // output Vxxx to Ebrew hardware
 
     //--------------------------------------------
-    // Send Pump On/Off signal to ebrew hardware.
+    // Send Pump On/Off signals to ebrew hardware.
     //--------------------------------------------
-    if (MainForm->std_out & P0b)
-    {    // New PUMP bit should be 1
-         strcpy(s,"P1\n");
-    } // if
-    else
-    {    // New PUMP bit should be 0
-         strcpy(s,"P0\n");
-    } // else
-    MainForm->comm_port_write(s); // Send P1/P0 command to ebrew hardware
+    if (MainForm->std_out & P0b) pump_bits  = 0x01;
+    else                         pump_bits  = 0x00;
+    if (MainForm->std_out & P1b) pump_bits |= 0x02;
+    sprintf(s,"P%d\n",pump_bits);
+    MainForm->comm_port_write(s); // Send Px command to ebrew hardware
 } // task_update_std()
 
 /*-----------------------------------------------------------------------------
@@ -1509,6 +1510,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
           Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 5 minutes after Malt is added
           // Boil-Time Setting
+          Reg->WriteInteger("BOIL_MIN_TEMP",60); // Min. Temp. for Boil-Kettle (Celsius)
           Reg->WriteInteger("BOIL_TIME",90);   // Total Boil Time (min.)
           Reg->WriteInteger("SP_PREBOIL",95);  // Pre-Boil Temperature (Celsius)
           Reg->WriteInteger("SP_BOIL",105);    // Boil Temperature (Celsius)
@@ -1847,6 +1849,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.ph_timer     = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_timer is in seconds
         std.mash_rest   = Reg->ReadBool("CB_Mash_Rest");  // Mash rest 5 minutes after malt is added
         // Boil-Time Settings
+        sp.boil_min_temp= Reg->ReadInteger("BOIL_MIN_TEMP"); // Min. Temp. for Boil-Kettle
         sp.boil_time    = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
         sp.sp_preboil   = Reg->ReadInteger("SP_PREBOIL"); // Setpoint Pre-Boil Temperature
         sp.sp_boil      = Reg->ReadInteger("SP_BOIL");    // Setpoint Boil Temperature
@@ -2320,6 +2323,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60);  // PREHEAT_TIME [minutes]
         ptmp->CB_mash_rest->Checked = std.mash_rest;           // Mash rest for 5 min after malt is added
         // Boil-Time Settings
+        ptmp->Boil_Min_Temp->Text = AnsiString(sp.boil_min_temp); // Min. Temp. for Boil-Kettle
         ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);  // Total Boil Time (min.)
         ptmp->SP_PreBoil->Text  = AnsiString(sp.sp_preboil); // Setpoint Temperature for pre-boil
         ptmp->SP_Boil->Text     = AnsiString(sp.sp_boil);    // Setpoint Temperature during boiling
@@ -2340,6 +2344,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            std.mash_rest = ptmp->CB_mash_rest->Checked;
 
            // Boil-Time Settings
+           Reg->WriteInteger("BOIL_MIN_TEMP",ptmp->Boil_Min_Temp->Text.ToInt());
            Reg->WriteInteger("BOIL_TIME",   ptmp->EBoilTime->Text.ToInt());
            Reg->WriteInteger("SP_PREBOIL",  ptmp->SP_PreBoil->Text.ToInt());
            Reg->WriteInteger("SP_BOIL",     ptmp->SP_Boil->Text.ToInt());
@@ -2651,6 +2656,10 @@ void __fastcall TMainForm::Auto1Click(TObject *Sender)
    {
       std_out &= ~(P0M | P0b); // Pump = Auto mode + OFF
    }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("P1") == 0)
+   {
+      std_out &= ~(P1M | P1b); // P1 = Auto mode + OFF
+   }
    else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
    {
       std_out &= ~(V1M | V1b); // V1 = Auto mode + OFF
@@ -2675,7 +2684,14 @@ void __fastcall TMainForm::Auto1Click(TObject *Sender)
    {
       std_out &= ~(V6M | V6b); // V6 = Auto mode + OFF
    }
-   else std_out &= ~(V7M | V7b); // V7 = Auto mode + OFF
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V7") == 0)
+   {
+      std_out &= ~(V7M | V7b); // V7 = Auto mode + OFF
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V8") == 0)
+   {
+      std_out &= ~(V8M | V8b); // V8 = Auto mode + OFF
+   }
 } // TMainForm::Auto1Click()
 //---------------------------------------------------------------------------
 
@@ -2685,6 +2701,11 @@ void __fastcall TMainForm::OFF1Click(TObject *Sender)
    {
       std_out |=  P0M; // Pump = Manual Override mode
       std_out &= ~P0b; // Pump = OFF
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("P1") == 0)
+   {
+      std_out |=  P1M; // Pump = Manual Override mode
+      std_out &= ~P1b; // Pump = OFF
    }
    else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
    {
@@ -2716,10 +2737,15 @@ void __fastcall TMainForm::OFF1Click(TObject *Sender)
       std_out |=  V6M; // V6 = Manual Override mode
       std_out &= ~V6b; // V6 = OFF
    }
-   else
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V7") == 0)
    {
       std_out |=  V7M; // V7 = Manual Override mode
       std_out &= ~V7b; // V7 = OFF
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V8") == 0)
+   {
+      std_out |=  V8M; // V8 = Manual Override mode
+      std_out &= ~V8b; // V8 = OFF
    }
 } //  TMainForm::OFF1Click()
 //---------------------------------------------------------------------------
@@ -2729,6 +2755,10 @@ void __fastcall TMainForm::ON1Click(TObject *Sender)
    if (PopupMenu1->PopupComponent->Name.AnsiCompare("P0") == 0)
    {
       std_out |= (P0M | P0b); // Pump = Manual Override mode + ON
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("P1") == 0)
+   {
+      std_out |= (P1M | P1b); // Pump = Manual Override mode + ON
    }
    else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V1") == 0)
    {
@@ -2754,7 +2784,14 @@ void __fastcall TMainForm::ON1Click(TObject *Sender)
    {
       std_out |= (V6M | V6b); // V6 = Manual Override mode + ON
    }
-   else std_out |= (V7M | V7b); // V7 = Manual Override mode + ON
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V7") == 0)
+   {
+      std_out |= (V7M | V7b); // V7 = Manual Override mode + ON
+   }
+   else if (PopupMenu1->PopupComponent->Name.AnsiCompare("V8") == 0)
+   {
+      std_out |= (V8M | V8b); // V8 = Manual Override mode + ON
+   }
 } // TMainForm::ON1Click()
 //---------------------------------------------------------------------------
 
@@ -2772,6 +2809,7 @@ void __fastcall TMainForm::ON1Click(TObject *Sender)
 void __fastcall TMainForm::PopupMenu1Popup(TObject *Sender)
 {
         SET_POPUPMENU("P0",P0M,P0b)
+   else SET_POPUPMENU("P1",P1M,P1b)
    else SET_POPUPMENU("V1",V1M,V1b)
    else SET_POPUPMENU("V2",V2M,V2b)
    else SET_POPUPMENU("V3",V3M,V3b)
@@ -2779,6 +2817,7 @@ void __fastcall TMainForm::PopupMenu1Popup(TObject *Sender)
    else SET_POPUPMENU("V5",V5M,V5b)
    else SET_POPUPMENU("V6",V6M,V6b)
    else SET_POPUPMENU("V7",V7M,V7b)
+   else SET_POPUPMENU("V8",V8M,V8b)
 }  // TMainForm::PopupMenu1Popup()
 //---------------------------------------------------------------------------
 
@@ -2859,7 +2898,9 @@ void __fastcall TMainForm::Update_GUI(void)
 
    sprintf(tmp_str,"SP %3.0f°C",tset_boil); // Setpoint Boil-Kettle Temperature
    Val_Tset_Boil->Caption = tmp_str;
-
+   if (MainForm->sp.pid_ctrl_boil_on) Val_Tset_Boil->Font->Color = clLime;
+   else                               Val_Tset_Boil->Font->Color = clRed;
+   
    //--------------------------
    // Actual Volumes and Flows
    //--------------------------
@@ -2944,6 +2985,13 @@ void __fastcall TMainForm::Update_GUI(void)
       case P0b      : P0->Caption = P01ATXT; P0->Font->Color = clRed;   break;
       default       : P0->Caption = P00ATXT; P0->Font->Color = clGreen; break;
    } // switch
+   switch (std_out & (P1M | P1b))
+   {
+      case P1M | P1b: P1->Caption = P11MTXT; P1->Font->Color = clRed;   break;
+      case P1M      : P1->Caption = P10MTXT; P1->Font->Color = clGreen; break;
+      case P1b      : P1->Caption = P11ATXT; P1->Font->Color = clRed;   break;
+      default       : P1->Caption = P10ATXT; P1->Font->Color = clGreen; break;
+   } // switch
    switch (std_out & (V1M | V1b))
    {
       case V1M | V1b: V1->Caption = V11MTXT; V1->Font->Color = clRed;   break;
@@ -2985,6 +3033,13 @@ void __fastcall TMainForm::Update_GUI(void)
       case V7M      : V7->Caption = V70MTXT; V7->Font->Color = clGreen; break;
       case V7b      : V7->Caption = V71ATXT; V7->Font->Color = clRed;   break;
       default       : V7->Caption = V70ATXT; V7->Font->Color = clGreen; break;
+   } // switch
+   switch (std_out & (V8M | V8b))
+   {
+      case V8M | V8b: V8->Caption = V81MTXT; V8->Font->Color = clRed;   break;
+      case V8M      : V8->Caption = V80MTXT; V8->Font->Color = clGreen; break;
+      case V8b      : V8->Caption = V81ATXT; V8->Font->Color = clRed;   break;
+      default       : V8->Caption = V80ATXT; V8->Font->Color = clGreen; break;
    } // switch
 
    //-------------------------------------------
@@ -3174,8 +3229,8 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
    } // if
    else if (UpCase(Key) == 'P')
    {
-      std_out |= P0M; // Set Pump Manual bit
-      std_out ^= P0b; // Toggle Pump On/Off
+      std_out |= (P0M | P1M); // Set Pump Manual bits
+      std_out ^= (P0b | P1b); // Toggle Pumps On/Off
    } // else if
    else if (UpCase(Key) == 'H')
    {
@@ -3189,16 +3244,16 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
          swfx.gamma_hlt_fx = 100.0; // fix gamma to 100 %
       } // else
    } // else if
-   else if ((Key >= '1') && (Key <= '7'))
+   else if ((Key >= '1') && (Key <= '8'))
    {
-      // This code only works if V7 is the MSB and V1 is the LSB!! (see misc.h)
-      std_out |= (V1M << (Key - '1')); // set corresponding V1M..V7M bit
-      std_out ^= (V1b << (Key - '1')); // set corresponding V1b..V7b bit
+      // This code only works if V8 is the MSB and V1 is the LSB!! (see misc.h)
+      std_out |= (V1M << (Key - '1')); // set corresponding V1M..V8M bit
+      std_out ^= (V1b << (Key - '1')); // set corresponding V1b..V8b bit
    } // else if
    else if (UpCase(Key) == 'A')
    {
       // Auto All
-      std_out &= ~(P0M | V1M | V2M | V3M | V4M | V5M | V6M | V7M);
+      std_out &= ~(ALL_PUMPS | ALL_VALVES);
       swfx.gamma_hlt_sw = false; // Release switch for gamma
    } // else if
 } // FormKeyPress()

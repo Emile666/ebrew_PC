@@ -5,6 +5,13 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.11  2016/04/09 12:58:50  Emile
+// - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+//   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+//   parameters and scheduler/tasks.
+// - Only 6 parameters left to send to HW. In line with firmware R1.23.
+// - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+//
 // Revision 1.10  2015/12/13 14:20:27  Emile
 // - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
 // - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
@@ -128,6 +135,9 @@ __published:	// IDE-managed Components
         TLabel *Label11;
         TLabel *Label13;
         TEdit *SP_Boil;
+        TLabel *Label15;
+        TLabel *Label16;
+        TEdit *Boil_Min_Temp;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

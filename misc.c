@@ -6,6 +6,12 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.32  2016/05/22 13:51:16  Emile
+  Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
+  - Temp.sensor error value is now '-99.99'
+  - Double updates to Vboil removed in std
+  - HLT and MLT thermometer objects removed
+
   Revision 1.31  2016/04/09 12:58:50  Emile
   - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
     and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
@@ -896,39 +902,42 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
   ------------------------------------------------------------------*/
 {
    //-------------------------------------------------------------------
-   //            |-------------------> Out to Boil kettle
-   //            |  |----------------> Out to Counter Flow Chiller (CFC)
-   //            |  |  |-------------> Out Bypass Heat Exchanger
-   //            |  |  |  |----------> Out to HLT Heat Exchanger
-   //            |  |  |  |  |-------> In from Boil kettle
-   //            |  |  |  |  |  |----> In from HLT
-   //            |  |  |  |  |  |  |-> In from MLT
-   //           V7 V6 V5 V4 V3 V2 V1 Pump Description           Hex.
-   //------------------------------------------------------------------
-   // State 00:  0  0  0  0  0  0  0  0   Initialisation            0x00
-   // State 01:  0  0  0  0  0  0  0  0   Wait for HLT Temp.        0x00
-   // State 02:  0  0  0  1  0  1  1  1   Fill MLT                  0x17
-   // State 03:  0  0  0  1  0  0  1  1   Mash In Progres           0x13
-   // State 04:  0  0  0  1  0  0  1  1   Mash Timer Running        0x13
-   // State 05:  0  0  0  1  0  0  1  1   Sparging Rest             0x13
-   // State 06:  1  0  0  0  0  0  1  1   Pump from MLT to Boil     0x83
-   // State 07:  0  0  0  1  0  1  1  1   Pump from HLT to MLT      0x17
-   // State 08:  0  0  0  0  0  0  0  0   Delay x Sec.              0x00
-   // State 09:  1  0  0  0  0  0  1  1   Empty MLT                 0x83
-   // State 10:  0  0  0  0  0  0  0  0   Wait for Boil             0x00
-   // State 11:  0  0  0  0  0  0  0  0   Boiling                   0x00
-   // State 12:  0  0  0  0  0  0  0  0   Boiling Finished          0x00
-   // State 13:  0  0  0  0  0  0  0  0   Mash PreHeat HLT          0x00
-   // State 14:  0  0  0  0  0  1  1  0   Pump Prefill              0x06
-   // State 15:  0  0  0  0  0  0  0  0   Add Malt to MLT           0x00
-   // State 16:  0  1  0  0  1  0  0  1   Chill & Pump to Fermentor 0x49
-   // State 17:  0  0  0  0  0  0  0  0   Finished!                 0x00
-   // State 18:  0  0  0  0  0  0  0  0   Mash Rest 10 minutes      0x00
-   //-------------------------------------------------------------------
-   unsigned int  klepstanden[] = {0x0000, 0x0000, 0x0017, 0x0013, 0x0013,
-                         /* 05 */ 0x0013, 0x0083, 0x0017, 0x0000, 0x0083,
-                         /* 10 */ 0x0000, 0x0000, 0x0000, 0x0000, 0x0006,
-                         /* 15 */ 0x0000, 0x0049, 0x0000, 0x0000};
+   //           |----------------------------> Pump 2 for HLT heat-exchanger
+   //           |  |-------------------------> Main Brewing-Pump
+   //           |  |  |----------------------> Future Use
+   //           |  |  |  |-------------------> Out to Boil kettle
+   //           |  |  |  |  |----------------> Out to Counter Flow Chiller (CFC)
+   //           |  |  |  |  |  |-------------> Out Bypass Heat Exchanger
+   //           |  |  |  |  |  |  |----------> Out to HLT Heat Exchanger
+   //           |  |  |  |  |  |  |  |-------> In from Boil kettle
+   //           |  |  |  |  |  |  |  |  |----> In from HLT
+   //           |  |  |  |  |  |  |  |  |  |-> In from MLT
+   //           P1 P0 V8 V7 V6 V5 V4 V3 V2 V1 Description              Hex.
+   //------------------------------------------------------------------------
+   // State 00: 0  0  0  0  0  0  0  0  0  0  Initialisation            0x0000
+   // State 01: 1  0  0  0  0  0  0  0  0  0  Wait for HLT Temp.        0x0200
+   // State 02: 1  1  0  0  0  0  1  0  1  1  Fill MLT                  0x030B
+   // State 03: 1  1  0  0  0  0  1  0  0  1  Wait for MLT Temp.        0x0309
+   // State 04: 1  1  0  0  0  0  1  0  0  1  Mash Timer Running        0x0309
+   // State 05: 1  1  0  0  0  0  1  0  0  1  Sparge Timer Running      0x0309
+   // State 06: 0  1  0  1  0  0  0  0  0  1  Pump from MLT to Boil     0x0141
+   // State 07: 1  1  0  0  0  0  1  0  1  1  Pump from HLT to MLT      0x030B
+   // State 08: 0  0  0  0  0  0  0  0  0  0  Delay x Sec.              0x0000
+   // State 09: 0  1  0  1  0  0  0  0  0  1  Empty MLT                 0x0141
+   // State 10: 0  0  0  0  0  0  0  0  0  0  Wait for Boil             0x0000
+   // State 11: 0  0  0  0  0  0  0  0  0  0  Boiling                   0x0000
+   // State 12: 0  0  0  0  0  0  0  0  0  0  Boiling Finished          0x0000
+   // State 13: 1  0  0  0  0  0  0  0  0  0  Mash PreHeat HLT          0x0200
+   // State 14: 0  0  0  0  0  0  0  0  1  1  Pump Prefill              0x0003
+   // State 15: 0  0  0  0  0  0  0  0  0  0  Add Malt to MLT           0x0000
+   // State 16: 0  1  0  0  1  0  0  1  0  0  Chill & Pump to Fermentor 0x0124
+   // State 17: 0  0  0  0  0  0  0  0  0  0  Finished!                 0x0000
+   // State 18: 0  0  0  0  0  0  0  0  0  0  Mash Rest 5 minutes       0x0000
+   //------------------------------------------------------------------------
+   unsigned int  klepstanden[] = {0x0000, 0x0200, 0x030B, 0x0309, 0x0309, /* 04 */
+                         /* 05 */ 0x0309, 0x0141, 0x030B, 0x0000, 0x0141, /* 09 */
+                         /* 10 */ 0x0000, 0x0000, 0x0000, 0x0200, 0x0003, /* 14 */
+                         /* 15 */ 0x0000, 0x0124, 0x0000, 0x0000}; /* 18 */
    unsigned int  klepstand; // Help var. = klepstanden[std->ebrew_std]
 
    switch (std->ebrew_std)
@@ -1132,11 +1141,12 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       case S05_SPARGE_TIMER_RUNNING:
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
-           if (tboil > 60.0)
+           if ((tboil > sps->boil_min_temp) || sps->pid_ctrl_boil_on)
            {  // There is sufficient wort in the Boil-Kettle
               *tset_boil = sps->sp_preboil; // PreBoil Temperature Setpoint
               sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
            }
+           else *tset_boil = 0.0;
            if (++std->timer1 >= sps->sp_time_ticks)
            {
               vol->Vmlt_old  = vol->Vmlt;  // save Vmlt for state 6 & 9
@@ -1160,7 +1170,13 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       case S06_PUMP_FROM_MLT_TO_BOIL:
            *tset_mlt  = ms[std->ms_idx].temp;
            *tset_hlt  = *tset_mlt + sps->temp_offset; // Single offset
-           //vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
+           if ((tboil > sps->boil_min_temp) || sps->pid_ctrl_boil_on)
+           {  // There is sufficient wort in the Boil-Kettle
+              *tset_boil = sps->sp_preboil; // PreBoil Temperature Setpoint
+              sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
+           }
+           else *tset_boil = 0.0;
+
            if (vol->Vmlt <= vol->Vmlt_old - (std->sp_idx == 0 ? sps->sp_vol_batch0 : sps->sp_vol_batch))
            {
               std->timer2    = 0;          // init. x sec. timer
@@ -1175,6 +1191,13 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       case S07_PUMP_FROM_HLT_TO_MLT:
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
+           if ((tboil > sps->boil_min_temp) || sps->pid_ctrl_boil_on)
+           {  // There is sufficient wort in the Boil-Kettle
+              *tset_boil = sps->sp_preboil; // PreBoil Temperature Setpoint
+              sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
+           }
+           else *tset_boil = 0.0;
+
            if (vol->Vmlt >= vol->Vmlt_old + sps->sp_vol_batch)
            {
               std->sp_idx++;              // Increase #Sparging Sessions done
@@ -1188,6 +1211,13 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       case S08_DELAY_xSEC:
            *tset_mlt = ms[std->ms_idx].temp;
            *tset_hlt = *tset_mlt + sps->temp_offset; // Single offset
+           if ((tboil > sps->boil_min_temp) || sps->pid_ctrl_boil_on)
+           {  // There is sufficient wort in the Boil-Kettle
+              *tset_boil = sps->sp_preboil; // PreBoil Temperature Setpoint
+              sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
+           }
+           else *tset_boil = 0.0;
+
            if (++std->timer2 >= TMR_DELAY_xSEC)
            {
               vol->Vhlt_old  = vol->Vhlt;          // remember old value
@@ -1207,9 +1237,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            *tset_hlt  = 0.0;          // Disable HLT PID-Controller
            *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
            sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
-           //vol->Vboil = vol->Vboil_old + vol->Vmlt_old - vol->Vmlt;
            if (flow_rate_low(vol->Flow_rate_mlt_boil))
-           //if (vol->Vmlt < sps->vmlt_empty)
            {
               std->ebrew_std = S10_WAIT_FOR_BOIL;
            } // if
@@ -1290,6 +1318,21 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
    // Now calculate the proper settings for the valves
    //-------------------------------------------------
    klepstand = klepstanden[std->ebrew_std];
+   if ((*kleppen & P1M) == 0x0000) // Pump 2 No Manual Override ?
+   {
+      if (klepstand & P1b) *kleppen |= P1b;
+      else                 *kleppen &= ~P1b;
+   }
+   if ((*kleppen & P0M) == 0x0000) // Pump No Manual Override ?
+   {
+      if (klepstand & P0b) *kleppen |= P0b;
+      else                 *kleppen &= ~P0b;
+   }
+   if ((*kleppen & V8M) == 0x0000) // V8 No Manual Override ?
+   {
+      if (klepstand & V8b) *kleppen |= V8b;
+      else                 *kleppen &= ~V8b;
+   }
    if ((*kleppen & V7M) == 0x0000) // V7 No Manual Override ?
    {
       if (klepstand & V7b) *kleppen |= V7b;
@@ -1324,11 +1367,6 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
    {
       if (klepstand & V1b) *kleppen |= V1b;
       else                 *kleppen &= ~V1b;
-   }
-   if ((*kleppen & P0M) == 0x0000) // Pump No Manual Override ?
-   {
-      if (klepstand & P0b) *kleppen |= P0b;
-      else                 *kleppen &= ~P0b;
    }
    return std->ebrew_std; // return the new state of the STD
 } // update_std()

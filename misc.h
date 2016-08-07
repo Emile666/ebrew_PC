@@ -6,6 +6,12 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.31  2016/05/22 13:51:16  Emile
+// Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
+// - Temp.sensor error value is now '-99.99'
+// - Double updates to Vboil removed in std
+// - HLT and MLT thermometer objects removed
+//
 // Revision 1.30  2016/04/09 12:58:50  Emile
 // - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
 //   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
@@ -294,6 +300,7 @@ typedef struct _sparge_struct
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
    double sp_vol_batch0;   // Sparge volume of first batch
    /* Sparge Settings */
+   int    boil_min_temp;   // Min. Temp. for Boil-Kettle to enable PID controller
    int    boil_time;       // Total boiling time in minutes
    int    sp_preboil;      // Setpoint Preboil Temperature
    int    sp_boil;         // Setpoint Boil Temperature
@@ -405,23 +412,39 @@ typedef struct _volume_struct
 // #defines for the valves. Each valve can be set manually or automatically
 // by the STD. Bit-values are for the variable 'valves'.
 //--------------------------------------------------------------------------
-#define V7M  (0x8000)
-#define V6M  (0x4000)
-#define V5M  (0x2000)
-#define V4M  (0x1000)
-#define V3M  (0x0800)
-#define V2M  (0x0400)
-#define V1M  (0x0200)
-#define P0M  (0x0100)
-#define V7b  (0x0080)
-#define V6b  (0x0040)
-#define V5b  (0x0020)
-#define V4b  (0x0010)
-#define V3b  (0x0008)
-#define V2b  (0x0004)
-#define V1b  (0x0002)
-#define P0b  (0x0001)
+#define P1M  (0x02000000)
+#define P0M  (0x01000000)
+#define V8M  (0x00800000)
+#define V7M  (0x00400000)
+#define V6M  (0x00200000)
+#define V5M  (0x00100000)
+#define V4M  (0x00080000)
+#define V3M  (0x00040000)
+#define V2M  (0x00020000)
+#define V1M  (0x00010000)
 
+#define P1b  (0x00000200)
+#define P0b  (0x00000100)
+#define V8b  (0x00000080)
+#define V7b  (0x00000040)
+#define V6b  (0x00000020)
+#define V5b  (0x00000010)
+#define V4b  (0x00000008)
+#define V3b  (0x00000004)
+#define V2b  (0x00000002)
+#define V1b  (0x00000001)
+
+#define ALL_VALVES (V1b | V2b | V3b | V4b | V5b | V6b | V7b | V8b)
+#define ALL_PUMPS  (P0b | P1b)
+
+#define P11MTXT "PUMP2 ON (M)"
+#define P10MTXT "PUMP2 OFF (M)"
+#define P11ATXT "PUMP2 ON (A)"
+#define P10ATXT "PUMP2 OFF (A)"
+#define V81MTXT "V8 ON (M)"
+#define V80MTXT "V8 OFF (M)"
+#define V81ATXT "V8 ON (A)"
+#define V80ATXT "V8 OFF (A)"
 #define V71MTXT "V7 ON (M)"
 #define V70MTXT "V7 OFF (M)"
 #define V71ATXT "V7 ON (A)"
