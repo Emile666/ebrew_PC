@@ -6,6 +6,13 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.32  2016/08/07 14:26:43  Emile
+// - Version works with firmware r1.29.
+// - Pump 2 (HLT heat-exchanger) support added in Px command
+// - V8 now also works, action bits in STD reorganised for this.
+// - Tboil Ref. Temp. is now properly set (bug-fix from session 151).
+// - New Registry parameter BOIL_MIN_TEMP instead of hard-coded value.
+//
 // Revision 1.31  2016/05/22 13:51:16  Emile
 // Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
 // - Temp.sensor error value is now '-99.99'
@@ -303,6 +310,7 @@ typedef struct _sparge_struct
    int    boil_min_temp;   // Min. Temp. for Boil-Kettle to enable PID controller
    int    boil_time;       // Total boiling time in minutes
    int    sp_preboil;      // Setpoint Preboil Temperature
+   double boil_detect;     // Boiling-Detection minimum Temperature (Celsius)
    int    sp_boil;         // Setpoint Boil Temperature
    int    pid_ctrl_boil_on;// 1= enable PID-controller for Boil-Kettle 
    /* Time-stamps for Sparge, Boil and Chilling*/
@@ -357,7 +365,17 @@ typedef struct _volume_struct
    double Flow_rate_cfc_out;
    double Flow_rate4;
    double Flow_cfc_out_reset_value;
+   int    min_flowrate_mlt_perc;
+   int    min_flowrate_boil_perc;
 } volume_struct;
+
+typedef struct _flow_rate_low_struct
+{
+	int    frl_std;     // STD state number
+	int    frl_tmr;     // Timer value
+	double frl_det_lim; // Lower-limit for flowrate
+	int    frl_perc;    // Percentage of max flowrate
+} flow_rate_low_struct;
 
 //------------------------------
 // Defines for read_input_file()
@@ -436,6 +454,7 @@ typedef struct _volume_struct
 
 #define ALL_VALVES (V1b | V2b | V3b | V4b | V5b | V6b | V7b | V8b)
 #define ALL_PUMPS  (P0b | P1b)
+#define ALL_MANUAL (V1M | V2M | V3M | V4M | V5M | V6M | V7M | V8M | P0M | P1M)
 
 #define P11MTXT "PUMP2 ON (M)"
 #define P10MTXT "PUMP2 OFF (M)"

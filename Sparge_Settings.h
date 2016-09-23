@@ -5,6 +5,13 @@
 //               can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.12  2016/08/07 14:26:43  Emile
+// - Version works with firmware r1.29.
+// - Pump 2 (HLT heat-exchanger) support added in Px command
+// - V8 now also works, action bits in STD reorganised for this.
+// - Tboil Ref. Temp. is now properly set (bug-fix from session 151).
+// - New Registry parameter BOIL_MIN_TEMP instead of hard-coded value.
+//
 // Revision 1.11  2016/04/09 12:58:50  Emile
 // - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
 //   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
@@ -138,6 +145,9 @@ __published:	// IDE-managed Components
         TLabel *Label15;
         TLabel *Label16;
         TEdit *Boil_Min_Temp;
+        TLabel *Label20;
+        TLabel *Label21;
+        TEdit *Boil_Det;
         void __fastcall Help_ButtonClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations

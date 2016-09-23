@@ -5,6 +5,13 @@
 //               (fixed) to a particular value.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.10  2016/04/09 12:58:49  Emile
+// - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+//   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+//   parameters and scheduler/tasks.
+// - Only 6 parameters left to send to HW. In line with firmware R1.23.
+// - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+//
 // Revision 1.9  2015/07/21 19:42:45  Emile
 // - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
 // - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
@@ -270,10 +277,10 @@ void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
       MainForm->swfx.std_sw = CB_std->Checked;
       if (MainForm->swfx.std_sw)
       {
-         // Value must be between 0 and 17
+         // Value must be between 0 and 18
          MainForm->swfx.std_fx = STD_MEdit->Text.ToInt();
          if (MainForm->swfx.std_fx < 0 ||
-             MainForm->swfx.std_fx > S17_FINISHED)
+             MainForm->swfx.std_fx > S18_MASH_REST_5_MIN)
          {
             MainForm->swfx.std_fx = 0; // reset to a safe value
          }

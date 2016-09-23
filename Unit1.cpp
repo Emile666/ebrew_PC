@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.85  2016/08/07 14:26:43  Emile
+// - Version works with firmware r1.29.
+// - Pump 2 (HLT heat-exchanger) support added in Px command
+// - V8 now also works, action bits in STD reorganised for this.
+// - Tboil Ref. Temp. is now properly set (bug-fix from session 151).
+// - New Registry parameter BOIL_MIN_TEMP instead of hard-coded value.
+//
 // Revision 1.84  2016/06/11 16:57:28  Emile
 // - Indy UDP components removed. udp routines added.
 // - Ethernet / UDP communication now works.
@@ -1497,7 +1504,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           PID_dbg2->Visible = false;
 
           //------------------------------------
-          // Sparge, Mash & STD Settings Dialog
+          // Sparge, Mash & Boil Settings Dialog
           //------------------------------------
           // Sparge Settings
           Reg->WriteInteger("SP_BATCHES",4);   // #Sparge Batches
@@ -1509,10 +1516,11 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
           Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 5 minutes after Malt is added
-          // Boil-Time Setting
+          // Boil Settings
           Reg->WriteInteger("BOIL_MIN_TEMP",60); // Min. Temp. for Boil-Kettle (Celsius)
           Reg->WriteInteger("BOIL_TIME",90);   // Total Boil Time (min.)
           Reg->WriteInteger("SP_PREBOIL",95);  // Pre-Boil Temperature (Celsius)
+          Reg->WriteFloat("BOIL_DETECT",99.3); // Boiling-Detection minimum Temperature (Celsius)
           Reg->WriteInteger("SP_BOIL",105);    // Boil Temperature (Celsius)
 
           //------------------------------------
@@ -1531,6 +1539,8 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("FLOW3_ERR",0);    // Error Correction for FLOW3
           Reg->WriteInteger("FLOW4_ERR",0);    // Error Correction for FLOW4
           Reg->WriteBool("FLOW_TEMP_CORR",1);  // Use Temperature Correction
+          Reg->WriteInteger("MIN_FR_MLT_PERC",10); // Min. Flowrate for MLT Empty detection
+          Reg->WriteInteger("MIN_FR_BOIL_PERC",2); // Min. Flowrate for Boil-Kettle Empty detection
        } // if
        Reg->CloseKey();
        delete Reg;
@@ -1632,6 +1642,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
          flow3_err   = Reg->ReadInteger("FLOW3_ERR"); // Compensation error for FLOW3
          flow4_err   = Reg->ReadInteger("FLOW4_ERR"); // Compensation error for FLOW4
          flow_temp_corr = Reg->ReadBool("FLOW_TEMP_CORR"); // Temp. correction for flowmeters
+         volumes.min_flowrate_mlt_perc  = Reg->ReadInteger("MIN_FR_MLT_PERC");
+         volumes.min_flowrate_boil_perc = Reg->ReadInteger("MIN_FR_BOIL_PERC");
 
          Reg->SaveKey(REGKEY,"ebrew_reg");
          Reg->CloseKey();      // Close the Registry
@@ -1852,6 +1864,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.boil_min_temp= Reg->ReadInteger("BOIL_MIN_TEMP"); // Min. Temp. for Boil-Kettle
         sp.boil_time    = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
         sp.sp_preboil   = Reg->ReadInteger("SP_PREBOIL"); // Setpoint Pre-Boil Temperature
+        sp.boil_detect  = Reg->ReadFloat("BOIL_DETECT");  // Boiling-Detection minimum Temperature (Celsius)
         sp.sp_boil      = Reg->ReadInteger("SP_BOIL");    // Setpoint Boil Temperature
         sp.pid_ctrl_boil_on = 0;                          // Disable PID-Controller for Boil-Kettle
 
@@ -2297,7 +2310,7 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
 void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
 /*------------------------------------------------------------------
   Purpose  : This is the function which is called whenever the user
-             presses 'Options | Sparge, Mash & STD Settings'.
+             presses 'Options | Sparge, Mash & Boil Settings'.
              Is assumes the Init_Sparge_Settings() has been called
              during Initialisation and that the struct sp is filled.
   Returns  : None
@@ -2320,13 +2333,14 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         // Mash Settings
         ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
         ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
-        ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60);  // PREHEAT_TIME [minutes]
-        ptmp->CB_mash_rest->Checked = std.mash_rest;           // Mash rest for 5 min after malt is added
+        ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60); // PREHEAT_TIME [minutes]
+        ptmp->CB_mash_rest->Checked = std.mash_rest;          // Mash rest for 5 min after malt is added
         // Boil-Time Settings
         ptmp->Boil_Min_Temp->Text = AnsiString(sp.boil_min_temp); // Min. Temp. for Boil-Kettle
-        ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);  // Total Boil Time (min.)
-        ptmp->SP_PreBoil->Text  = AnsiString(sp.sp_preboil); // Setpoint Temperature for pre-boil
-        ptmp->SP_Boil->Text     = AnsiString(sp.sp_boil);    // Setpoint Temperature during boiling
+        ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);   // Total Boil Time (min.)
+        ptmp->SP_PreBoil->Text  = AnsiString(sp.sp_preboil);  // Setpoint Temperature for pre-boil
+        ptmp->Boil_Det->Text    = AnsiString(sp.boil_detect); // Boiling-Detection minimum Temperature (Celsius)
+        ptmp->SP_Boil->Text     = AnsiString(sp.sp_boil);     // Setpoint Temperature during boiling
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
@@ -2347,6 +2361,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("BOIL_MIN_TEMP",ptmp->Boil_Min_Temp->Text.ToInt());
            Reg->WriteInteger("BOIL_TIME",   ptmp->EBoilTime->Text.ToInt());
            Reg->WriteInteger("SP_PREBOIL",  ptmp->SP_PreBoil->Text.ToInt());
+           Reg->WriteFloat("BOIL_DETECT",   ptmp->Boil_Det->Text.ToDouble());
            Reg->WriteInteger("SP_BOIL",     ptmp->SP_Boil->Text.ToInt());
 
            Init_Sparge_Settings(); // Init. struct with new sparge settings
@@ -2404,6 +2419,8 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
          ptmp->Flow3_Err->Text         = flow3_err;
          ptmp->Flow4_Err->Text         = flow4_err;
          ptmp->Flow_Temp_Corr->Checked = flow_temp_corr;
+         ptmp->Min_FR_MLT->Text        = volumes.min_flowrate_mlt_perc;
+         ptmp->Min_FR_Boil->Text       = volumes.min_flowrate_boil_perc;
 
          if (ptmp->ShowModal() == 0x1) // mrOK
          {
@@ -2449,6 +2466,10 @@ void __fastcall TMainForm::MeasurementsClick(TObject *Sender)
             Reg->WriteInteger("FLOW4_ERR",flow4_err);
             flow_temp_corr = ptmp->Flow_Temp_Corr->Checked;
             Reg->WriteBool("FLOW_TEMP_CORR",flow_temp_corr);
+            volumes.min_flowrate_mlt_perc = ptmp->Min_FR_MLT->Text.ToInt();
+            Reg->WriteInteger("MIN_FR_MLT_PERC",volumes.min_flowrate_mlt_perc);
+            volumes.min_flowrate_boil_perc = ptmp->Min_FR_Boil->Text.ToInt();
+            Reg->WriteInteger("MIN_FR_BOIL_PERC",volumes.min_flowrate_boil_perc);
          } // if
          Reg->CloseKey(); // Close the Registry
       } // if
@@ -2496,10 +2517,11 @@ void __fastcall TMainForm::exit_ebrew(void)
       ViewMashProgress = 0;     // null the pointer
    }
    // Disable Gas-Burner PWM, Heater and Alive LEDs
-   comm_port_write("L0\n"); // Disable Alive-LED
    comm_port_write("B0\n"); // Disable Boil-kettle gas-burner
    comm_port_write("H0\n"); // Disable HLT gas-burner
+   comm_port_write("L0\n"); // Disable Alive-LED
    comm_port_write("P0\n"); // Disable Pump
+   comm_port_write("V0\n"); // Disable All Valves
    if (com_port_is_open)
    {
         comm_port_close();
@@ -2546,11 +2568,24 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
       ptmp->Tset_MEdit->Text = AnsiString(swfx.tset_hlt_fx); // Set fix value
    } // if
    //-------------------------------------------------------------------------
-   ptmp->CB_Gamma->Checked = swfx.gamma_hlt_sw; // Set Checkbox for Gamma
+   ptmp->CheckBox1->Checked = swfx.tset_boil_sw; // Set Checkbox for Tset_boil
+   if (swfx.tset_boil_sw)
+   {
+      ptmp->MaskEdit1->Text = AnsiString(swfx.tset_boil_fx); // Set fix value
+   } // if
+   //-------------------------------------------------------------------------
+   ptmp->CB_Gamma->Checked = swfx.gamma_hlt_sw; // Set Checkbox for Gamma_HLT
    if (swfx.gamma_hlt_sw)
    {
       ptmp->Gamma_MEdit->Text = AnsiString(swfx.gamma_hlt_fx); // Set fix value
    } // if
+   //-------------------------------------------------------------------------
+   ptmp->CheckBox2->Checked = swfx.gamma_boil_sw; // Set Checkbox for Gamma_Boil
+   if (swfx.gamma_boil_sw)
+   {
+      ptmp->MaskEdit2->Text = AnsiString(swfx.gamma_boil_fx); // Set fix value
+   } // if
+
    //-------------------------------------------------------------------------
    ptmp->CB_Tad1->Checked = swfx.thlt_sw; // Set Checkbox for Thlt
    if (swfx.thlt_sw)
@@ -2564,10 +2599,10 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
       ptmp->Tad2_MEdit->Text = AnsiString(swfx.tmlt_fx); // Set fix value
    } // if
    //-------------------------------------------------------------------------
-   ptmp->CB_std->Checked = swfx.std_sw; // Set Checkbox for ebrew_std
-   if (swfx.std_sw)
+   ptmp->CheckBox3->Checked = swfx.tboil_sw; // Set Checkbox for Tboil
+   if (swfx.tboil_sw)
    {
-      ptmp->STD_MEdit->Text = AnsiString(swfx.std_fx); // Set fix value
+      ptmp->MaskEdit3->Text = AnsiString(swfx.tboil_fx); // Set fix value
    } // if
    //-------------------------------------------------------------------------
    ptmp->CB_ttriac->Checked = swfx.ttriac_sw; // Set Checkbox for Ttriac
@@ -2575,6 +2610,7 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
    {
       ptmp->Ttriac_MEdit->Text = AnsiString(swfx.ttriac_fx); // Set fix value
    } // if
+
    //-------------------------------------------------------------------------
    ptmp->CB_vhlt->Checked = swfx.vhlt_sw; // Set Checkbox for Vhlt
    if (swfx.vhlt_sw)
@@ -2588,6 +2624,19 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
       ptmp->Vmlt_MEdit->Text = AnsiString(swfx.vmlt_fx); // Set fix value
    } // if
    //-------------------------------------------------------------------------
+   ptmp->CheckBox4->Checked = swfx.vboil_sw; // Set Checkbox for Vboil
+   if (swfx.vboil_sw)
+   {
+      ptmp->MaskEdit4->Text = AnsiString(swfx.vboil_fx); // Set fix value
+   } // if
+   //-------------------------------------------------------------------------
+   ptmp->CB_std->Checked = swfx.std_sw; // Set Checkbox for ebrew_std
+   if (swfx.std_sw)
+   {
+      ptmp->STD_MEdit->Text = AnsiString(swfx.std_fx); // Set fix value
+   } // if
+   //-------------------------------------------------------------------------
+
    if (ptmp->ShowModal() == 0x1) // mrOK
    {
       ptmp->Apply_ButtonClick(this);
@@ -2965,7 +3014,7 @@ void __fastcall TMainForm::Update_GUI(void)
       case 13: Std_State->Caption = "13. Mash Pre-Heat HLT"                ; break;
       case 14: Std_State->Caption = "14. Pump Pre-Fill"                    ; break;
       case 15: Std_State->Caption = "15. Add Malt to MLT (M)"              ; break;
-      case 16: Std_State->Caption = "16. Chill && Pump to Fermentor (M)"   ; break;
+      case 16: Std_State->Caption = "16. Chill && Pump to Fermentation Bin (M)"; break;
       case 17: Std_State->Caption = "17. Finished!"                        ; break;
       case 18: Std_State->Caption = "18. Mash Rest (5 minutes)"            ; break;
       default: break;
@@ -3229,8 +3278,13 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
    } // if
    else if (UpCase(Key) == 'P')
    {
-      std_out |= (P0M | P1M); // Set Pump Manual bits
-      std_out ^= (P0b | P1b); // Toggle Pumps On/Off
+      std_out |= P0M; // Set Pump Manual bit
+      std_out ^= P0b; // Toggle Pump On/Off
+   } // else if
+   else if (UpCase(Key) == 'Q')
+   {
+      std_out |= P1M; // Set Pump 2 Manual bit
+      std_out ^= P1b; // Toggle Pump 2 On/Off
    } // else if
    else if (UpCase(Key) == 'H')
    {
@@ -3253,7 +3307,7 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
    else if (UpCase(Key) == 'A')
    {
       // Auto All
-      std_out &= ~(ALL_PUMPS | ALL_VALVES);
+      std_out &= ~ALL_MANUAL;    // set everything to Auto again
       swfx.gamma_hlt_sw = false; // Release switch for gamma
    } // else if
 } // FormKeyPress()

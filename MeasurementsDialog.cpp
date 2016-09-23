@@ -5,6 +5,13 @@
 //               various measurements (volume, temperature) can be modified.
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.5  2016/04/09 12:58:50  Emile
+// - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
+//   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
+//   parameters and scheduler/tasks.
+// - Only 6 parameters left to send to HW. In line with firmware R1.23.
+// - New switched/fixes added for tset_boil, gamma_boil and Tboil.
+//
 // Revision 1.4  2015/06/05 19:18:40  Emile
 // - STD optimized for new solenoid valves. User Interaction dialog added
 // - Calibration & Temp. correction added for flowsensors
@@ -60,6 +67,7 @@ void __fastcall TMeasurements::Help_ButtonClick(TObject *Sender)
    Application->HelpContext(IDH_MEASUREMENTS);
 }
 //---------------------------------------------------------------------------
+
 
 
 

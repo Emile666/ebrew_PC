@@ -6,6 +6,13 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.33  2016/08/07 14:26:43  Emile
+  - Version works with firmware r1.29.
+  - Pump 2 (HLT heat-exchanger) support added in Px command
+  - V8 now also works, action bits in STD reorganised for this.
+  - Tboil Ref. Temp. is now properly set (bug-fix from session 151).
+  - New Registry parameter BOIL_MIN_TEMP instead of hard-coded value.
+
   Revision 1.32  2016/05/22 13:51:16  Emile
   Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
   - Temp.sensor error value is now '-99.99'
@@ -233,6 +240,9 @@
 #include <stdlib.h>
 #include "pid_reg.h" /* for TS */
 #include "misc.h"
+
+flow_rate_low_struct frl_empty_mlt;  // Needed for detection of low flowrate
+flow_rate_low_struct frl_empty_boil; // Needed for detection of low flowrate
 
 /*----------------------------------------------------*/
 /* This macro is used by decode_log_file() to advance */
@@ -820,6 +830,14 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts,
    return ret;
 } // read_input_file
 
+void init_frl_struct(flow_rate_low_struct *p, int perc)
+{
+	p->frl_std     = 0;    // set state nr to 0
+	p->frl_tmr     = 0;    // set timer to 0
+	p->frl_det_lim = 0.0;  // set detection limit to 0
+	p->frl_perc    = perc; // init. percentage value
+} // init_frl_struct()
+
 /*------------------------------------------------------------------
   Purpose  : This function is called every second from
              STD state 'Empty MLT' and is used to detect when the MLT
@@ -828,39 +846,37 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts,
   flow_rate: the flow-rate from MLT to Boil-kettle in L/min.
   Returns  : 1: flow-rate is low, 0: flow-rate is still high
   ------------------------------------------------------------------*/
-int flow_rate_low(double flow_rate)
+int flow_rate_low(double flow_rate, flow_rate_low_struct *p)
 {
-   static int    std_fr = 0;   // state number
-   static int    tmr_fr = 0;   // timer
-   static double det_fr = 0.0; // Detection limit for minimum flow-rate
-   int           retv = 0;     // return-value
+   int retv = 0; // return-value
 
-   switch (std_fr)
+   switch (p->frl_std)
    {
         case 0 : // Give flow-rate time to increase because of the MA-filter
                  // Use 20 seconds which is enough to stabilize the MA-filter
-                 if (++tmr_fr > 20)
+				 if (++p->frl_tmr > 20)
                  {
-                    det_fr = 0.0;
-                    tmr_fr = 0; // reset timer again
-                    std_fr = 1;
+					p->frl_det_lim = 0; // reset detection-limit
+					p->frl_tmr     = 0; // reset timer
+                    p->frl_std     = 1; // goto next state
                  } // if
                  break;
         case 1 : // Calculate the average flow-rate for the next 20 seconds
-                 // Use 25 % of average flow-rate as detection-limit
-                 if (++tmr_fr > 20)
+                 // Use perc of average flow-rate as detection-limit
+                 if (++p->frl_tmr > 20)
                  {
-                    det_fr /= 80.0; // 25 % of average of 20 samples
-                    std_fr = 2;
-                 }
-                 else det_fr += flow_rate;
+                    p->frl_det_lim *= p->frl_perc; // Percentage of average flowrate
+					p->frl_det_lim /= 2000.0;      // 20 samples, divide by 100%
+                    p->frl_std      = 2;           // goto next state
+                 } // if
+                 else p->frl_det_lim += flow_rate; // calculate average flowrate
                  break;
         case 2: // Now check if flow-rate decreases
-                if (flow_rate < det_fr) // flow-rate < 25 % of average flow-rate?
+                if (flow_rate < p->frl_det_lim) // flow-rate < percentage of average flow-rate?
                      retv = 1;
                 break;
-        default: std_fr = 0;
-                 tmr_fr = 0;
+        default: p->frl_std = 0;
+                 p->frl_tmr = 0;
                  break;
    } // switch
    return retv;
@@ -1156,8 +1172,9 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
                  std->ebrew_std = S06_PUMP_FROM_MLT_TO_BOIL; // Pump to BOIL (again)
               } // if
               else
-              {
-                 std->timer1    = 0; // reset timer1
+              {  // Init flowrate low struct with percentage
+		 init_frl_struct(&frl_empty_mlt,vol->min_flowrate_mlt_perc);
+                 std->timer1    = 0;             // reset timer1
                  std->ebrew_std = S09_EMPTY_MLT; // Finished with Sparging, empty MLT
               } // else if
            } // if
@@ -1237,7 +1254,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            *tset_hlt  = 0.0;          // Disable HLT PID-Controller
            *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
            sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
-           if (flow_rate_low(vol->Flow_rate_mlt_boil))
+           if (flow_rate_low(vol->Flow_rate_mlt_boil,&frl_empty_mlt))
            {
               std->ebrew_std = S10_WAIT_FOR_BOIL;
            } // if
@@ -1245,13 +1262,14 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       //---------------------------------------------------------------------------
       // S10_WAIT_FOR_BOIL: After all wort is pumped to the boil kettle, it takes
       // a while before boiling actually starts. When the user selects the
-      // 'Boiling Started' option, goto S11_BOILING.
+      // 'Boiling Started' option or when the boil-kettle temperature exceeds
+      // the minimum temperature BOIL_DETECT, goto S11_BOILING.
       //---------------------------------------------------------------------------
       case S10_WAIT_FOR_BOIL:
            *tset_hlt  = 0.0; // disable heating element
            *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
            sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
-           if (ui & UI_BOILING_STARTED)
+           if ((ui & UI_BOILING_STARTED) || (tboil > sps->boil_detect))
            {
               std->timer5    = 0; // init. timer for boiling time
               std->ebrew_std = S11_BOILING;
@@ -1279,7 +1297,8 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
            sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
            if (ui & UI_START_CHILLING)
-           {
+           {  // Init flowrate low struct with percentage
+	      init_frl_struct(&frl_empty_boil,vol->min_flowrate_boil_perc);
               std->ebrew_std = S16_CHILL_PUMP_FERMENTOR;
            } // if
            break;
@@ -1290,7 +1309,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       case S16_CHILL_PUMP_FERMENTOR:
            *tset_boil = 0.0;  // Boil Temperature Setpoint
            sps->pid_ctrl_boil_on = 0; // Disable PID-Controller for Boil-Kettle
-           if (ui & UI_CHILLING_FINISHED)
+           if ((ui & UI_CHILLING_FINISHED) || (flow_rate_low(vol->Flow_rate_cfc_out,&frl_empty_boil)))
            {
               std->ebrew_std = S17_FINISHED;
            } // if
