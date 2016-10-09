@@ -6,6 +6,15 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.86  2016/09/23 09:51:55  Emile
+// - Bug-fix: Switches/Fixes for Tset_boil, gamma_boil, Tboil and Vboil now work properly.
+// - Separate key (Q) for Pump 2 instead of one key (P) for both pumps.
+// - Added: All valves off (V0 command) when exiting program.
+// - Boiling-detection added. New Registry variable BOIL_DETECT, adjustable in Sparge, Mash
+//   & Boil Settings Dialog Box.
+// - Flowrate low detection also added for boil-kettle to fermentation bin. New Registry
+//   variables added: MIN_FR_MLT_PERC and MIN_FR_BOIL_PERC, adjustable in Measurements dialog box.
+//
 // Revision 1.85  2016/08/07 14:26:43  Emile
 // - Version works with firmware r1.29.
 // - Pump 2 (HLT heat-exchanger) support added in Px command
@@ -639,7 +648,7 @@ void task_read_temps(void)
     if (str_ok && (temp2 > SENSOR_VAL_LIM_OK))
     {
          MainForm->Val_Thlt->Font->Color = clLime;
-         MainForm->thlt = temp2; // update THLT with new value
+         MainForm->thlt = temp2 + MainForm->thlt_offset; // update THLT with new value
     } // if
     else MainForm->Val_Thlt->Font->Color = clRed; // + do NOT update THLT
     if (MainForm->swfx.thlt_sw)
@@ -650,9 +659,9 @@ void task_read_temps(void)
     if (str_ok && (temp3 > SENSOR_VAL_LIM_OK))
     {
          MainForm->Val_Tmlt->Font->Color = clLime;
-         MainForm->tmlt = temp3; // update TMLT with new value
+         MainForm->tmlt = temp3 + MainForm->tmlt_offset; // update TMLT with new value
     }
-    else MainForm->Val_Tmlt->Font->Color = clRed;
+    else MainForm->Val_Tmlt->Font->Color = clRed; // + do NOT update TMLT
     if (MainForm->swfx.tmlt_sw)
     {  // Switch & Fix
        MainForm->tmlt = (double)(MainForm->swfx.tmlt_fx);
@@ -661,9 +670,9 @@ void task_read_temps(void)
     if (str_ok && (temp4 > SENSOR_VAL_LIM_OK))
     {
          MainForm->Temp_Boil->Font->Color = clLime;
-         MainForm->tboil = temp4; // update TBOIL with new value
+         MainForm->tboil = temp4 + MainForm->tboil_offset; // update TBOIL with new value
     }
-    else MainForm->Temp_Boil->Font->Color = clRed;
+    else MainForm->Temp_Boil->Font->Color = clRed; // + do NOT update TBOIL
     if (MainForm->swfx.tboil_sw)
     {  // Switch & Fix
        MainForm->tboil = (double)(MainForm->swfx.tboil_fx);
@@ -672,9 +681,9 @@ void task_read_temps(void)
     if (str_ok && (temp5 > SENSOR_VAL_LIM_OK))
     {
          MainForm->Temp_CFC->Font->Color = clLime;
-         MainForm->tcfc = temp5; // update TCFC with new value
+         MainForm->tcfc = temp5 + MainForm->tcfc_offset; // update TCFC with new value
     }
-    else MainForm->Temp_CFC->Font->Color = clRed;
+    else MainForm->Temp_CFC->Font->Color = clRed; // + do NOT update TCFC
     // No switch/fix needed for TCFC
 } // task_read_temps()
 
@@ -875,13 +884,50 @@ void task_update_std(void)
     if (MainForm->Boilingstarted1->Checked)   ui |= UI_BOILING_STARTED;
     if (MainForm->StartChilling1->Checked)    ui |= UI_START_CHILLING;
     if (MainForm->ChillingFinished1->Checked) ui |= UI_CHILLING_FINISHED;
+    if (MainForm->CIP_Start->Checked)         ui |= UI_CIP_INIT;
+    else                                      ui &= ~UI_CIP_INIT;
+
+    switch (MainForm->std.ebrew_std)
+    {
+       case S20_CIP_INIT:
+            MessageBox(NULL,"- Fill Boil-Kettle with 1% NaOH solution\n"
+                            "- Place MLT-Return hose into Boil-Kettle\n"
+                            "- Place CFC-Output hose into Boil-Kettle\n"
+                            "Press OK to continue.",
+                            "Cleaning in Place (CIP): Initialisation",MB_OK);
+            ui |= UI_CIP_BOIL_FILLED;
+            break;
+       case S24_CIP_DRAIN_BOIL1:
+            MessageBox(NULL,"- Place MLT-Return hose into drain\n"
+                            "- Place CFC-Output hose into drain\n"
+                            "Press OK to continue.",
+                            "Cleaning in Place (CIP): Draining Boil-Kettle",MB_OK);
+            ui |= UI_CIP_HOSES_IN_DRAIN;
+            break;
+       case S26_CIP_FILL_HLT:
+            MessageBox(NULL,"- NEW: Fill HLT with fresh water\n"
+                            "- NEW: Place Boil-Kettle return into drain\n"
+                            "- Leave MLT-Return hose in drain\n"
+                            "- Leave CFC-Output hose in drain\n"
+                            "Press OK to continue.",
+                            "Cleaning in Place (CIP): Fill HLT with Fresh Water",MB_OK);
+            ui |= UI_CIP_HLT_FILLED;
+            break;
+       case S29_CIP_END:
+            MainForm->CIP_Start->Checked = false; // Reset CIP checkbox
+            ui &= ~UI_CIP_INIT;                   // Reset UI checkbox
+            MainForm->std.ebrew_std = S00_INITIALISATION;
+            break;
+       default:
+            break;
+    } // switch
 
     update_std(&MainForm->volumes , MainForm->thlt, MainForm->tmlt, MainForm->tboil,
                &MainForm->tset_hlt, &MainForm->tset_mlt, &MainForm->tset_boil,
                &MainForm->std_out, MainForm->ms, &MainForm->sp, &MainForm->std,
                ui, std_tmp);
     if (MainForm->swfx.tset_hlt_sw)
-    {  // Set Temperature Setpoint for HTL to a fixed value
+    {  // Set Temperature Setpoint for HLT to a fixed value
        MainForm->tset_hlt = MainForm->swfx.tset_hlt_fx; // fix tset_hlt
     } // if
     slope_limiter(MainForm->tset_slope_limit, old_tset_hlt, &MainForm->tset_hlt);
@@ -1489,26 +1535,26 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           // PID Settings Dialog
           //------------------------------------
           Reg->WriteInteger("PID_Model",1);      // Takahashi PID Controller
-          Reg->WriteFloat("TS",TS_INIT);         // Set Default sample time
-          Reg->WriteFloat("Kc",KC_INIT);         // Controller gain
-          Reg->WriteFloat("Ti",TI_INIT);         // Ti constant
-          Reg->WriteFloat("Td",TD_INIT);         // Td constant
+          Reg->WriteFloat("TS",20.0);            // Set Default sample time
+          Reg->WriteFloat("Kc",80.0);            // Controller gain
+          Reg->WriteFloat("Ti",282.0);           // Ti constant
+          Reg->WriteFloat("Td",20.0);            // Td constant
           Reg->WriteFloat("K_LPF",0);            // LPF filter time-constant
           Reg->WriteInteger("STC_N",1);          // order N for system identification
           Reg->WriteInteger("STC_TD",4); // Time-Delay estimate for system identification
           Reg->WriteFloat("TSET_SLOPE_LIM",1.0); // Slope Limit for Temperature Setpoints
           sys_id_pars.stc_adf = 1; // true = use Adaptive directional forgetting
           Reg->WriteBool("STC_ADF",(sys_id_pars.stc_adf > 0));
-          cb_pid_dbg       = false; // no PID debug to screen (not a Reg. variable)
-          PID_dbg->Visible = false;
+          cb_pid_dbg        = false; // no PID debug to screen (not a Reg. variable)
+          PID_dbg->Visible  = false;
           PID_dbg2->Visible = false;
 
           //------------------------------------
           // Sparge, Mash & Boil Settings Dialog
           //------------------------------------
           // Sparge Settings
-          Reg->WriteInteger("SP_BATCHES",4);   // #Sparge Batches
-          Reg->WriteInteger("SP_TIME",15);     // Time between sparge batches
+          Reg->WriteInteger("SP_BATCHES",5);   // #Sparge Batches
+          Reg->WriteInteger("SP_TIME",12);     // Time between sparge batches
           Reg->WriteBool("CB_VSP2",1);         // Double Initial Sparge Volume to Boil-Kettle
           // Mash Settings
           Reg->WriteInteger("ms_idx",MAX_MS);  // init. index in mash scheme
@@ -1531,7 +1577,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TBOIL_OFFSET",0.0); // Offset for Tboil
           Reg->WriteFloat("TCFC_OFFSET",0.0);  // Offset for Tcfc
 
-          Reg->WriteFloat("VHLT_MAX",140.0);   // Max. HLT volume
+          Reg->WriteFloat("VHLT_MAX",200.0);   // Max. HLT volume
           Reg->WriteFloat("VMLT_MAX",110.0);   // Max. MLT volume
           Reg->WriteFloat("VBOIL_MAX",140.0);  // Max. Boil kettle volume
           Reg->WriteInteger("FLOW1_ERR",0);    // Error Correction for FLOW1
@@ -2941,7 +2987,9 @@ void __fastcall TMainForm::Update_GUI(void)
    //------------------------
    sprintf(tmp_str,"SP %4.1f°C",tset_hlt);  // Setpoint HLT Temperature
    Val_Tset_hlt->Caption = tmp_str;
-
+   if (MainForm->PID_Ctrl->Active) Val_Tset_hlt->Font->Color = clLime;
+   else                            Val_Tset_hlt->Font->Color = clRed;
+   
    sprintf(tmp_str,"SP %3.0f°C",tset_mlt);  // Setpoint MLT Temperature
    Val_Tset_mlt->Caption   = tmp_str;
 
@@ -2949,21 +2997,21 @@ void __fastcall TMainForm::Update_GUI(void)
    Val_Tset_Boil->Caption = tmp_str;
    if (MainForm->sp.pid_ctrl_boil_on) Val_Tset_Boil->Font->Color = clLime;
    else                               Val_Tset_Boil->Font->Color = clRed;
-   
+
    //--------------------------
    // Actual Volumes and Flows
    //--------------------------
-   Tank_HLT->Position  = volumes.Vhlt;      // Actual Volume HLT
-   sprintf(tmp_str,"%4.1f L",volumes.Vhlt);
+   sprintf(tmp_str,"%4.1f L",volumes.Vhlt);  // Actual Volume HLT
    Vol_HLT->Caption = tmp_str;
+   if (volumes.Vhlt >= 0.0) Tank_HLT->Position = volumes.Vhlt;
 
-   sprintf(tmp_str,"%4.1f L",volumes.Vmlt); // Actual Volume MLT
+   sprintf(tmp_str,"%4.1f L",volumes.Vmlt);  // Actual Volume MLT
    Vol_MLT->Caption   = tmp_str;
-   Tank_MLT->Position = volumes.Vmlt;
+   if (volumes.Vmlt >= 0.0) Tank_MLT->Position = volumes.Vmlt;
 
-   Tank_Boil->Position = volumes.Vboil;     // Actual Volume Boil-Kettle
-   sprintf(tmp_str,"%4.1f L",volumes.Vboil);
+   sprintf(tmp_str,"%4.1f L",volumes.Vboil); // Actual Volume Boil-Kettle
    Vol_Boil->Caption = tmp_str;
+   if (volumes.Vboil >= 0.0) Tank_Boil->Position = volumes.Vboil;
 
    sprintf(tmp_str,"%4.1f L",volumes.Flow_hlt_mlt);            // Display flow from HLT -> MLT
    Flow1_hlt_mlt->Caption = tmp_str;
@@ -2998,26 +3046,36 @@ void __fastcall TMainForm::Update_GUI(void)
 
    switch (std.ebrew_std)
    {
-      case  0: Std_State->Caption = "00. Initialisation"                   ; break;
-      case  1: Std_State->Caption = "01. Wait for HLT Temperature"         ; break;
-      case  2: Std_State->Caption = "02. Fill MLT"                         ; break;
-      case  3: Std_State->Caption = "03. Wait for MLT Temperature"         ; break;
-      case  4: Std_State->Caption = "04. Mash Timer Running"               ; break;
-      case  5: Std_State->Caption = "05. Sparge Timer Running"             ; break;
-      case  6: Std_State->Caption = "06. Pump from MLT to Boil-Kettle"     ; break;
-      case  7: Std_State->Caption = "07. Pump from HLT to MLT"             ; break;
-      case  8: Std_State->Caption = "08. Delay"                            ; break;
-      case  9: Std_State->Caption = "09. Empty MLT"                        ; break;
-      case 10: Std_State->Caption = "10. Wait for Boil (M)"                ; break;
-      case 11: Std_State->Caption = "11. Now Boiling"                      ; break;
-      case 12: Std_State->Caption = "12. Boiling Finished, prepare Chiller (M)"; break;
-      case 13: Std_State->Caption = "13. Mash Pre-Heat HLT"                ; break;
-      case 14: Std_State->Caption = "14. Pump Pre-Fill"                    ; break;
-      case 15: Std_State->Caption = "15. Add Malt to MLT (M)"              ; break;
-      case 16: Std_State->Caption = "16. Chill && Pump to Fermentation Bin (M)"; break;
-      case 17: Std_State->Caption = "17. Finished!"                        ; break;
-      case 18: Std_State->Caption = "18. Mash Rest (5 minutes)"            ; break;
-      default: break;
+     case S00_INITIALISATION       : Std_State->Caption = "00. Initialisation"                 ; break;
+     case S01_WAIT_FOR_HLT_TEMP    : Std_State->Caption = "01. Wait for HLT Temperature"       ; break;
+     case S02_FILL_MLT             : Std_State->Caption = "02. Fill MLT"                       ; break;
+     case S03_WAIT_FOR_MLT_TEMP    : Std_State->Caption = "03. Wait for MLT Temperature"       ; break;
+     case S04_MASH_TIMER_RUNNING   : Std_State->Caption = "04. Mash Timer Running"             ; break;
+     case S05_SPARGE_TIMER_RUNNING : Std_State->Caption = "05. Sparge Timer Running"           ; break;
+     case S06_PUMP_FROM_MLT_TO_BOIL: Std_State->Caption = "06. Pump from MLT to Boil-Kettle"   ; break;
+     case S07_PUMP_FROM_HLT_TO_MLT : Std_State->Caption = "07. Pump from HLT to MLT"           ; break;
+     case S08_DELAY_xSEC           : Std_State->Caption = "08. Delay"                          ; break;
+     case S09_EMPTY_MLT            : Std_State->Caption = "09. Empty MLT"                      ; break;
+     case S10_WAIT_FOR_BOIL        : Std_State->Caption = "10. Wait for Boil (M)"              ; break;
+     case S11_BOILING              : Std_State->Caption = "11. Now Boiling"                    ; break;
+     case S12_BOILING_FINISHED     : Std_State->Caption = "12. Boiling Finished, prepare Chiller (M)"; break;
+     case S13_MASH_PREHEAT_HLT     : Std_State->Caption = "13. Mash Pre-Heat HLT"              ; break;
+     case S14_PUMP_PREFILL         : Std_State->Caption = "14. Pump Pre-Fill"                  ; break;
+     case S15_ADD_MALT_TO_MLT      : Std_State->Caption = "15. Add Malt to MLT (M)"            ; break;
+     case S16_CHILL_PUMP_FERMENTOR : Std_State->Caption = "16. Chill && Pump to Fermentation Bin (M)"; break;
+     case S17_FINISHED             : Std_State->Caption = "17. Finished!"                      ; break;
+     case S18_MASH_REST_5_MIN      : Std_State->Caption = "18. Mash Rest (5 minutes)"          ; break;
+     case S20_CIP_INIT             : Std_State->Caption = "20. CIP: Initialisation"            ; break;
+     case S21_CIP_HEAT_UP          : Std_State->Caption = "21. CIP: Heat up and Circulate"     ; break;
+     case S22_CIP_CIRC_5_MIN       : Std_State->Caption = "22. CIP: Circulating"               ; break;
+     case S23_CIP_REST_5_MIN       : Std_State->Caption = "23. CIP: Resting"                   ; break;
+     case S24_CIP_DRAIN_BOIL1      : Std_State->Caption = "24. CIP: Drain Boil-Kettle 1"       ; break;
+     case S25_CIP_DRAIN_BOIL2      : Std_State->Caption = "25. CIP: Drain Boil-Kettle 2"       ; break;
+     case S26_CIP_FILL_HLT         : Std_State->Caption = "26. CIP: Fill HLT with fresh water" ; break;
+     case S27_CIP_CLEAN_OUTPUTS    : Std_State->Caption = "27. CIP: Clean Outputs"             ; break;
+     case S28_CIP_CLEAN_INPUTS     : Std_State->Caption = "28. CIP: Clean Inputs"              ; break;
+     case S29_CIP_END              : Std_State->Caption = "29. CIP: End of Program"            ; break;
+     default                       : Std_State->Caption = "xx. Unknown State"                  ; break;
    } // switch
 
    //--------------------------------------------------------------------------
@@ -3335,10 +3393,10 @@ void __fastcall TMainForm::ChillingFinished1Click(TObject *Sender)
 {
   ChillingFinished1->Checked = True;
 }
+
+void __fastcall TMainForm::CIP_StartClick(TObject *Sender)
+{
+   CIP_Start->Checked = !CIP_Start->Checked;
+}
 //---------------------------------------------------------------------------
-// TMainForm::PID_CtrlClick()
-//---------------------------------------------------------------------------
-
-
-
 

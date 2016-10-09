@@ -6,6 +6,15 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.33  2016/09/23 09:51:55  Emile
+// - Bug-fix: Switches/Fixes for Tset_boil, gamma_boil, Tboil and Vboil now work properly.
+// - Separate key (Q) for Pump 2 instead of one key (P) for both pumps.
+// - Added: All valves off (V0 command) when exiting program.
+// - Boiling-detection added. New Registry variable BOIL_DETECT, adjustable in Sparge, Mash
+//   & Boil Settings Dialog Box.
+// - Flowrate low detection also added for boil-kettle to fermentation bin. New Registry
+//   variables added: MIN_FR_MLT_PERC and MIN_FR_BOIL_PERC, adjustable in Measurements dialog box.
+//
 // Revision 1.32  2016/08/07 14:26:43  Emile
 // - Version works with firmware r1.29.
 // - Pump 2 (HLT heat-exchanger) support added in Px command
@@ -332,6 +341,8 @@ typedef struct _std_struct
    int    mrest_tmr; // Timer for state 'Mast Rest 5 Min.'
    int    timer5;    // Timer for state 'Boiling'
    int    mash_rest; // 1 = mash rest after malt is added
+   int    cip_tmr1;  // Timer for CIP process
+   int    cip_circ;  // Counter for CIP circulations
 } std_struct;
 
 #define MAX_MA (50)
@@ -410,21 +421,43 @@ typedef struct _flow_rate_low_struct
 #define S17_FINISHED              (17)
 #define S18_MASH_REST_5_MIN       (18)
 
+#define S20_CIP_INIT              (20)
+#define S21_CIP_HEAT_UP           (21)
+#define S22_CIP_CIRC_5_MIN        (22)
+#define S23_CIP_REST_5_MIN        (23)
+#define S24_CIP_DRAIN_BOIL1       (24)
+#define S25_CIP_DRAIN_BOIL2       (25)
+#define S26_CIP_FILL_HLT          (26)
+#define S27_CIP_CLEAN_OUTPUTS     (27)
+#define S28_CIP_CLEAN_INPUTS      (28)
+#define S29_CIP_END               (29)
+
 //----------------------------------
 // Defines for User Interaction
 //----------------------------------
-#define UI_PID_ON            (0x01)
-#define UI_MALT_ADDED_TO_MLT (0x02)
-#define UI_BOILING_STARTED   (0x04)
-#define UI_START_CHILLING    (0x08)
-#define UI_CHILLING_FINISHED (0x10)
+#define UI_PID_ON             (0x0001)
+#define UI_MALT_ADDED_TO_MLT  (0x0002)
+#define UI_BOILING_STARTED    (0x0004)
+#define UI_START_CHILLING     (0x0008)
+#define UI_CHILLING_FINISHED  (0x0010)
+#define UI_CIP_INIT           (0x0020)
+#define UI_CIP_BOIL_FILLED    (0x0040)
+#define UI_CIP_HOSES_IN_DRAIN (0x0080)
+#define UI_CIP_HLT_FILLED     (0x0100)
 
-//------------------------------
-// Hard-coded Timers
-//------------------------------
+//-------------------------------------------------------------
+// Hard-coded Timers.
+// task update_std() runs every second, so 1 second is 1 tick.
+//-------------------------------------------------------------
 #define TMR_PREFILL_PUMP       (60)
 #define TMR_DELAY_xSEC         (10)
 #define TMR_MASH_REST_5_MIN   (300)
+#define TMR_CIP_CIRC_TIME     (300)
+#define TMR_CIP_REST_TIME     (300)
+#define TMR_CIP_CLEAN_OUTPUTS (300)
+#define TMR_CIP_CLEAN_INPUTS  (120)
+
+#define CIP_TEMP_SETPOINT     (65.0)
 
 //--------------------------------------------------------------------------
 // #defines for the valves. Each valve can be set manually or automatically

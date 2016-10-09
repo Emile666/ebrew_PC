@@ -6,6 +6,13 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.55  2016/08/07 14:26:43  Emile
+// - Version works with firmware r1.29.
+// - Pump 2 (HLT heat-exchanger) support added in Px command
+// - V8 now also works, action bits in STD reorganised for this.
+// - Tboil Ref. Temp. is now properly set (bug-fix from session 151).
+// - New Registry parameter BOIL_MIN_TEMP instead of hard-coded value.
+//
 // Revision 1.54  2016/06/11 16:57:28  Emile
 // - Indy UDP components removed. udp routines added.
 // - Ethernet / UDP communication now works.
@@ -413,10 +420,6 @@
 #include "VrGradient.hpp"
 #include <winsock2.h>
 
-#define TS_INIT   (20.0)
-#define KC_INIT   (80.0)
-#define TI_INIT  (282.0)
-#define TD_INIT   (20.0)
 #define LOGFILE   "ebrewlog.txt"
 #define MASH_FILE "maisch.sch"
 #define REGKEY    "Software\\ebrew"
@@ -592,6 +595,8 @@ __published:	// IDE-managed Components
         TLabel *PID_dbg2;
         TLabel *P1;
         TLabel *V8;
+        TMenuItem *CIP_Start;
+        TMenuItem *N1;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -616,6 +621,7 @@ __published:	// IDE-managed Components
         void __fastcall Boilingstarted1Click(TObject *Sender);
         void __fastcall StartChilling1Click(TObject *Sender);
         void __fastcall ChillingFinished1Click(TObject *Sender);
+        void __fastcall CIP_StartClick(TObject *Sender);
 private:	// User declarations
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall print_mash_scheme_to_statusbar(void);

@@ -4,6 +4,11 @@
 // Purpose     : 
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.8  2013/06/22 23:04:19  Emile
+// - Second intermediate version: scheduler added and timer interrupt divided
+//   over a number of tasks.
+// - Version works with Ebrew hardware, task duration needs to be optimised!
+//
 // Revision 1.7  2013/06/16 14:39:19  Emile
 // Intermediate version for new Ebrew 2.0 USB hardware:
 // - Hardware settings Dialog: COM Port + Settings added + LEDx removed
@@ -65,7 +70,7 @@ WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
         {
                  Application->Initialize();
                  Application->Title = "E-Brew!";
-                 Application->HelpFile = "C:\\DATA\\ebrew\\win_app\\EBREW.HLP";
+                 Application->HelpFile = "EBREW.HLP";
                  Application->CreateForm(__classid(TMainForm), &MainForm);
                  Application->CreateForm(__classid(TPID_Settings), &PID_Settings);
                  Application->CreateForm(__classid(TFix_Params), &Fix_Params);

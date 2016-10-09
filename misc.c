@@ -6,6 +6,15 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.34  2016/09/23 09:51:55  Emile
+  - Bug-fix: Switches/Fixes for Tset_boil, gamma_boil, Tboil and Vboil now work properly.
+  - Separate key (Q) for Pump 2 instead of one key (P) for both pumps.
+  - Added: All valves off (V0 command) when exiting program.
+  - Boiling-detection added. New Registry variable BOIL_DETECT, adjustable in Sparge, Mash
+    & Boil Settings Dialog Box.
+  - Flowrate low detection also added for boil-kettle to fermentation bin. New Registry
+    variables added: MIN_FR_MLT_PERC and MIN_FR_BOIL_PERC, adjustable in Measurements dialog box.
+
   Revision 1.33  2016/08/07 14:26:43  Emile
   - Version works with firmware r1.29.
   - Pump 2 (HLT heat-exchanger) support added in Px command
@@ -243,6 +252,7 @@
 
 flow_rate_low_struct frl_empty_mlt;  // Needed for detection of low flowrate
 flow_rate_low_struct frl_empty_boil; // Needed for detection of low flowrate
+flow_rate_low_struct frl_empty_cip;  // Needed for detection of low flowrate
 
 /*----------------------------------------------------*/
 /* This macro is used by decode_log_file() to advance */
@@ -923,13 +933,13 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
    //           |  |  |----------------------> Future Use
    //           |  |  |  |-------------------> Out to Boil kettle
    //           |  |  |  |  |----------------> Out to Counter Flow Chiller (CFC)
-   //           |  |  |  |  |  |-------------> Out Bypass Heat Exchanger
+   //           |  |  |  |  |  |-------------> Future Use
    //           |  |  |  |  |  |  |----------> Out to HLT Heat Exchanger
    //           |  |  |  |  |  |  |  |-------> In from Boil kettle
    //           |  |  |  |  |  |  |  |  |----> In from HLT
    //           |  |  |  |  |  |  |  |  |  |-> In from MLT
-   //           P1 P0 V8 V7 V6 V5 V4 V3 V2 V1 Description              Hex.
-   //------------------------------------------------------------------------
+   //           P1 P0 V8 V7 V6 V5 V4 V3 V2 V1 Description                Hex.
+   //-------------------------------------------------------------------------
    // State 00: 0  0  0  0  0  0  0  0  0  0  Initialisation            0x0000
    // State 01: 1  0  0  0  0  0  0  0  0  0  Wait for HLT Temp.        0x0200
    // State 02: 1  1  0  0  0  0  1  0  1  1  Fill MLT                  0x030B
@@ -949,11 +959,25 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
    // State 16: 0  1  0  0  1  0  0  1  0  0  Chill & Pump to Fermentor 0x0124
    // State 17: 0  0  0  0  0  0  0  0  0  0  Finished!                 0x0000
    // State 18: 0  0  0  0  0  0  0  0  0  0  Mash Rest 5 minutes       0x0000
-   //------------------------------------------------------------------------
+   // State 19:                               NOT USED                  0x0000
+   // State 20: 0  0  0  0  0  0  0  0  0  0  CIP: Initalisation        0x0000   
+   // State 21: 0  1  0  1  1  0  1  1  0  0  CIP: Heat Up              0x016C   
+   // State 22: 0  1  0  1  1  0  1  1  0  0  CIP: Circulate 5 Minutes  0x016C   
+   // State 23: 0  0  0  0  0  0  0  0  0  0  CIP: Rest 5 Minutes       0x0000   
+   // State 24: 0  1  0  0  1  0  1  1  0  0  CIP: Drain Boil-Kettle 1  0x012C
+   // State 25: 0  1  0  0  1  0  1  1  0  0  CIP: Drain Boil-Kettle 2  0x012C
+   // State 26: 0  0  0  0  0  0  0  0  0  0  CIP: Fill HLT             0x0000
+   // State 27: 0  1  0  1  1  0  1  0  1  0  CIP: Clean Outputs        0x016A
+   // State 28: 0  0  0  0  0  0  0  1  1  1  CIP: Clean Inputs         0x0007
+   // State 29: 0  0  0  0  0  0  0  0  0  0  CIP: End                  0x0000
+//----------------------------------------------------------------------------
    unsigned int  klepstanden[] = {0x0000, 0x0200, 0x030B, 0x0309, 0x0309, /* 04 */
                          /* 05 */ 0x0309, 0x0141, 0x030B, 0x0000, 0x0141, /* 09 */
                          /* 10 */ 0x0000, 0x0000, 0x0000, 0x0200, 0x0003, /* 14 */
-                         /* 15 */ 0x0000, 0x0124, 0x0000, 0x0000}; /* 18 */
+                         /* 15 */ 0x0000, 0x0124, 0x0000, 0x0000, 0x0000, /* 19 */
+                         /* 20 */ 0x0000, 0x016C, 0x016C, 0x0000, 0x012C, /* 24 */
+                         /* 25 */ 0x012C, 0x0000, 0x016A, 0x0007, 0x0000};/* 29 */
+
    unsigned int  klepstand; // Help var. = klepstanden[std->ebrew_std]
 
    switch (std->ebrew_std)
@@ -972,6 +996,10 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            {
               std->ebrew_std = S01_WAIT_FOR_HLT_TEMP;
            } // if
+           else if (ui & UI_CIP_INIT) 
+           {
+              std->ebrew_std = S20_CIP_INIT;
+           } // else if
            break;
       //---------------------------------------------------------------------------
       // S01_WAIT_FOR_HLT_TEMP: Thlt < tset_HLT, continue to heat HLT
@@ -1247,6 +1275,8 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            } // else if
            break;
       //---------------------------------------------------------------------------
+      //                            B O I L I N G   &    C H I L L I N G
+      //---------------------------------------------------------------------------
       // S09_EMPTY_MLT: Sparging is finished, pump all wort to the boil kettle
       //---------------------------------------------------------------------------
       case S09_EMPTY_MLT:
@@ -1323,6 +1353,134 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            sps->pid_ctrl_boil_on = 0; // Disable PID-Controller for Boil-Kettle
            // Remain in this state until Program Exit.
            break;
+      //---------------------------------------------------------------------------
+      //               C L E A N I N G    I N    P L A C E   ( C I P )
+      //---------------------------------------------------------------------------
+      // S20_CIP_INIT: Start of Cleaning-In-Place Program.
+      // Wait until Boil-kettle has been filled with 1% NaOH solution.
+      //---------------------------------------------------------------------------
+      case S20_CIP_INIT:
+           *tset_boil            = 0.0; // Boil Temperature Setpoint
+           sps->pid_ctrl_boil_on = 0;   // Disable PID-Controller for Boil-Kettle
+           std->cip_circ         = 0;   // Init. CIP circulation counter
+           if (ui & UI_CIP_BOIL_FILLED) // User indicated that Boil-Kettle is filled
+                std->ebrew_std = S21_CIP_HEAT_UP;
+           else if (!(ui & UI_CIP_INIT))
+                std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S21_CIP_HEAT_UP: Heat Boil-kettle up to predefined temperature.
+      //---------------------------------------------------------------------------
+      case S21_CIP_HEAT_UP:
+           *tset_boil            = CIP_TEMP_SETPOINT; // Boil-Kettle Temperature Setpoint
+           sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
+           if (tboil > CIP_TEMP_SETPOINT - 1.0) // Almost at setpoint temperature
+           {
+              std->cip_tmr1  = 0;        // Init. CIP timer
+              std->ebrew_std = S22_CIP_CIRC_5_MIN;  
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S22_CIP_CIRC_5_MIN: Circulate NaOH solution through brewing system pipes
+      //---------------------------------------------------------------------------
+      case S22_CIP_CIRC_5_MIN:
+           *tset_boil            = CIP_TEMP_SETPOINT; // Boil-Kettle Temperature Setpoint
+           sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
+           if (++std->cip_tmr1 >= TMR_CIP_CIRC_TIME)
+           {
+              std->cip_tmr1  = 0;        // Reset CIP timer  
+              if (++std->cip_circ > 1)   // Count number of CIP circulations
+              {    // Init flowrate low struct with percentage
+	           init_frl_struct(&frl_empty_cip,vol->min_flowrate_boil_perc);
+                   std->ebrew_std = S24_CIP_DRAIN_BOIL1;
+	      }	// if
+              else std->ebrew_std = S23_CIP_REST_5_MIN;
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S23_CIP_REST_5_MIN: Rest period, all valves and pump off
+      //---------------------------------------------------------------------------
+      case S23_CIP_REST_5_MIN:
+           *tset_boil            = CIP_TEMP_SETPOINT; // Boil-Kettle Temperature Setpoint
+           sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
+           if (++std->cip_tmr1 >= TMR_CIP_REST_TIME)
+           {
+              std->cip_tmr1  = 0;        // Reset CIP timer
+              std->ebrew_std = S22_CIP_CIRC_5_MIN;
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S24_CIP_DRAIN_BOIL1: Empty Boil-Kettle, remove NaOH solution. Do this by
+      //                      placing the CFC-output and MLT-return hoses in the drain.
+      //---------------------------------------------------------------------------
+      case S24_CIP_DRAIN_BOIL1:
+           *tset_boil            = 0.0; // Boil-Kettle Temperature Setpoint
+           sps->pid_ctrl_boil_on = 0;   // Disable PID-Controller for Boil-Kettle
+           if (ui | UI_CIP_HOSES_IN_DRAIN)
+              std->ebrew_std = S25_CIP_DRAIN_BOIL2;
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S25_CIP_DRAIN_BOIL2: Empty Boil-Kettle, remove NaOH solution. Check when
+      //                      CFC-output flowrate is low, then boil-kettle is empty.
+      //---------------------------------------------------------------------------
+      case S25_CIP_DRAIN_BOIL2:
+           *tset_boil            = 0.0; // Boil-Kettle Temperature Setpoint
+           sps->pid_ctrl_boil_on = 0;   // Disable PID-Controller for Boil-Kettle
+           if (flow_rate_low(vol->Flow_rate_cfc_out,&frl_empty_cip))
+              std->ebrew_std = S26_CIP_FILL_HLT;
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S26_CIP_FILL_HLT: Fill HLT with sufficient fresh water
+      //---------------------------------------------------------------------------
+      case S26_CIP_FILL_HLT:
+           if (ui & UI_CIP_HLT_FILLED)
+	   {  // User indicated that HLT has been filled with fresh water
+              std->cip_tmr1  = 0;
+              std->ebrew_std = S27_CIP_CLEAN_OUTPUTS;
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S27_CIP_CLEAN_OUTPUTS: Clean outputs of brewing system with fresh water
+      //---------------------------------------------------------------------------
+      case S27_CIP_CLEAN_OUTPUTS:
+           if (++std->cip_tmr1 >= TMR_CIP_CLEAN_OUTPUTS)
+           {
+              std->cip_tmr1  = 0; // Reset CIP timer
+              std->ebrew_std = S28_CIP_CLEAN_INPUTS;
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S28_CIP_CLEAN_INPUTS: Clean inputs of brewing system with fresh water.
+      //                       This is done by gravity-feed, not with a pump.
+      //---------------------------------------------------------------------------
+      case S28_CIP_CLEAN_INPUTS:
+           if (++std->cip_tmr1 >= TMR_CIP_CLEAN_INPUTS)
+           {
+              std->ebrew_std = S29_CIP_END;
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      case S29_CIP_END:
+           // End of CIP-Program. UI (Main-Program) sets state to S00_Initialisation
+           break;
+      //---------------------------------------------------------------------------
+      // Default: should never get here
+      //---------------------------------------------------------------------------
       default:
            std->ebrew_std = S00_INITIALISATION;
            break;
