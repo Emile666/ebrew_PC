@@ -6,6 +6,11 @@
   ------------------------------------------------------------------
   Purpose : This file contains several miscellaneous functions
   $Log$
+  Revision 1.35  2016/10/09 12:44:45  Emile
+  - Bugfix from brewsession 153: Temp. offset were not added to temps. Corrected.
+  - First version of CIP STD added. TODO: add parameter menu instead of hardcoded values.
+  - Several minor changes
+
   Revision 1.34  2016/09/23 09:51:55  Emile
   - Bug-fix: Switches/Fixes for Tset_boil, gamma_boil, Tboil and Vboil now work properly.
   - Separate key (Q) for Pump 2 instead of one key (P) for both pumps.
@@ -965,18 +970,22 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
    // State 22: 0  1  0  1  1  0  1  1  0  0  CIP: Circulate 5 Minutes  0x016C   
    // State 23: 0  0  0  0  0  0  0  0  0  0  CIP: Rest 5 Minutes       0x0000   
    // State 24: 0  1  0  0  1  0  1  1  0  0  CIP: Drain Boil-Kettle 1  0x012C
-   // State 25: 0  1  0  0  1  0  1  1  0  0  CIP: Drain Boil-Kettle 2  0x012C
+   // State 25: 0  1  0  0  1  0  0  1  0  0  CIP: Drain Boil-Kettle 2  0x0124
    // State 26: 0  0  0  0  0  0  0  0  0  0  CIP: Fill HLT             0x0000
-   // State 27: 0  1  0  1  1  0  1  0  1  0  CIP: Clean Outputs        0x016A
-   // State 28: 0  0  0  0  0  0  0  1  1  1  CIP: Clean Inputs         0x0007
-   // State 29: 0  0  0  0  0  0  0  0  0  0  CIP: End                  0x0000
+   // State 27: 0  1  0  1  0  0  0  0  1  0  CIP: Clean Output V7      0x0142
+   // State 28: 0  1  0  0  1  0  0  0  1  0  CIP: Clean Output V6      0x0122
+   // State 29: 0  1  0  0  0  0  1  0  1  0  CIP: Clean Output V4      0x010A
+   // State 30: 0  0  0  0  0  0  0  1  1  0  CIP: Clean Input V3       0x0006
+   // State 31: 0  0  0  0  0  0  0  0  1  1  CIP: Clean Input V1       0x0003
+   // State 32: 0  0  0  0  0  0  0  0  0  0  CIP: End                  0x0000
 //----------------------------------------------------------------------------
    unsigned int  klepstanden[] = {0x0000, 0x0200, 0x030B, 0x0309, 0x0309, /* 04 */
                          /* 05 */ 0x0309, 0x0141, 0x030B, 0x0000, 0x0141, /* 09 */
                          /* 10 */ 0x0000, 0x0000, 0x0000, 0x0200, 0x0003, /* 14 */
                          /* 15 */ 0x0000, 0x0124, 0x0000, 0x0000, 0x0000, /* 19 */
                          /* 20 */ 0x0000, 0x016C, 0x016C, 0x0000, 0x012C, /* 24 */
-                         /* 25 */ 0x012C, 0x0000, 0x016A, 0x0007, 0x0000};/* 29 */
+                         /* 25 */ 0x0124, 0x0000, 0x0142, 0x0122, 0x010A, /* 29 */
+                         /* 30 */ 0x0006, 0x0003, 0x0000}; /* 32 */
 
    unsigned int  klepstand; // Help var. = klepstanden[std->ebrew_std]
 
@@ -1374,7 +1383,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       case S21_CIP_HEAT_UP:
            *tset_boil            = CIP_TEMP_SETPOINT; // Boil-Kettle Temperature Setpoint
            sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
-           if (tboil > CIP_TEMP_SETPOINT - 1.0) // Almost at setpoint temperature
+           if (tboil > CIP_TEMP_SETPOINT - 5.0) // Almost at setpoint temperature
            {
               std->cip_tmr1  = 0;        // Init. CIP timer
               std->ebrew_std = S22_CIP_CIRC_5_MIN;  
@@ -1446,36 +1455,73 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            if (ui & UI_CIP_HLT_FILLED)
 	   {  // User indicated that HLT has been filled with fresh water
               std->cip_tmr1  = 0;
-              std->ebrew_std = S27_CIP_CLEAN_OUTPUTS;
+              std->ebrew_std = S27_CIP_CLEAN_OUTPUT_V7;
            } // if
            else if (!(ui & UI_CIP_INIT))
               std->ebrew_std = S00_INITIALISATION;
            break;
       //---------------------------------------------------------------------------
-      // S27_CIP_CLEAN_OUTPUTS: Clean outputs of brewing system with fresh water
+      // S27_CIP_CLEAN_OUTPUT_V7: Clean output V7 of brewing system with fresh water
       //---------------------------------------------------------------------------
-      case S27_CIP_CLEAN_OUTPUTS:
+      case S27_CIP_CLEAN_OUTPUT_V7:
            if (++std->cip_tmr1 >= TMR_CIP_CLEAN_OUTPUTS)
            {
               std->cip_tmr1  = 0; // Reset CIP timer
-              std->ebrew_std = S28_CIP_CLEAN_INPUTS;
+              std->ebrew_std = S28_CIP_CLEAN_OUTPUT_V6;
            } // if
            else if (!(ui & UI_CIP_INIT))
               std->ebrew_std = S00_INITIALISATION;
            break;
       //---------------------------------------------------------------------------
-      // S28_CIP_CLEAN_INPUTS: Clean inputs of brewing system with fresh water.
-      //                       This is done by gravity-feed, not with a pump.
+      // S28_CIP_CLEAN_OUTPUT_V6: Clean output V6 of brewing system with fresh water
       //---------------------------------------------------------------------------
-      case S28_CIP_CLEAN_INPUTS:
+      case S28_CIP_CLEAN_OUTPUT_V6:
+           if (++std->cip_tmr1 >= TMR_CIP_CLEAN_OUTPUTS)
+           {
+              std->cip_tmr1  = 0; // Reset CIP timer
+              std->ebrew_std = S29_CIP_CLEAN_OUTPUT_V4;
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S29_CIP_CLEAN_OUTPUT_V4: Clean output V4 of brewing system with fresh water
+      //---------------------------------------------------------------------------
+      case S29_CIP_CLEAN_OUTPUT_V4:
+           if (++std->cip_tmr1 >= TMR_CIP_CLEAN_OUTPUTS)
+           {
+              std->cip_tmr1  = 0; // Reset CIP timer
+              std->ebrew_std = S30_CIP_CLEAN_INPUT_V3;
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      //---------------------------------------------------------------------------
+      // S30_CIP_CLEAN_INPUT_V3: Clean input V3 of brewing system with fresh water.
+      //                         This is done by gravity-feed, not with a pump.
+      //---------------------------------------------------------------------------
+      case S30_CIP_CLEAN_INPUT_V3:
            if (++std->cip_tmr1 >= TMR_CIP_CLEAN_INPUTS)
            {
-              std->ebrew_std = S29_CIP_END;
+              std->cip_tmr1  = 0; // Reset CIP timer
+              std->ebrew_std = S31_CIP_CLEAN_INPUT_V1;
            } // if
            else if (!(ui & UI_CIP_INIT))
               std->ebrew_std = S00_INITIALISATION;
            break;
-      case S29_CIP_END:
+      //---------------------------------------------------------------------------
+      // S31_CIP_CLEAN_INPUT_V1: Clean input V1 of brewing system with fresh water.
+      //                         This is done by gravity-feed, not with a pump.
+      //---------------------------------------------------------------------------
+      case S31_CIP_CLEAN_INPUT_V1:
+           if (++std->cip_tmr1 >= TMR_CIP_CLEAN_INPUTS)
+           {
+              std->ebrew_std = S32_CIP_END;
+           } // if
+           else if (!(ui & UI_CIP_INIT))
+              std->ebrew_std = S00_INITIALISATION;
+           break;
+      case S32_CIP_END:
            // End of CIP-Program. UI (Main-Program) sets state to S00_Initialisation
            break;
       //---------------------------------------------------------------------------

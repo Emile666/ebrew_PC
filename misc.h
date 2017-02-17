@@ -6,6 +6,11 @@
 // ------------------------------------------------------------------
 // Modification History :
 // $Log$
+// Revision 1.34  2016/10/09 12:44:45  Emile
+// - Bugfix from brewsession 153: Temp. offset were not added to temps. Corrected.
+// - First version of CIP STD added. TODO: add parameter menu instead of hardcoded values.
+// - Several minor changes
+//
 // Revision 1.33  2016/09/23 09:51:55  Emile
 // - Bug-fix: Switches/Fixes for Tset_boil, gamma_boil, Tboil and Vboil now work properly.
 // - Separate key (Q) for Pump 2 instead of one key (P) for both pumps.
@@ -428,9 +433,12 @@ typedef struct _flow_rate_low_struct
 #define S24_CIP_DRAIN_BOIL1       (24)
 #define S25_CIP_DRAIN_BOIL2       (25)
 #define S26_CIP_FILL_HLT          (26)
-#define S27_CIP_CLEAN_OUTPUTS     (27)
-#define S28_CIP_CLEAN_INPUTS      (28)
-#define S29_CIP_END               (29)
+#define S27_CIP_CLEAN_OUTPUT_V7   (27)
+#define S28_CIP_CLEAN_OUTPUT_V6   (28)
+#define S29_CIP_CLEAN_OUTPUT_V4   (29)
+#define S30_CIP_CLEAN_INPUT_V3    (30)
+#define S31_CIP_CLEAN_INPUT_V1    (31)
+#define S32_CIP_END               (32)
 
 //----------------------------------
 // Defines for User Interaction
@@ -454,8 +462,8 @@ typedef struct _flow_rate_low_struct
 #define TMR_MASH_REST_5_MIN   (300)
 #define TMR_CIP_CIRC_TIME     (300)
 #define TMR_CIP_REST_TIME     (300)
-#define TMR_CIP_CLEAN_OUTPUTS (300)
-#define TMR_CIP_CLEAN_INPUTS  (120)
+#define TMR_CIP_CLEAN_OUTPUTS  (60)
+#define TMR_CIP_CLEAN_INPUTS   (60)
 
 #define CIP_TEMP_SETPOINT     (65.0)
 

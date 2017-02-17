@@ -6,6 +6,11 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.87  2016/10/09 12:44:45  Emile
+// - Bugfix from brewsession 153: Temp. offset were not added to temps. Corrected.
+// - First version of CIP STD added. TODO: add parameter menu instead of hardcoded values.
+// - Several minor changes
+//
 // Revision 1.86  2016/09/23 09:51:55  Emile
 // - Bug-fix: Switches/Fixes for Tset_boil, gamma_boil, Tboil and Vboil now work properly.
 // - Separate key (Q) for Pump 2 instead of one key (P) for both pumps.
@@ -913,7 +918,7 @@ void task_update_std(void)
                             "Cleaning in Place (CIP): Fill HLT with Fresh Water",MB_OK);
             ui |= UI_CIP_HLT_FILLED;
             break;
-       case S29_CIP_END:
+       case S32_CIP_END:
             MainForm->CIP_Start->Checked = false; // Reset CIP checkbox
             ui &= ~UI_CIP_INIT;                   // Reset UI checkbox
             MainForm->std.ebrew_std = S00_INITIALISATION;
@@ -3043,7 +3048,7 @@ void __fastcall TMainForm::Update_GUI(void)
    Boil->Value = gamma_boil; // PID-output for Boil-Kettle
    sprintf(tmp_str,"%d %%",(int)gamma_boil);
    Gamma_Boil->Caption = tmp_str;
-
+   
    switch (std.ebrew_std)
    {
      case S00_INITIALISATION       : Std_State->Caption = "00. Initialisation"                 ; break;
@@ -3072,9 +3077,12 @@ void __fastcall TMainForm::Update_GUI(void)
      case S24_CIP_DRAIN_BOIL1      : Std_State->Caption = "24. CIP: Drain Boil-Kettle 1"       ; break;
      case S25_CIP_DRAIN_BOIL2      : Std_State->Caption = "25. CIP: Drain Boil-Kettle 2"       ; break;
      case S26_CIP_FILL_HLT         : Std_State->Caption = "26. CIP: Fill HLT with fresh water" ; break;
-     case S27_CIP_CLEAN_OUTPUTS    : Std_State->Caption = "27. CIP: Clean Outputs"             ; break;
-     case S28_CIP_CLEAN_INPUTS     : Std_State->Caption = "28. CIP: Clean Inputs"              ; break;
-     case S29_CIP_END              : Std_State->Caption = "29. CIP: End of Program"            ; break;
+     case S27_CIP_CLEAN_OUTPUT_V7  : Std_State->Caption = "27. CIP: Clean Output V7"           ; break;
+     case S28_CIP_CLEAN_OUTPUT_V6  : Std_State->Caption = "28. CIP: Clean Output V6"           ; break;
+     case S29_CIP_CLEAN_OUTPUT_V4  : Std_State->Caption = "29. CIP: Clean Output V4"           ; break;
+     case S30_CIP_CLEAN_INPUT_V3   : Std_State->Caption = "30. CIP: Clean Input V3"            ; break;
+     case S31_CIP_CLEAN_INPUT_V1   : Std_State->Caption = "31. CIP: Clean Input V1"            ; break;
+     case S32_CIP_END              : Std_State->Caption = "32. CIP: End of Program"            ; break;
      default                       : Std_State->Caption = "xx. Unknown State"                  ; break;
    } // switch
 
