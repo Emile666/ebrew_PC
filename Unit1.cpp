@@ -6,6 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // $Log$
+// Revision 1.88  2017/02/17 13:29:25  Emile
+// - CIP cleaning inputs and outputs now per valve instead of all together.
+//
 // Revision 1.87  2016/10/09 12:44:45  Emile
 // - Bugfix from brewsession 153: Temp. offset were not added to temps. Corrected.
 // - First version of CIP STD added. TODO: add parameter menu instead of hardcoded values.
@@ -1506,7 +1509,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision$";
+   ebrew_revision   = "$Revision: 1.89 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active

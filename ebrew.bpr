@@ -84,7 +84,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=1
 Release=0
-Build=96
+Build=99
 Debug=0
 PreRelease=0
 Special=0
@@ -96,7 +96,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=de Boezem
 FileDescription=ebrew automates the HERMS home-brewery, web-site: www.vandelogt.nl
-FileVersion=1.1.0.96
+FileVersion=1.1.0.99
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=
