@@ -5,7 +5,7 @@
     <VERSION value="BCB.06.00"/>
     <PROJECT value="ebrew.exe"/>
     <OBJFILES value="O\ebrew.obj O\Unit1.obj O\PID_Settings_Dialog.obj O\FixParamsDialog.obj 
-      O\I2CSettingsDialog.obj O\misc.obj O\PID_REG.obj O\EditMashScheme.obj 
+      O\I2CSettingsDialog.obj O\misc.obj O\pid_reg.obj O\EditMashScheme.obj 
       O\ViewMashProgressForm.obj O\Sparge_Settings.obj O\RestoreSettings.obj 
       O\VersionAwareAbout.obj O\MeasurementsDialog.obj O\scheduler.obj"/>
     <RESFILES value="ebrew.res"/>
@@ -65,7 +65,7 @@
       <FILE FILENAME="FixParamsDialog.cpp" FORMNAME="Fix_Params" UNITNAME="FixParamsDialog" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="I2CSettingsDialog.cpp" FORMNAME="I2C_Settings" UNITNAME="I2CSettingsDialog" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="misc.c" FORMNAME="" UNITNAME="MISC" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
-      <FILE FILENAME="PID_REG.C" FORMNAME="" UNITNAME="PID_REG" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
+      <FILE FILENAME="pid_reg.c" FORMNAME="" UNITNAME="PID_REG" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="EditMashScheme.cpp" FORMNAME="EditMashSchemeDlg" UNITNAME="EditMashScheme" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="ViewMashProgressForm.cpp" FORMNAME="ViewMashProgress" UNITNAME="ViewMashProgressForm" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>
       <FILE FILENAME="Sparge_Settings.cpp" FORMNAME="SpargeSettings" UNITNAME="Sparge_Settings" CONTAINERID="CCompiler" DESIGNCLASS="" LOCALCOMMAND=""/>

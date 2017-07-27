@@ -1,11 +1,9 @@
 // ==========================================================================
-// Filename    : $Id$
-// Author      : E. van de Logt
+// Filename    : RestoreSettings.cpp
+// Author      : Emile
 // Purpose     : Provides a form where the contents of the log-file are
 //               displayed (in a Combobox), so that the proper log-entry to
 //               restore from, can be selected.
-// --------------------------------------------------------------------------
-// $Log$
 // ==========================================================================
 
 //---------------------------------------------------------------------------

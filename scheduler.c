@@ -1,15 +1,9 @@
 /*==================================================================
   File Name    : scheduler.c
-  Function name: scheduler_isr(), dispatch_tasks(), add_task(),
-                 enable_task()  , disable_task()  , set_task_time_period(),
-				 list_all_tasks()
-  File name    : $Id$
-  Author       : E. van de Logt
+  Author       : Emile
   ------------------------------------------------------------------
   Purpose : This files contains all the functions for adding and
             executing tasks in a cooperative (non pre-emptive) way.
-  ------------------------------------------------------------------
-  $Log$
   ==================================================================
 */ 
 #include "scheduler.h"

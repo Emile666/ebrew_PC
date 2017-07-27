@@ -1,28 +1,7 @@
 // ==========================================================================
-// Filename    : $Id$
-// Author      : E. van de Logt
+// Filename    : VersionAwareAbout.cpp
+// Author      : Emile
 // Purpose     : Provides the code for the About... Screen.
-// --------------------------------------------------------------------------
-// $Log$
-// Revision 1.3  2013/07/23 09:42:46  Emile
-// - Fourth intermediate version: several Registry Settings added / removed.
-// - Dialog Screens updated: better lay-out and matches new Registry Settings
-// - Source-code improved for readability
-//
-// Revision 1.2  2013/06/16 14:39:19  Emile
-// Intermediate version for new Ebrew 2.0 USB hardware:
-// - Hardware settings Dialog: COM Port + Settings added + LEDx removed
-// - PortTalk + i2c_dll + Start_i2c_communication + Reset_I2C_Bus removed
-// - New routines for COM-Port added
-// - Generate_IO_Signals() now uses COM_port_write to address all hardware
-// - This version works with new hardware: PUMP on/off + LEDs are working
-// - HEATER led and PWM output do not work yet + TODO: add scheduler.
-//
-// Revision 1.1  2004/03/26 10:22:55  emile
-// - Several files added to CVS repository, where not included yet
-// - Help file extended with many help items. First real help file version.
-// - TAnimTimer replaced by standard TTimer in TDataGraph form
-//
 // ==========================================================================
 
 //---------------------------------------------------------------------------
@@ -105,7 +84,7 @@ void __fastcall TVersionAwareAbout::FormCreate(TObject *Sender)
      if(buf[0] !='\0')
         reVersionInfo->Lines->Add("Brewery  : "+AnsiString(buf));
      reVersionInfo->Lines->Add("Web-site : www.vandelogt.nl");
-     reVersionInfo->Lines->Add("(c) 2003-2015: ir. drs. Emile van de Logt");
+     reVersionInfo->Lines->Add("(c) 2003-2017: Emile");
      free(VerInfo);
   }
 

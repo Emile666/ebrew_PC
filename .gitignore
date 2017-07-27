@@ -16,6 +16,7 @@
 *.dsk
 *.tds
 *.drc
+*.ddp
 
 # Libraries
 *.lib

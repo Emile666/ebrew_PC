@@ -1,11 +1,15 @@
 // ==========================================================================
-// Filename    : $Id$
-// Author      : E. van de Logt
+// Filename    : Unit1.cpp
+// Author      : Emile
 // Purpose     : Main Unit of the ebrew program. Contains Init. functions,
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
-// $Log$
+// Revision 1.89
+// - Switched from CVS to GIT version control
+// - All CVS logs in headers removed (except this one)
+// - View Mash Progress Form made larger to prevent roll-over bug
+//
 // Revision 1.88  2017/02/17 13:29:25  Emile
 // - CIP cleaning inputs and outputs now per valve instead of all together.
 //

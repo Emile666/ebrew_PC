@@ -6,6 +6,8 @@ Amount of Sparge water (L): 1
 
 // Format: Temp (Celsius), time (min.) for temperature rest
 // NOTE: Max. 10 Entries, NO empty lines!
+44, 10
+52, 15
 63, 60
 73, 20
 78,  5

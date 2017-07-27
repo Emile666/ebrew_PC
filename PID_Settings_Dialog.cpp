@@ -1,80 +1,8 @@
 // ==========================================================================
-// Filename    : $Id$
-// Author      : E. van de Logt
+// Filename    : PID_Settings_Dialog.cpp
+// Author      : Emile
 // Purpose     : Provides a form where parameters for the PID Controller
 //               can be modified.
-// --------------------------------------------------------------------------
-// $Log$
-// Revision 1.10  2013/07/23 09:42:46  Emile
-// - Fourth intermediate version: several Registry Settings added / removed.
-// - Dialog Screens updated: better lay-out and matches new Registry Settings
-// - Source-code improved for readability
-//
-// Revision 1.9  2013/07/21 22:32:47  Emile
-// - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
-// - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
-// - Registry: several parameters removed + parameters renamed
-// - Ttriac & DAC code & parameters removed
-//
-// Revision 1.8  2011/05/29 20:56:25  Emile
-// - New Registry variables added: STC_N, STC_TD and STC_ADF
-// - PID Settings Dialog screen extended with new parameters for self-tuning
-//   controller: possibility to set the system order N, an estimate for the
-//   time-delay and a boolean whether or not to use adaptive dir. forgetting.
-// - PID Settings Dialog screen: parameters enabled/disabled when a
-//   specific PID controller is chosen.
-// - New functions time_delay() and init_time_delay() added
-// - Changes made in init_pid2() function header.
-// - Unit-test cases updated and extended with tests for new functions.
-//
-// Revision 1.7  2011/05/06 11:09:42  Emile
-// - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
-// - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
-// - PID dialog updated to reflect changes.
-//
-// Revision 1.6  2006/11/19 10:53:55  Emile
-// The power outlet (220 V) is now shared with the modulating gas burner and
-// the electrical heating element. By setting the proper bits in the PID
-// Settings Dialog Screen, one can select which function is allocated to the
-// power outlet. If the gas burner is used, the outlet is energized when the
-// pid_output exceeds the gas burner hysteresis (also in the PID settings screen).
-// For this: the generate_IO_signals STD has been updated significantly.
-//
-// Revision 1.5  2005/11/12 22:19:38  Emile
-// - PID Output (Gamma) routing added. It is now possible to send the output
-//   of the PID controller to 3 devices: 1) electrical heating element,
-//   2) Non-modulating (standard) gas-burner, 3) modulating gas-burner.
-// - PID Dialog changed, checkboxes added.
-// - New registry variables: CB_PID_OUT, DAC_A, DAC_B
-// - The conversion from gamma to a value for the DA-output is done with
-//   DAC_A and DAC_B. The DA-output is used to generate the PWM signal for
-//   the modulating gas-burner.
-// - Led visibility decreased.
-// - Bug-fix: Check_HW_Devices screen appeared twice when checking I2C HW. Fixed.
-// - Displaying of Vhlt, Vmlt and Ttriac on LED-displays changed (less resolution).
-// - Network routines removed.
-//
-// Revision 1.4  2004/03/10 10:10:38  emile
-// - Reduced complexity of several routines:
-//   - T50msecTimer split, new routine Generate_IO_Signals added
-//   - PopupMenu1Popup now uses (new) macro SET_POPUPMENU
-//   - Reset_I2C_Bus now included in SET_LED macro
-// - Every I2C write action now in a separate time-slice to avoid
-//   I2C bus errors if fscl is low
-// - This is the first version where the help file function is enabled
-//   - All help buttons and F1 function key are operational
-//   - Help file sources: ebrew.rtf and ebrew.hpj are added to CVS
-// - ad1, ad2 and ad3 variables -> thlt, tmlt and ttriac (new variables)
-//
-// Revision 1.3  2003/06/29 13:11:34  emile
-// - Time switch function added (PID options screen). The PID controller is
-//   enabled when the predefined date and time have been met.
-//
-// Revision 1.2  2002/12/30 13:33:44  emile
-// - Headers with CVS tags added to every source file
-// - Restore Settings function is added
-// - "ebrew" registry key now in a define REGKEY
-//
 // ==========================================================================
 
 //----------------------------------------------------------------------------

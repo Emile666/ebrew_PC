@@ -1,8 +1,8 @@
 /*==================================================================
   Function name: init_pid2(), pid_reg2()
                  init_pid3(), pid_reg3(), init_pid4(), pid_reg4()
-  Author       : E. vd Logt
-  File name    : $Id$
+  Author       : Emile
+  File name    : pid_reg.c
   ------------------------------------------------------------------
   Purpose : This file contains the main body of the PID controller.
             For design details, please read the Word document
@@ -13,81 +13,6 @@
             Ti: Time-constant for the Integral Gain
             Td: Time-constant for the Derivative Gain
             Ts: The sample period [seconds]
-  ------------------------------------------------------------------
-  $Log$
-  Revision 1.12  2016/04/09 12:58:50  Emile
-  - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
-    and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
-    parameters and scheduler/tasks.
-  - Only 6 parameters left to send to HW. In line with firmware R1.23.
-  - New switched/fixes added for tset_boil, gamma_boil and Tboil.
-
-  Revision 1.11  2013/07/23 09:42:46  Emile
-  - Fourth intermediate version: several Registry Settings added / removed.
-  - Dialog Screens updated: better lay-out and matches new Registry Settings
-  - Source-code improved for readability
-
-  Revision 1.10  2011/05/29 20:56:26  Emile
-  - New Registry variables added: STC_N, STC_TD and STC_ADF
-  - PID Settings Dialog screen extended with new parameters for self-tuning
-    controller: possibility to set the system order N, an estimate for the
-    time-delay and a boolean whether or not to use adaptive dir. forgetting.
-  - PID Settings Dialog screen: parameters enabled/disabled when a
-    specific PID controller is chosen.
-  - New functions time_delay() and init_time_delay() added
-  - Changes made in init_pid2() function header.
-  - Unit-test cases updated and extended with tests for new functions.
-
-  Revision 1.9  2011/05/14 14:02:19  Emile
-  - Unit test set updates, test-case 16 added
-  - Self-Tuning controller N=1 and N=2 added to PID dialog screen
-  - PID debug label extended with (Kc Ti Td) and sys. id. parameters
-  - Max. sample-time extended to SIXTY_SECONDS (was 20 seconds)
-  - Help file updated with version history
-
-  Revision 1.8  2011/05/06 11:09:42  Emile
-  - pid_reg1(), pid_reg2(), init_pid1(), init_pid2() removed.
-  - pid_reg4() changed into pure Takahashi PID controller, no D-filtering anymore.
-  - PID dialog updated to reflect changes.
-
-  Revision 1.7  2007/07/06 22:23:02  Emile
-  - The real time between two lines from a log-file is now used instead of a
-    fixed 5 sec. time when reading a log-file.
-  - Leading-zero bug solved in Mash Progress screen
-  - i2c_stop() only called with PT_CLOSE in case of exit of program
-  - System Identification library functions added (but not used yet).
-
-  Revision 1.6  2004/05/13 20:51:00  emile
-  - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
-    timing is now reset after 100 loops (5 seconds)
-  - TS parameter now only works on PID-controller time-slice. Max. is 20 sec.
-  - Bug-fix in init_ma() filter when init. to a value (should be /N).
-  - LPF for D-term of PID controller added. New reg. var. K_LPF
-  - PID Debug label added + checkbox in PID screen. Default off (NO reg var).
-  - Statusbar object added
-  - Start made with network functionality. Not operational yet.
-
-  Revision 1.5  2004/05/10 20:54:30  emile
-  - Bug-fix: log-file header: '\n' was removed, is corrected now
-  - Hints added to PID dialog screen
-  - Now four PID controllers to choose from. Old ebrew version is still listed,
-    but should not be used anymore. Simulation showed stability problems.
-    Preferably use the type C controller.
-
-  Revision 1.4  2004/04/26 13:30:22  emile
-  Bug-fix: init_pid3() did not calculate correctly when Ti = 0. Corrected.
-
-  Revision 1.3  2004/04/25 14:02:17  emile
-  - Added a 'type C' PID controller, function pid_reg3(). Possible to select
-    this from the PID settings dialog screen. Left the old one in for
-    compatibility. New registry variable PID_Model.
-  - Gamma added to log-file, so that the PID controller can be tuned.
-
-  Revision 1.2  2002/12/30 13:33:45  emile
-  - Headers with CVS tags added to every source file
-  - Restore Settings function is added
-  - "ebrew" registry key now in a define REGKEY
-
   ==================================================================
 */
 #include "pid_reg.h"
