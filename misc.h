@@ -302,6 +302,7 @@ typedef struct _maisch_schedule
    double time;           /* time (min.) to remain at this temperature */
    double temp;           /* temperature (Celsius) to hold */
    int    timer;          /* timer, init. to NOT_STARTED */
+   int    preht;          /* preheat timer */
    char   time_stamp[20]; /* time when timer was started */
 } maisch_schedule;
 
@@ -310,7 +311,9 @@ typedef struct _sparge_struct
    /* Mash Settings */
    double temp_offset;     // Offset to add to Tset to compensate for HLT-MLT losses
    double temp_offset2;    // Offset to add to Tmlt for early start of mash timers
-   int    ph_timer;        // Mash pre-heat timer
+   int    ph_time;         // Copy of Registry var. PREHEAT_TIME
+   int    use_dpht;        // 1= use Dynamic preheat timing instead of fixed timing
+   int    hlt_bcap;        // HLT Burner Capacity in seconds per °C
    /* Sparge Settings */
    int    sp_batches;      // Total number of sparge batches
    int    sp_time;         // Time between two sparge batches in minutes

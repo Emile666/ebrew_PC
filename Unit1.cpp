@@ -5,7 +5,13 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
-// Revision 1.89
+// Revision 1.90  2017/08/03
+// - Added dynamic preheat timing instead of only fixed timing
+// - Two new Registry variables: CB_dpht and HLT_Bcap
+// - State labels extended with more information
+// - Feed-forward control instead of PID control in CIP state HEAT_UP
+//
+// Revision 1.89  2017/07/27
 // - Switched from CVS to GIT version control
 // - All CVS logs in headers removed (except this one)
 // - View Mash Progress Form made larger to prevent roll-over bug
@@ -860,7 +866,12 @@ void task_pid_ctrl(void)
     // PID-Controller for Boil-Kettle: only use Takahashi type C
     //----------------------------------------------------------------------
     pid_reg4(MainForm->tboil, &MainForm->gamma_boil, MainForm->tset_boil,
-             &MainForm->pid_pars_boil, MainForm->sp.pid_ctrl_boil_on);
+             &MainForm->pid_pars_boil, MainForm->sp.pid_ctrl_boil_on == 1);
+    if (MainForm->sp.pid_ctrl_boil_on == 2)
+    {   // Feed-Forward, gamma_boil == 100%, disable PID-control
+        // Only used in CIP-program
+        MainForm->gamma_boil = 100.0; // Boil-kettle Burner at full-power
+    } // if
     if (MainForm->swfx.gamma_boil_sw)
     {
        MainForm->gamma_boil = MainForm->swfx.gamma_boil_fx; // fix gamma for Boil-Kettle
@@ -1513,7 +1524,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.89 $";
+   ebrew_revision   = "$Revision: 1.90 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -1898,6 +1909,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
   ------------------------------------------------------------------*/
 {
   TRegistry *Reg = new TRegistry();
+  int i;
 
   // Get Sparge  & STD Settings from the Registry
   try
@@ -1916,8 +1928,25 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         // Mash Settings
         sp.temp_offset  = Reg->ReadFloat("TOffset");
         sp.temp_offset2 = Reg->ReadFloat("TOffset2");
-        sp.ph_timer     = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_timer is in seconds
-        std.mash_rest   = Reg->ReadBool("CB_Mash_Rest");  // Mash rest 5 minutes after malt is added
+        sp.ph_time      = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_time is in seconds
+        sp.use_dpht     = Reg->ReadBool("CB_dpht");              // 1= use dynamic preheat timing
+        sp.hlt_bcap     = Reg->ReadInteger("HLT_Bcap");          // HLT Burner capacity
+        std.mash_rest   = Reg->ReadBool("CB_Mash_Rest");         // Mash rest 5 minutes after malt is added
+        for (i = 0; i < std.ms_tot; i++)
+        {
+            ms[i].preht = ms[i].time;
+            if (sp.use_dpht)
+            {   // dynamic preheat time
+                if (i < std.ms_tot - 1)
+                     ms[i].preht -= sp.hlt_bcap * (int)(ms[i+1].temp - ms[i].temp);
+                else ms[i].preht  = 0;
+            } // if
+            else
+            {   // fixed preheat time
+                ms[i].preht -= sp.ph_time;
+            } // else
+            if (ms[i].preht < 0) ms[i].preht = 0;
+        } // for i
         // Boil-Time Settings
         sp.boil_min_temp= Reg->ReadInteger("BOIL_MIN_TEMP"); // Min. Temp. for Boil-Kettle
         sp.boil_time    = Reg->ReadInteger("BOIL_TIME");  // Total Boil Time (min.)
@@ -2391,8 +2420,10 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         // Mash Settings
         ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
         ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
-        ptmp->Eph_time->Text    = AnsiString(sp.ph_timer/60); // PREHEAT_TIME [minutes]
+        ptmp->Eph_time->Text    = AnsiString(sp.ph_time/60);  // PREHEAT_TIME [minutes]
         ptmp->CB_mash_rest->Checked = std.mash_rest;          // Mash rest for 5 min after malt is added
+        ptmp->CB_dpht->Checked  = sp.use_dpht;                // 1= Use Dynamic preheat Timing
+        ptmp->HLT_Bcap->Text    = sp.hlt_bcap;                // HLT burner capacity in sec./°C
         // Boil-Time Settings
         ptmp->Boil_Min_Temp->Text = AnsiString(sp.boil_min_temp); // Min. Temp. for Boil-Kettle
         ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);   // Total Boil Time (min.)
@@ -2414,6 +2445,8 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());
            Reg->WriteBool("CB_Mash_Rest",   ptmp->CB_mash_rest->Checked);
            std.mash_rest = ptmp->CB_mash_rest->Checked;
+           Reg->WriteBool("CB_dpht",        ptmp->CB_dpht->Checked);
+           Reg->WriteInteger("HLT_Bcap",    ptmp->HLT_Bcap->Text.ToInt());
 
            // Boil-Time Settings
            Reg->WriteInteger("BOIL_MIN_TEMP",ptmp->Boil_Min_Temp->Text.ToInt());
@@ -3055,42 +3088,125 @@ void __fastcall TMainForm::Update_GUI(void)
    Boil->Value = gamma_boil; // PID-output for Boil-Kettle
    sprintf(tmp_str,"%d %%",(int)gamma_boil);
    Gamma_Boil->Caption = tmp_str;
-   
+
    switch (std.ebrew_std)
    {
-     case S00_INITIALISATION       : Std_State->Caption = "00. Initialisation"                 ; break;
-     case S01_WAIT_FOR_HLT_TEMP    : Std_State->Caption = "01. Wait for HLT Temperature"       ; break;
-     case S02_FILL_MLT             : Std_State->Caption = "02. Fill MLT"                       ; break;
-     case S03_WAIT_FOR_MLT_TEMP    : Std_State->Caption = "03. Wait for MLT Temperature"       ; break;
-     case S04_MASH_TIMER_RUNNING   : Std_State->Caption = "04. Mash Timer Running"             ; break;
-     case S05_SPARGE_TIMER_RUNNING : Std_State->Caption = "05. Sparge Timer Running"           ; break;
-     case S06_PUMP_FROM_MLT_TO_BOIL: Std_State->Caption = "06. Pump from MLT to Boil-Kettle"   ; break;
-     case S07_PUMP_FROM_HLT_TO_MLT : Std_State->Caption = "07. Pump from HLT to MLT"           ; break;
-     case S08_DELAY_xSEC           : Std_State->Caption = "08. Delay"                          ; break;
-     case S09_EMPTY_MLT            : Std_State->Caption = "09. Empty MLT"                      ; break;
-     case S10_WAIT_FOR_BOIL        : Std_State->Caption = "10. Wait for Boil (M)"              ; break;
-     case S11_BOILING              : Std_State->Caption = "11. Now Boiling"                    ; break;
-     case S12_BOILING_FINISHED     : Std_State->Caption = "12. Boiling Finished, prepare Chiller (M)"; break;
-     case S13_MASH_PREHEAT_HLT     : Std_State->Caption = "13. Mash Pre-Heat HLT"              ; break;
-     case S14_PUMP_PREFILL         : Std_State->Caption = "14. Pump Pre-Fill"                  ; break;
-     case S15_ADD_MALT_TO_MLT      : Std_State->Caption = "15. Add Malt to MLT (M)"            ; break;
-     case S16_CHILL_PUMP_FERMENTOR : Std_State->Caption = "16. Chill && Pump to Fermentation Bin (M)"; break;
-     case S17_FINISHED             : Std_State->Caption = "17. Finished!"                      ; break;
-     case S18_MASH_REST_5_MIN      : Std_State->Caption = "18. Mash Rest (5 minutes)"          ; break;
-     case S20_CIP_INIT             : Std_State->Caption = "20. CIP: Initialisation"            ; break;
-     case S21_CIP_HEAT_UP          : Std_State->Caption = "21. CIP: Heat up and Circulate"     ; break;
-     case S22_CIP_CIRC_5_MIN       : Std_State->Caption = "22. CIP: Circulating"               ; break;
-     case S23_CIP_REST_5_MIN       : Std_State->Caption = "23. CIP: Resting"                   ; break;
-     case S24_CIP_DRAIN_BOIL1      : Std_State->Caption = "24. CIP: Drain Boil-Kettle 1"       ; break;
-     case S25_CIP_DRAIN_BOIL2      : Std_State->Caption = "25. CIP: Drain Boil-Kettle 2"       ; break;
-     case S26_CIP_FILL_HLT         : Std_State->Caption = "26. CIP: Fill HLT with fresh water" ; break;
-     case S27_CIP_CLEAN_OUTPUT_V7  : Std_State->Caption = "27. CIP: Clean Output V7"           ; break;
-     case S28_CIP_CLEAN_OUTPUT_V6  : Std_State->Caption = "28. CIP: Clean Output V6"           ; break;
-     case S29_CIP_CLEAN_OUTPUT_V4  : Std_State->Caption = "29. CIP: Clean Output V4"           ; break;
-     case S30_CIP_CLEAN_INPUT_V3   : Std_State->Caption = "30. CIP: Clean Input V3"            ; break;
-     case S31_CIP_CLEAN_INPUT_V1   : Std_State->Caption = "31. CIP: Clean Input V1"            ; break;
-     case S32_CIP_END              : Std_State->Caption = "32. CIP: End of Program"            ; break;
-     default                       : Std_State->Caption = "xx. Unknown State"                  ; break;
+     case S00_INITIALISATION:
+          Std_State->Caption = "00. Initialisation";
+          break;
+     case S01_WAIT_FOR_HLT_TEMP:
+          sprintf(tmp_str,"01. Wait for HLT Temperature (%2.1f °C)",MainForm->tset_hlt);
+          Std_State->Caption = tmp_str;
+          break;
+     case S02_FILL_MLT:
+          sprintf(tmp_str,"02. Fill MLT with %d L water",sp.mash_vol);
+          Std_State->Caption = tmp_str;
+          break;
+     case S03_WAIT_FOR_MLT_TEMP:
+          sprintf(tmp_str,"03. Wait for MLT Temperature (%2.1f °C)",ms[std.ms_idx].temp + sp.temp_offset2);
+          Std_State->Caption = tmp_str;
+          break;
+     case S04_MASH_TIMER_RUNNING:
+          sprintf(tmp_str,"04. Mash-Timer Running (%d/%2.0f min.)",ms[std.ms_idx].timer/60,ms[std.ms_idx].time/60.0);
+          Std_State->Caption = tmp_str;
+          break;
+     case S05_SPARGE_TIMER_RUNNING:
+          sprintf(tmp_str,"05. Sparge-Timer Running (%d/%d min.)",std.timer1/60,sp.sp_time);
+          Std_State->Caption = tmp_str;
+          break;
+     case S06_PUMP_FROM_MLT_TO_BOIL:
+          sprintf(tmp_str,"06. Pump from MLT to Boil-Kettle (%2.1f L)",std.sp_idx ? sp.sp_vol_batch : sp.sp_vol_batch0);
+          Std_State->Caption = tmp_str;
+          break;
+     case S07_PUMP_FROM_HLT_TO_MLT:
+          sprintf(tmp_str,"07. Pump fresh water from HLT to MLT (%2.1f L)",sp.sp_vol_batch);
+          Std_State->Caption = tmp_str;
+          break;
+     case S08_DELAY_xSEC:
+          sprintf(tmp_str,"08. Delay: %d seconds",TMR_DELAY_xSEC);
+          Std_State->Caption = tmp_str;
+          break;
+     case S09_EMPTY_MLT:
+          Std_State->Caption = "09. Empty MLT";
+          break;
+     case S10_WAIT_FOR_BOIL:
+          Std_State->Caption = "10. Wait for Boil (M)";
+          break;
+     case S11_BOILING:
+          sprintf(tmp_str,"11. Now Boiling (%d/%d min.)",std.timer5/60,sp.boil_time);
+          Std_State->Caption = tmp_str;
+          break;
+     case S12_BOILING_FINISHED:
+          Std_State->Caption = "12. Boiling Finished, prepare Chiller (M)";
+          break;
+     case S13_MASH_PREHEAT_HLT:
+          sprintf(tmp_str,"13. Mash Preheat HLT (%d/%2.0f min.)",ms[std.ms_idx].timer/60,ms[std.ms_idx].time/60.0);
+          Std_State->Caption = tmp_str;
+          break;
+     case S14_PUMP_PREFILL:
+          sprintf(tmp_str,"14. Pump Pre-Fill / Priming (%d/%d sec.)",std.timer3,TMR_PREFILL_PUMP);
+          Std_State->Caption = tmp_str;
+          break;
+     case S15_ADD_MALT_TO_MLT:
+          Std_State->Caption = "15. Add Malt to MLT (M)";
+          break;
+     case S16_CHILL_PUMP_FERMENTOR:
+          Std_State->Caption = "16. Chill && Pump to Fermentation Bin (M)";
+          break;
+     case S17_FINISHED:
+          Std_State->Caption = "17. Finished!";
+          break;
+     case S18_MASH_REST_5_MIN:
+          sprintf(tmp_str,"18. Mash-Rest (%d/%d sec.)",std.mrest_tmr,TMR_MASH_REST_5_MIN);
+          Std_State->Caption = tmp_str;
+          break;
+     //---------------------------------------------------------
+     // These are the Cleaning-In-Place (CIP) states
+     //---------------------------------------------------------
+     case S20_CIP_INIT:
+          Std_State->Caption = "20. CIP: Initialisation";
+          break;
+     case S21_CIP_HEAT_UP:
+          Std_State->Caption = "21. CIP: Heat up and Circulate";
+          break;
+     case S22_CIP_CIRC_5_MIN:
+          sprintf(tmp_str,"22. CIP: Circulating (%d/%d sec.)",std.cip_tmr1,TMR_CIP_CIRC_TIME);
+          Std_State->Caption = tmp_str;
+          break;
+     case S23_CIP_REST_5_MIN:
+          sprintf(tmp_str,"23. CIP: Resting (%d/%d sec.)",std.cip_tmr1,TMR_CIP_REST_TIME);
+          Std_State->Caption = tmp_str;
+          break;
+     case S24_CIP_DRAIN_BOIL1:
+          Std_State->Caption = "24. CIP: Drain Boil-Kettle 1";
+          break;
+     case S25_CIP_DRAIN_BOIL2:
+          Std_State->Caption = "25. CIP: Drain Boil-Kettle 2";
+          break;
+     case S26_CIP_FILL_HLT:
+          Std_State->Caption = "26. CIP: Fill HLT with fresh water";
+          break;
+     case S27_CIP_CLEAN_OUTPUT_V7:
+          Std_State->Caption = "27. CIP: Clean Output V7";
+          break;
+     case S28_CIP_CLEAN_OUTPUT_V6:
+          Std_State->Caption = "28. CIP: Clean Output V6";
+          break;
+     case S29_CIP_CLEAN_OUTPUT_V4:
+          Std_State->Caption = "29. CIP: Clean Output V4";
+          break;
+     case S30_CIP_CLEAN_INPUT_V3:
+          Std_State->Caption = "30. CIP: Clean Input V3";
+          break;
+     case S31_CIP_CLEAN_INPUT_V1:
+          Std_State->Caption = "31. CIP: Clean Input V1";
+          break;
+     case S32_CIP_END:
+          Std_State->Caption = "32. CIP: End of Program";
+          break;
+     default:
+          Std_State->Caption = "xx. Unknown State";
+          break;
    } // switch
 
    //--------------------------------------------------------------------------

@@ -201,7 +201,7 @@ void __fastcall TFix_Params::Apply_ButtonClick(TObject *Sender)
          // Value must be between 0 and 18
          MainForm->swfx.std_fx = STD_MEdit->Text.ToInt();
          if (MainForm->swfx.std_fx < 0 ||
-             MainForm->swfx.std_fx > S18_MASH_REST_5_MIN)
+             MainForm->swfx.std_fx > S32_CIP_END)
          {
             MainForm->swfx.std_fx = 0; // reset to a safe value
          }

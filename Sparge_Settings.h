@@ -56,10 +56,18 @@ __published:	// IDE-managed Components
         TLabel *Label20;
         TLabel *Label21;
         TEdit *Boil_Det;
+        TLabel *Label22;
+        TCheckBox *CB_dpht;
+        TLabel *Label23;
+        TLabel *Label27;
+        TEdit *HLT_Bcap;
         void __fastcall Help_ButtonClick(TObject *Sender);
+        void __fastcall CB_dphtClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TSpargeSettings(TComponent* Owner);
+        void __fastcall init_preheat(void);
+
 };
 //---------------------------------------------------------------------------
 extern PACKAGE TSpargeSettings *SpargeSettings;

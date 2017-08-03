@@ -53,11 +53,6 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       for (i = 0; i < MainForm->std.ms_tot; i++)
       {
          p = &MainForm->ms[i]; // hulp pointer
-         x = p->time - MainForm->sp.ph_timer;
-         if (x < 0.0)
-         {
-            x = 0.0;
-         } // if
          //---------------------------------------------------
          // Now update time_stamp if a mash-timer has started
          //---------------------------------------------------
@@ -66,7 +61,7 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
             strcpy(p->time_stamp, TimeToStr(Time()).c_str());
 
          } // if
-         sprintf(s,"%2d %5.0f %5.0f %5.0f %5.0f  ",i, p->temp, p->time, x,
+         sprintf(s,"%2d %5.0f %5.0f %5d %5.0f  ",i, p->temp, p->time, p->preht,
                    p->timer == NOT_STARTED ? 0.0 : p->timer);
          if (p->timer == NOT_STARTED)
          {

@@ -863,7 +863,8 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            if (std->ms_idx < std->ms_tot - 1)
            {
               // There's next mash phase
-              if (ms[std->ms_idx].timer >= ms[std->ms_idx].time - sps->ph_timer)
+              //if (ms[std->ms_idx].timer >= ms[std->ms_idx].time - sps->ph_timer)
+              if (ms[std->ms_idx].timer >= ms[std->ms_idx].preht)
               {
                  std->ebrew_std = S13_MASH_PREHEAT_HLT;
               } // if
@@ -874,9 +875,9 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
               // This is the last mash phase, continue with sparging
               if (ms[std->ms_idx].timer >= ms[std->ms_idx].time) // time-out?
               {
-                 std->sp_idx    = 0;                       // init. sparging index
-                 std->timer1    = sps->sp_time_ticks - 10; // timer1 -> TIME-OUT - 10 sec.
-                 std->ebrew_std = S05_SPARGE_TIMER_RUNNING;       // goto SPARGING phase
+                 std->sp_idx    = 0;                        // init. sparging index
+                 std->timer1    = sps->sp_time_ticks - 10;  // timer1 -> TIME-OUT - 10 sec.
+                 std->ebrew_std = S05_SPARGE_TIMER_RUNNING; // goto SPARGING phase
               } // if
               // else remain in this state (timer is incremented)
            } // else
@@ -916,7 +917,8 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            if (std->ms_idx < std->ms_tot - 1)
            {
               // There's a next mash phase
-              if (ms[std->ms_idx].timer >= ms[std->ms_idx].time - sps->ph_timer)
+              //if (ms[std->ms_idx].timer >= ms[std->ms_idx].time - sps->ph_timer)
+              if (ms[std->ms_idx].timer >= ms[std->ms_idx].preht)
               {  // Preheat timer has priority, since it also switches off the pump
                  std->ebrew_std = S13_MASH_PREHEAT_HLT;
               } // if
@@ -1137,7 +1139,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       //---------------------------------------------------------------------------
       case S21_CIP_HEAT_UP:
            *tset_boil            = CIP_TEMP_SETPOINT; // Boil-Kettle Temperature Setpoint
-           sps->pid_ctrl_boil_on = 1;    // Enable PID-Controller for Boil-Kettle
+           sps->pid_ctrl_boil_on = 2;           // Enable Feed-Forward for Boil-Kettle
            if (tboil > CIP_TEMP_SETPOINT - 5.0) // Almost at setpoint temperature
            {
               std->cip_tmr1  = 0;        // Init. CIP timer

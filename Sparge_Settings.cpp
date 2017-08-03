@@ -14,11 +14,35 @@
 #pragma package(smart_init)
 #pragma resource "*.dfm"
 TSpargeSettings *SpargeSettings;
+
+void __fastcall TSpargeSettings::init_preheat(void)
+{
+   if (CB_dpht->Checked)
+   {
+      Label23->Enabled  = true;
+      Label27->Enabled  = true;
+      HLT_Bcap->Enabled = true;
+      Label6->Enabled   = false;
+      Label7->Enabled   = false;
+      Eph_time->Enabled = false;
+   }
+   else
+   {
+      Label23->Enabled  = false;
+      Label27->Enabled  = false;
+      HLT_Bcap->Enabled = false;
+      Label6->Enabled   = true;
+      Label7->Enabled   = true;
+      Eph_time->Enabled = true;
+   } // else
+} // TSpargeSettings::init_preheat()
+
 //---------------------------------------------------------------------------
 __fastcall TSpargeSettings::TSpargeSettings(TComponent* Owner)
         : TForm(Owner)
 {
-}
+   init_preheat();
+} //  TSpargeSettings::TSpargeSettings()
 //---------------------------------------------------------------------------
 
 #define IDH_SPARGESTDSETTINGS (0x100B0)
@@ -28,4 +52,10 @@ void __fastcall TSpargeSettings::Help_ButtonClick(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 
+
+void __fastcall TSpargeSettings::CB_dphtClick(TObject *Sender)
+{
+   init_preheat();
+} // TSpargeSettings::CheckBox1Click()
+//---------------------------------------------------------------------------
 
