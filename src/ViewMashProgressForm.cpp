@@ -86,8 +86,8 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       // Now print the Sparging Information
       //-----------------------------------
       ViewMashProgress->Memo1->Lines->Add(" ");
-      ViewMashProgress->Memo1->Lines->Add("index  HLT to MLT   MLT to Boil  Sparging");
-      ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
+      ViewMashProgress->Memo1->Lines->Add("index  From HLT to MLT  |   From MLT to Boil");
+      ViewMashProgress->Memo1->Lines->Add(BAR_LINE2);
 
       if ((MainForm->std.ebrew_std == S06_PUMP_FROM_MLT_TO_BOIL) &&
           (prev_ebrew_std == S05_SPARGE_TIMER_RUNNING))
@@ -117,17 +117,17 @@ void __fastcall TViewMashProgress::UpdateTimerTimer(TObject *Sender)
       } // if
       prev_ebrew_std = MainForm->std.ebrew_std; // update previous value
 
-      sprintf(s,"  0     - - - -  %12s     - -  , %4.1f L",MainForm->sp.mlt2boil[0],MainForm->sp.sp_vol_batch0);
+      sprintf(s,"  0    - - - - - - - -  |%11s %4.1f L",MainForm->sp.mlt2boil[0],MainForm->sp.sp_vol_batch0);
       ViewMashProgress->Memo1->Lines->Add(s);
       x = MainForm->sp.sp_vol_batch;
       for (i = 1; i <= MainForm->sp.sp_batches; i++)
       {
          if (i == MainForm->sp.sp_batches)
-              sprintf(s,"%3d %12s %12s    %4.1f L, Empty"  ,i,MainForm->sp.hlt2mlt[i],MainForm->sp.mlt2boil[i],x);
-         else sprintf(s,"%3d %12s %12s    %4.1f L, %4.1f L",i,MainForm->sp.hlt2mlt[i],MainForm->sp.mlt2boil[i],x,x);
+              sprintf(s,"%3d %11s %4.1f L  |%11s Empty MLT",i,MainForm->sp.hlt2mlt[i],i*x,MainForm->sp.mlt2boil[i]);
+         else sprintf(s,"%3d %11s %4.1f L  |%11s %4.1f L"  ,i,MainForm->sp.hlt2mlt[i],i*x,MainForm->sp.mlt2boil[i],i*x+MainForm->sp.sp_vol_batch0);
          ViewMashProgress->Memo1->Lines->Add(s);
       } // for i
-      ViewMashProgress->Memo1->Lines->Add(BAR_LINE);
+      ViewMashProgress->Memo1->Lines->Add(BAR_LINE2);
       sprintf(s,"Sparge Index (sp_idx) = %d",MainForm->std.sp_idx);
       ViewMashProgress->Memo1->Lines->Add(s);
       ViewMashProgress->Memo1->Lines->Add(" ");
