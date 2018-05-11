@@ -5,6 +5,9 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
+// Revision 1.92  2018/05/11
+// - Toffset0 added to compensate for mash dough-in temperature loss
+//
 // Revision 1.91  2018/01/03
 // - Bug-fix: CB_dpht and HLT_Bcap now also added to MainForm constructor
 // - flow_rate_low() now checks if flow-sensor gives a good reading. If not,
@@ -1532,7 +1535,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.91 $";
+   ebrew_revision   = "$Revision: 1.92 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -1589,6 +1592,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteBool("CB_VSP2",1);         // Double Initial Sparge Volume to Boil-Kettle
           // Mash Settings
           Reg->WriteInteger("ms_idx",MAX_MS);  // init. index in mash scheme
+          Reg->WriteFloat("TOffset0",3.5);     // Compensation for dough-in of malt
           Reg->WriteFloat("TOffset",1.0);      // Compensation HLT-MLT heat-loss
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
@@ -1936,6 +1940,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
              sp.sp_vol_batch0 = 2.0 * sp.sp_vol_batch;
         else sp.sp_vol_batch0 = sp.sp_vol_batch;
         // Mash Settings
+        sp.temp_offset0 = Reg->ReadFloat("TOffset0");
         sp.temp_offset  = Reg->ReadFloat("TOffset");
         sp.temp_offset2 = Reg->ReadFloat("TOffset2");
         sp.ph_time      = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_time is in seconds
@@ -2428,6 +2433,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->EBTime->Text      = AnsiString(sp.sp_time);    // Time between two Sparge Batches
         ptmp->CB_VSp2->Checked  = MainForm->cb_vsp2;         // Double the Initial Sparge Volume to Boil-kettle
         // Mash Settings
+        ptmp->Offs0_Edit->Text  = AnsiString(sp.temp_offset0);
         ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
         ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
         ptmp->Eph_time->Text    = AnsiString(sp.ph_time/60);  // PREHEAT_TIME [minutes]
@@ -2450,6 +2456,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            MainForm->cb_vsp2 = ptmp->CB_VSp2->Checked;
 
            // Mash Settings
+           Reg->WriteFloat("TOffset0",      ptmp->Offs0_Edit->Text.ToDouble());
            Reg->WriteFloat("TOffset",       ptmp->Offs_Edit->Text.ToDouble());
            Reg->WriteFloat("TOffset2",      ptmp->Offs2_Edit->Text.ToDouble());
            Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());

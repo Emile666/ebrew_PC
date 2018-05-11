@@ -784,7 +784,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       //---------------------------------------------------------------------------
       case S01_WAIT_FOR_HLT_TEMP:
            *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = *tset_mlt + 2 * sps->temp_offset;
+           *tset_hlt  = *tset_mlt + sps->temp_offset0;
            *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (thlt >= *tset_hlt) // HLT TEMP is OK
            {

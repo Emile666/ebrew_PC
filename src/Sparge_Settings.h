@@ -61,6 +61,9 @@ __published:	// IDE-managed Components
         TLabel *Label23;
         TLabel *Label27;
         TEdit *HLT_Bcap;
+        TLabel *Label28;
+        TLabel *Label29;
+        TEdit *Offs0_Edit;
         void __fastcall Help_ButtonClick(TObject *Sender);
         void __fastcall CB_dphtClick(TObject *Sender);
 private:	// User declarations

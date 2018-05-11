@@ -309,6 +309,7 @@ typedef struct _maisch_schedule
 typedef struct _sparge_struct
 {
    /* Mash Settings */
+   double temp_offset0;    // Offset to add to Tset to compensate for dough-in losses
    double temp_offset;     // Offset to add to Tset to compensate for HLT-MLT losses
    double temp_offset2;    // Offset to add to Tmlt for early start of mash timers
    int    ph_time;         // Copy of Registry var. PREHEAT_TIME
