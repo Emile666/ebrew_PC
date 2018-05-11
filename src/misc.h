@@ -390,10 +390,11 @@ typedef struct _volume_struct
 
 typedef struct _flow_rate_low_struct
 {
-	int    frl_std;     // STD state number
-	int    frl_tmr;     // Timer value
-	double frl_det_lim; // Lower-limit for flowrate
-	int    frl_perc;    // Percentage of max flowrate
+	int    frl_std;         // STD state number
+	int    frl_tmr;         // Timer value
+	double frl_det_lim;     // Lower-limit for flowrate
+	double frl_min_det_lim; // Minimum flowrate: sensor-check
+	int    frl_perc;        // Percentage of max flowrate
 } flow_rate_low_struct;
 
 //------------------------------

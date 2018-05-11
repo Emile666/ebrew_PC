@@ -5,6 +5,12 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
+// Revision 1.91  2018/01/03
+// - Bug-fix: CB_dpht and HLT_Bcap now also added to MainForm constructor
+// - flow_rate_low() now checks if flow-sensor gives a good reading. If not,
+//   measurement is repeated. Sometimes the CFC flow-sensor gets stuck with
+//   hop particles in the beginning. This should prevent a switch-off.
+//
 // Revision 1.90  2017/08/03
 // - Added dynamic preheat timing instead of only fixed timing
 // - Two new Registry variables: CB_dpht and HLT_Bcap
@@ -589,6 +595,8 @@
 #include "scheduler.h"
 
 extern vector theta; // defined in pid_reg.h
+extern flow_rate_low_struct frl_empty_boil; // Needed for detection of low flowrate
+
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 #pragma link "AnimTimer"
@@ -1524,7 +1532,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.90 $";
+   ebrew_revision   = "$Revision: 1.91 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -1585,6 +1593,8 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
           Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 5 minutes after Malt is added
+          Reg->WriteBool("CB_dpht",1);         // 1= use dynamic preheat timing
+          Reg->WriteInteger("HLT_Bcap",90);    // HLT burner capacity in sec./°C
           // Boil Settings
           Reg->WriteInteger("BOIL_MIN_TEMP",60); // Min. Temp. for Boil-Kettle (Celsius)
           Reg->WriteInteger("BOIL_TIME",90);   // Total Boil Time (min.)
@@ -3070,7 +3080,9 @@ void __fastcall TMainForm::Update_GUI(void)
 
    sprintf(tmp_str,"%4.1f L",volumes.Flow_cfc_out);            // Display flow from CFC-output
    Flow3_cfc->Caption = tmp_str;
-   sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_cfc_out);  // Display flowrate from CFC-output
+   sprintf(tmp_str,"%3.1f L/min. (%d,%d,%4.1f)",volumes.Flow_rate_cfc_out,
+           frl_empty_boil.frl_std,frl_empty_boil.frl_tmr,frl_empty_boil.frl_det_lim);  // Display flowrate from CFC-output
+   //sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_cfc_out);  // Display flowrate from CFC-output
    Flow3_rate->Caption = tmp_str;
 
    sprintf(tmp_str,"%4.1f L",volumes.Flow4);                   // Display flow from CFC-output

@@ -602,10 +602,11 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts,
 
 void init_frl_struct(flow_rate_low_struct *p, int perc)
 {
-	p->frl_std     = 0;    // set state nr to 0
-	p->frl_tmr     = 0;    // set timer to 0
-	p->frl_det_lim = 0.0;  // set detection limit to 0
-	p->frl_perc    = perc; // init. percentage value
+	p->frl_std         = 0;    // set state nr to 0
+	p->frl_tmr         = 0;    // set timer to 0
+        p->frl_min_det_lim = 1.5;  // Flow-sensor should at least give 1.5 L/min.
+	p->frl_det_lim     = 0.0;  // set detection limit to 0
+	p->frl_perc        = perc; // init. percentage value
 } // init_frl_struct()
 
 /*------------------------------------------------------------------
@@ -623,28 +624,40 @@ int flow_rate_low(double flow_rate, flow_rate_low_struct *p)
    switch (p->frl_std)
    {
         case 0 : // Give flow-rate time to increase because of the MA-filter
-                 // Use 20 seconds which is enough to stabilize the MA-filter
-				 if (++p->frl_tmr > 20)
+                 // Use 30 seconds which is enough to stabilize the MA-filter
+		 if (++p->frl_tmr > 30)
                  {
-					p->frl_det_lim = 0; // reset detection-limit
-					p->frl_tmr     = 0; // reset timer
-                    p->frl_std     = 1; // goto next state
+		     p->frl_det_lim = 0.0; // reset detection-limit
+                     p->frl_tmr     = 0;   // reset timer
+                     p->frl_std     = 1;   // goto next state
                  } // if
                  break;
-        case 1 : // Calculate the average flow-rate for the next 20 seconds
+        case 1 : // Calculate the average flow-rate for the next 30 seconds
                  // Use perc of average flow-rate as detection-limit
-                 if (++p->frl_tmr > 20)
+                 if (++p->frl_tmr > 30)
                  {
-                    p->frl_det_lim *= p->frl_perc; // Percentage of average flowrate
-					p->frl_det_lim /= 2000.0;      // 20 samples, divide by 100%
-                    p->frl_std      = 2;           // goto next state
+                    p->frl_det_lim /= 30.0; // calculate average flow-rate
+                    p->frl_std      = 2;    // goto next state
                  } // if
                  else p->frl_det_lim += flow_rate; // calculate average flowrate
                  break;
-        case 2: // Now check if flow-rate decreases
-                if (flow_rate < p->frl_det_lim) // flow-rate < percentage of average flow-rate?
+        case 2:  // Now check if average flow-rate is above a minimum. If not, repeat calculations
+                 if (p->frl_det_lim > p->frl_min_det_lim)
+                 {    // average flow-rate > minimum flow-rate?
+                      p->frl_det_lim *= p->frl_perc; // Percentage of average flowrate
+                      p->frl_det_lim /= 100.0;       // Divide by 100%
+                      p->frl_std = 3;
+                 } // if
+                 else
+                 {
+                      p->frl_tmr = 0; // reset timer
+                      p->frl_std = 0; // repeat measurements
+                 } // else
+                 break;
+        case 3:  // Now check if flow-rate decreases
+                 if (flow_rate < p->frl_det_lim) // flow-rate < percentage of average flow-rate?
                      retv = 1;
-                break;
+                 break;
         default: p->frl_std = 0;
                  p->frl_tmr = 0;
                  break;
