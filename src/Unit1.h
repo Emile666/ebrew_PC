@@ -210,6 +210,7 @@ __published:	// IDE-managed Components
         TLabel *V8;
         TMenuItem *CIP_Start;
         TMenuItem *N1;
+        TMenuItem *AddingMalt1;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -235,6 +236,7 @@ __published:	// IDE-managed Components
         void __fastcall StartChilling1Click(TObject *Sender);
         void __fastcall ChillingFinished1Click(TObject *Sender);
         void __fastcall CIP_StartClick(TObject *Sender);
+        void __fastcall AddingMalt1Click(TObject *Sender);
 private:	// User declarations
         void __fastcall ebrew_idle_handler(TObject *Sender, bool &Done);
         void __fastcall print_mash_scheme_to_statusbar(void);

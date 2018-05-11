@@ -732,7 +732,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
    // State 16: 0  1  0  0  1  0  0  1  0  0  Chill & Pump to Fermentor 0x0124
    // State 17: 0  0  0  0  0  0  0  0  0  0  Finished!                 0x0000
    // State 18: 0  0  0  0  0  0  0  0  0  0  Mash Rest 5 minutes       0x0000
-   // State 19:                               NOT USED                  0x0000
+   // State 19: 1  1  0  0  0  0  1  0  0  1  Ready to add malt to MLT  0x0309
    // State 20: 0  0  0  0  0  0  0  0  0  0  CIP: Initalisation        0x0000   
    // State 21: 0  1  0  1  1  0  1  1  0  0  CIP: Heat Up              0x016C   
    // State 22: 0  1  0  1  1  0  1  1  0  0  CIP: Circulate 5 Minutes  0x016C   
@@ -750,7 +750,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
    unsigned int  klepstanden[] = {0x0000, 0x0200, 0x030B, 0x0309, 0x0309, /* 04 */
                          /* 05 */ 0x0309, 0x0141, 0x030B, 0x0000, 0x0141, /* 09 */
                          /* 10 */ 0x0000, 0x0000, 0x0000, 0x0200, 0x0003, /* 14 */
-                         /* 15 */ 0x0000, 0x0124, 0x0000, 0x0000, 0x0000, /* 19 */
+                         /* 15 */ 0x0000, 0x0124, 0x0000, 0x0000, 0x0309, /* 19 */
                          /* 20 */ 0x0000, 0x016C, 0x016C, 0x0000, 0x012C, /* 24 */
                          /* 25 */ 0x0124, 0x0000, 0x0142, 0x0122, 0x010A, /* 29 */
                          /* 30 */ 0x0006, 0x0003, 0x0000}; /* 32 */
@@ -766,7 +766,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       case S00_INITIALISATION:
            std->ms_idx = 0; // init. index in mash schem
            *tset_mlt   = ms[std->ms_idx].temp;
-           *tset_hlt   = *tset_mlt + 2 * sps->temp_offset;
+           *tset_hlt   = *tset_mlt + sps->temp_offset0;
            *tset_boil  = 0.0; // Setpoint Temp. for Boil-Kettle
            sps->pid_ctrl_boil_on = 0; // Disable PID-Controller for Boil-Kettle
            if (ui & UI_PID_ON)
@@ -799,7 +799,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       //---------------------------------------------------------------------------
       case S14_PUMP_PREFILL:
            *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = *tset_mlt + 2 * sps->temp_offset;
+           *tset_hlt  = *tset_mlt + sps->temp_offset0;
            *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (++std->timer3 >= TMR_PREFILL_PUMP) // Stay-here timer timeout?
            {
@@ -813,7 +813,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       //---------------------------------------------------------------------------
       case S02_FILL_MLT:
            *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = *tset_mlt + 2 * sps->temp_offset;
+           *tset_hlt  = *tset_mlt + sps->temp_offset0;
            *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
            if (vol->Vmlt >= sps->mash_vol)
            {
@@ -836,7 +836,12 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            {  // Tmlt has reached Tset_mlt + Offset2, start mash timer
               if (std->ms_idx == 0)
               {  // We need to add malt to the MLT first
-                 std->ebrew_std = S15_ADD_MALT_TO_MLT;
+                 // Depending on the state of the checkbox 'Leave pumps running',
+                 // we go directly to state 15 or only after the user selects the
+                 // 'Start adding malt to the MLT' menu-option.
+                 if (sps->leave_pumps_on)
+                      std->ebrew_std = S19_RDY_TO_ADD_MALT; // leave pumps running for now
+                 else std->ebrew_std = S15_ADD_MALT_TO_MLT; // switch pumps off directly
               } // if
               else
               {  // already added malt to the MLT, start directly with timer
@@ -844,6 +849,15 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
                  std->ebrew_std        = S04_MASH_TIMER_RUNNING;
               } // else
            } // if
+           break;
+      //---------------------------------------------------------------------------
+      // S19_RDY_TO_ADD_MALT: Tmlt >= Tset_mlt, PID is active
+      // - Keeps pumps running, so that water is circulating through the MLT
+      // - If user presses 'OK' in dialog screen, then goto S15_ADD_MALT_TO_MLT
+      //---------------------------------------------------------------------------
+      case S19_RDY_TO_ADD_MALT:
+           if (ui & UI_ADDING_MALT_TO_MLT)
+              std->ebrew_std = S15_ADD_MALT_TO_MLT;
            break;
       //---------------------------------------------------------------------------
       // S15_ADD_MALT_TO_MLT: Before a mash-timer is started, the malt has to be

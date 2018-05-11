@@ -64,6 +64,8 @@ __published:	// IDE-managed Components
         TLabel *Label28;
         TLabel *Label29;
         TEdit *Offs0_Edit;
+        TLabel *Label30;
+        TCheckBox *CB_pumps_on;
         void __fastcall Help_ButtonClick(TObject *Sender);
         void __fastcall CB_dphtClick(TObject *Sender);
 private:	// User declarations

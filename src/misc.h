@@ -315,6 +315,7 @@ typedef struct _sparge_struct
    int    ph_time;         // Copy of Registry var. PREHEAT_TIME
    int    use_dpht;        // 1= use Dynamic preheat timing instead of fixed timing
    int    hlt_bcap;        // HLT Burner Capacity in seconds per °C
+   int    leave_pumps_on;  // After MLT Temp and before malt is added.
    /* Sparge Settings */
    int    sp_batches;      // Total number of sparge batches
    int    sp_time;         // Time between two sparge batches in minutes
@@ -430,6 +431,7 @@ typedef struct _flow_rate_low_struct
 #define S16_CHILL_PUMP_FERMENTOR  (16)
 #define S17_FINISHED              (17)
 #define S18_MASH_REST_5_MIN       (18)
+#define S19_RDY_TO_ADD_MALT       (19)
 
 #define S20_CIP_INIT              (20)
 #define S21_CIP_HEAT_UP           (21)
@@ -457,6 +459,7 @@ typedef struct _flow_rate_low_struct
 #define UI_CIP_BOIL_FILLED    (0x0040)
 #define UI_CIP_HOSES_IN_DRAIN (0x0080)
 #define UI_CIP_HLT_FILLED     (0x0100)
+#define UI_ADDING_MALT_TO_MLT (0x0200)
 
 //-------------------------------------------------------------
 // Hard-coded Timers.

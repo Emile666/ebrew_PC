@@ -923,6 +923,17 @@ void task_update_std(void)
 
     switch (MainForm->std.ebrew_std)
     {
+       case S15_ADD_MALT_TO_MLT:
+            MessageBox(NULL,"Press OK when all malt has been added to the MLT.\n",
+                            "Now adding malt to the MLT",MB_OK);
+            ui |= UI_MALT_ADDED_TO_MLT;
+            break;
+       case S19_RDY_TO_ADD_MALT:
+            MessageBox(NULL,"Mash dough-in Temperature and Volume are reached.\n"
+                            "Press OK when malt can be added to the MLT.\n",
+                            "Ready to add malt to the MLT",MB_OK);
+            ui |= UI_ADDING_MALT_TO_MLT;
+            break;
        case S20_CIP_INIT:
             MessageBox(NULL,"- Fill Boil-Kettle with 1% NaOH solution\n"
                             "- Place MLT-Return hose into Boil-Kettle\n"
@@ -1599,6 +1610,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 5 minutes after Malt is added
           Reg->WriteBool("CB_dpht",1);         // 1= use dynamic preheat timing
           Reg->WriteInteger("HLT_Bcap",90);    // HLT burner capacity in sec./°C
+          Reg->WriteBool("CB_pumps_on",1);     // 1= Leave pumps runnings after MLT temp. is reached
           // Boil Settings
           Reg->WriteInteger("BOIL_MIN_TEMP",60); // Min. Temp. for Boil-Kettle (Celsius)
           Reg->WriteInteger("BOIL_TIME",90);   // Total Boil Time (min.)
@@ -1940,13 +1952,14 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
              sp.sp_vol_batch0 = 2.0 * sp.sp_vol_batch;
         else sp.sp_vol_batch0 = sp.sp_vol_batch;
         // Mash Settings
-        sp.temp_offset0 = Reg->ReadFloat("TOffset0");
-        sp.temp_offset  = Reg->ReadFloat("TOffset");
-        sp.temp_offset2 = Reg->ReadFloat("TOffset2");
-        sp.ph_time      = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_time is in seconds
-        sp.use_dpht     = Reg->ReadBool("CB_dpht");              // 1= use dynamic preheat timing
-        sp.hlt_bcap     = Reg->ReadInteger("HLT_Bcap");          // HLT Burner capacity
-        std.mash_rest   = Reg->ReadBool("CB_Mash_Rest");         // Mash rest 5 minutes after malt is added
+        sp.temp_offset0   = Reg->ReadFloat("TOffset0");
+        sp.temp_offset    = Reg->ReadFloat("TOffset");
+        sp.temp_offset2   = Reg->ReadFloat("TOffset2");
+        sp.ph_time        = 60 * Reg->ReadInteger("PREHEAT_TIME"); // ph_time is in seconds
+        sp.use_dpht       = Reg->ReadBool("CB_dpht");              // 1= use dynamic preheat timing
+        sp.hlt_bcap       = Reg->ReadInteger("HLT_Bcap");          // HLT Burner capacity
+        sp.leave_pumps_on = Reg->ReadBool("CB_pumps_on");          // 1= leave pumps on when MLT temp. is reached
+        std.mash_rest     = Reg->ReadBool("CB_Mash_Rest");         // Mash rest 5 minutes after malt is added
         for (i = 0; i < std.ms_tot; i++)
         {
             ms[i].preht = ms[i].time;
@@ -2440,6 +2453,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->CB_mash_rest->Checked = std.mash_rest;          // Mash rest for 5 min after malt is added
         ptmp->CB_dpht->Checked  = sp.use_dpht;                // 1= Use Dynamic preheat Timing
         ptmp->HLT_Bcap->Text    = sp.hlt_bcap;                // HLT burner capacity in sec./°C
+        ptmp->CB_pumps_on->Checked = sp.leave_pumps_on;       // 1= leave pumps running when MLT temp. is reached
         // Boil-Time Settings
         ptmp->Boil_Min_Temp->Text = AnsiString(sp.boil_min_temp); // Min. Temp. for Boil-Kettle
         ptmp->EBoilTime->Text   = AnsiString(sp.boil_time);   // Total Boil Time (min.)
@@ -2464,7 +2478,8 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            std.mash_rest = ptmp->CB_mash_rest->Checked;
            Reg->WriteBool("CB_dpht",        ptmp->CB_dpht->Checked);
            Reg->WriteInteger("HLT_Bcap",    ptmp->HLT_Bcap->Text.ToInt());
-
+           Reg->WriteBool("CB_pumps_on",    ptmp->CB_pumps_on->Checked);
+           sp.leave_pumps_on = ptmp->CB_pumps_on->Checked;
            // Boil-Time Settings
            Reg->WriteInteger("BOIL_MIN_TEMP",ptmp->Boil_Min_Temp->Text.ToInt());
            Reg->WriteInteger("BOIL_TIME",   ptmp->EBoilTime->Text.ToInt());
@@ -3179,6 +3194,9 @@ void __fastcall TMainForm::Update_GUI(void)
           sprintf(tmp_str,"18. Mash-Rest (%d/%d sec.)",std.mrest_tmr,TMR_MASH_REST_5_MIN);
           Std_State->Caption = tmp_str;
           break;
+     case S19_RDY_TO_ADD_MALT:
+          Std_State->Caption = "19. Ready to add Malt to the MLT";
+          break;
      //---------------------------------------------------------
      // These are the Cleaning-In-Place (CIP) states
      //---------------------------------------------------------
@@ -3547,6 +3565,12 @@ void __fastcall TMainForm::ChillingFinished1Click(TObject *Sender)
 void __fastcall TMainForm::CIP_StartClick(TObject *Sender)
 {
    CIP_Start->Checked = !CIP_Start->Checked;
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TMainForm::AddingMalt1Click(TObject *Sender)
+{
+   AddingMalt1->Checked = True;
 }
 //---------------------------------------------------------------------------
 
