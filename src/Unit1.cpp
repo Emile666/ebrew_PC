@@ -6,7 +6,9 @@
 //               program loop (TMainForm::T50msec2Timer()).  
 // --------------------------------------------------------------------------
 // Revision 1.92  2018/05/11
-// - Toffset0 added to compensate for mash dough-in temperature loss
+// - Toffset0 Reg. Var. added to compensate for mash dough-in temperature loss
+// - CB_Boil_Rest Reg. Var. added to select 5 min. rest after boiling
+// - CB_pumps_on Reg. Var. added to select pumps running after MLT Temp. reached
 //
 // Revision 1.91  2018/01/03
 // - Bug-fix: CB_dpht and HLT_Bcap now also added to MainForm constructor
@@ -914,6 +916,7 @@ void task_update_std(void)
     old_tset_hlt  = MainForm->tset_hlt;  // Previous value of HLT Temp. Ref.
     old_tset_boil = MainForm->tset_boil; // Previous value of Boil-Kettle Temp. Ref.
     ui = (MainForm->PID_Ctrl->Active ? 1 : 0);
+    if (MainForm->AddingMalt1->Checked)       ui |= UI_ADDING_MALT_TO_MLT;
     if (MainForm->MaltaddedtoMLT1->Checked)   ui |= UI_MALT_ADDED_TO_MLT;
     if (MainForm->Boilingstarted1->Checked)   ui |= UI_BOILING_STARTED;
     if (MainForm->StartChilling1->Checked)    ui |= UI_START_CHILLING;
@@ -923,17 +926,6 @@ void task_update_std(void)
 
     switch (MainForm->std.ebrew_std)
     {
-       case S15_ADD_MALT_TO_MLT:
-            MessageBox(NULL,"Press OK when all malt has been added to the MLT.\n",
-                            "Now adding malt to the MLT",MB_OK);
-            ui |= UI_MALT_ADDED_TO_MLT;
-            break;
-       case S19_RDY_TO_ADD_MALT:
-            MessageBox(NULL,"Mash dough-in Temperature and Volume are reached.\n"
-                            "Press OK when malt can be added to the MLT.\n",
-                            "Ready to add malt to the MLT",MB_OK);
-            ui |= UI_ADDING_MALT_TO_MLT;
-            break;
        case S20_CIP_INIT:
             MessageBox(NULL,"- Fill Boil-Kettle with 1% NaOH solution\n"
                             "- Place MLT-Return hose into Boil-Kettle\n"
@@ -1617,6 +1609,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("SP_PREBOIL",95);  // Pre-Boil Temperature (Celsius)
           Reg->WriteFloat("BOIL_DETECT",99.3); // Boiling-Detection minimum Temperature (Celsius)
           Reg->WriteInteger("SP_BOIL",105);    // Boil Temperature (Celsius)
+          Reg->WriteBool("CB_Boil_Rest",1);    // Let wort rest for 5 minutes after boiling
 
           //------------------------------------
           // Measurements Dialog
@@ -1960,6 +1953,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.hlt_bcap       = Reg->ReadInteger("HLT_Bcap");          // HLT Burner capacity
         sp.leave_pumps_on = Reg->ReadBool("CB_pumps_on");          // 1= leave pumps on when MLT temp. is reached
         std.mash_rest     = Reg->ReadBool("CB_Mash_Rest");         // Mash rest 5 minutes after malt is added
+        std.boil_rest     = Reg->ReadBool("CB_Boil_Rest");         // Let wort rest for 5 minutes after boiling
         for (i = 0; i < std.ms_tot; i++)
         {
             ms[i].preht = ms[i].time;
@@ -2460,6 +2454,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->SP_PreBoil->Text  = AnsiString(sp.sp_preboil);  // Setpoint Temperature for pre-boil
         ptmp->Boil_Det->Text    = AnsiString(sp.boil_detect); // Boiling-Detection minimum Temperature (Celsius)
         ptmp->SP_Boil->Text     = AnsiString(sp.sp_boil);     // Setpoint Temperature during boiling
+        ptmp->CB_boil_rest->Checked = std.boil_rest;          // Let wort rest for 5 minutes after boiling
 
         if (ptmp->ShowModal() == 0x1) // mrOK
         {
@@ -2486,6 +2481,8 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("SP_PREBOIL",  ptmp->SP_PreBoil->Text.ToInt());
            Reg->WriteFloat("BOIL_DETECT",   ptmp->Boil_Det->Text.ToDouble());
            Reg->WriteInteger("SP_BOIL",     ptmp->SP_Boil->Text.ToInt());
+           Reg->WriteBool("CB_Boil_Rest",   ptmp->CB_boil_rest->Checked);
+           std.boil_rest = ptmp->CB_boil_rest->Checked;
 
            Init_Sparge_Settings(); // Init. struct with new sparge settings
         } // if
@@ -3102,9 +3099,8 @@ void __fastcall TMainForm::Update_GUI(void)
 
    sprintf(tmp_str,"%4.1f L",volumes.Flow_cfc_out);            // Display flow from CFC-output
    Flow3_cfc->Caption = tmp_str;
-   sprintf(tmp_str,"%3.1f L/min. (%d,%d,%4.1f)",volumes.Flow_rate_cfc_out,
+   sprintf(tmp_str,"%3.1f L/min. (%d, %d, %4.1f)",volumes.Flow_rate_cfc_out,
            frl_empty_boil.frl_std,frl_empty_boil.frl_tmr,frl_empty_boil.frl_det_lim);  // Display flowrate from CFC-output
-   //sprintf(tmp_str,"%4.1f L/min.",volumes.Flow_rate_cfc_out);  // Display flowrate from CFC-output
    Flow3_rate->Caption = tmp_str;
 
    sprintf(tmp_str,"%4.1f L",volumes.Flow4);                   // Display flow from CFC-output
@@ -3171,7 +3167,12 @@ void __fastcall TMainForm::Update_GUI(void)
           Std_State->Caption = tmp_str;
           break;
      case S12_BOILING_FINISHED:
-          Std_State->Caption = "12. Boiling Finished, prepare Chiller (M)";
+          if (std.boil_rest)
+          {
+             sprintf(tmp_str,"12. Boiling Finished, wait %d/%d min., prepare Chiller (M)",std.brest_tmr/60,TMR_BOIL_REST_5_MIN/60);
+             Std_State->Caption = tmp_str;
+          }
+          else Std_State->Caption = "12. Boiling Finished, prepare Chiller (M)";
           break;
      case S13_MASH_PREHEAT_HLT:
           sprintf(tmp_str,"13. Mash Preheat HLT (%d/%2.0f min.)",ms[std.ms_idx].timer/60,ms[std.ms_idx].time/60.0);
@@ -3195,7 +3196,7 @@ void __fastcall TMainForm::Update_GUI(void)
           Std_State->Caption = tmp_str;
           break;
      case S19_RDY_TO_ADD_MALT:
-          Std_State->Caption = "19. Ready to add Malt to the MLT";
+          Std_State->Caption = "19. Ready to add Malt to MLT (M)";
           break;
      //---------------------------------------------------------
      // These are the Cleaning-In-Place (CIP) states

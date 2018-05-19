@@ -613,6 +613,7 @@ void init_frl_struct(flow_rate_low_struct *p, int perc)
   Purpose  : This function is called every second from
              STD state 'Empty MLT' and is used to detect when the MLT
              is empty. In that case the flow-rate becomes low / zero.
+             It is also used in STD state 'Chill & Pump to fermentation Bin'.
   Variables:
   flow_rate: the flow-rate from MLT to Boil-kettle in L/min.
   Returns  : 1: flow-rate is low, 0: flow-rate is still high
@@ -1106,6 +1107,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
            if (++std->timer5 >= sps->boil_time_ticks)
            {
+              std->brest_tmr = 0; // init boil-rest timer
               vol->Flow_cfc_out_reset_value = vol->Flow_cfc_out; // reset Flow_cfc_out
               std->ebrew_std = S12_BOILING_FINISHED;
            } // if
@@ -1117,9 +1119,9 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       // a longer boiling time, to achieve final gravity of the wort.
       //---------------------------------------------------------------------------
       case S12_BOILING_FINISHED:
-           *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
-           sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
-           if (ui & UI_START_CHILLING)
+           *tset_boil = 0.0;          // Boil Temperature Setpoint
+           sps->pid_ctrl_boil_on = 0; // Disable PID-Controller for Boil-Kettle
+           if ((!std->boil_rest || (++std->brest_tmr > TMR_BOIL_REST_5_MIN)) && (ui & UI_START_CHILLING))
            {  // Init flowrate low struct with percentage
 	      init_frl_struct(&frl_empty_boil,vol->min_flowrate_boil_perc);
               std->ebrew_std = S16_CHILL_PUMP_FERMENTOR;

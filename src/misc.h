@@ -3,253 +3,6 @@
 // Auteur      : E. van de Logt
 // ------------------------------------------------------------------
 // Purpose : This include file contains defines for misc.c
-// ------------------------------------------------------------------
-// Modification History :
-// $Log$
-// Revision 1.34  2016/10/09 12:44:45  Emile
-// - Bugfix from brewsession 153: Temp. offset were not added to temps. Corrected.
-// - First version of CIP STD added. TODO: add parameter menu instead of hardcoded values.
-// - Several minor changes
-//
-// Revision 1.33  2016/09/23 09:51:55  Emile
-// - Bug-fix: Switches/Fixes for Tset_boil, gamma_boil, Tboil and Vboil now work properly.
-// - Separate key (Q) for Pump 2 instead of one key (P) for both pumps.
-// - Added: All valves off (V0 command) when exiting program.
-// - Boiling-detection added. New Registry variable BOIL_DETECT, adjustable in Sparge, Mash
-//   & Boil Settings Dialog Box.
-// - Flowrate low detection also added for boil-kettle to fermentation bin. New Registry
-//   variables added: MIN_FR_MLT_PERC and MIN_FR_BOIL_PERC, adjustable in Measurements dialog box.
-//
-// Revision 1.32  2016/08/07 14:26:43  Emile
-// - Version works with firmware r1.29.
-// - Pump 2 (HLT heat-exchanger) support added in Px command
-// - V8 now also works, action bits in STD reorganised for this.
-// - Tboil Ref. Temp. is now properly set (bug-fix from session 151).
-// - New Registry parameter BOIL_MIN_TEMP instead of hard-coded value.
-//
-// Revision 1.31  2016/05/22 13:51:16  Emile
-// Bugfixes brewing session 21-05-'16 with v3.30 PCB and HW r1.27
-// - Temp.sensor error value is now '-99.99'
-// - Double updates to Vboil removed in std
-// - HLT and MLT thermometer objects removed
-//
-// Revision 1.30  2016/04/09 12:58:50  Emile
-// - First version for new V3.30 PCB HW. Now support 4 temperatures, 4 flowsensors
-//   and Boil-Kettle PID-Controller. Various changes to User Interface, Registry
-//   parameters and scheduler/tasks.
-// - Only 6 parameters left to send to HW. In line with firmware R1.23.
-// - New switched/fixes added for tset_boil, gamma_boil and Tboil.
-//
-// Revision 1.29  2016/01/24 19:36:55  Emile
-// - Valves and Pump now show colours: RED (on) and GREEN (off)
-// - Pipes are now highlighted to show actual direction of fluid movement
-// - Initial delay of tasks changed to multiples of 100 msec. scheduler tick
-// - Mash-rest in new state now set to 5 min. instead of 10 min.
-//
-// Revision 1.28  2015/12/13 14:20:27  Emile
-// - Size of all 3 brew-kettles now adjustable. New Reg. par. VBOIL_MAX added.
-// - New 'Mash_Rest' checkbox added to 'Sparge & Mash Settings. New. Reg. par.
-//   CB_Mash_Rest. New state 18 'Mast Rest (10 minutes)' added to STD.
-// - Pump and Valves are now all off in state 'Add Malt to MLT'.
-// - Statusbar now also shows mash and sparge litres (valves indicators removed).
-// - Auto-All option added to set all valves and the pump to Auto when 'A' pressed.
-//
-// Revision 1.27  2015/07/21 19:42:46  Emile
-// - Setting Mash- and Sparge Volume now via maisch.sch and not in Dialog screen anymore.
-// - Flow-rate indicators added (HLT->MLT and MLT->Boil) to Main-Screen.
-// - Transition from 'Empty MLT' to 'Wait for Boil' now detected automatically with
-//   new function flow_rate_low().
-// - Registry vars VMLT_EMPTY, MASH_VOL and SPARGE_VOL removed.
-// - Functionality and Checkbox for 'Double initial Sparge Volume' added.
-// - Registry var CB_VSP2 added.
-//
-// Revision 1.26  2015/06/06 14:02:33  Emile
-// - User Interaction now with PopupMenu to State-label
-// - PID Controller now made with a TvrPowerButton instead of a radiobutton box
-// - View Mash Progress Form improved
-//
-// Revision 1.25  2015/06/05 19:18:40  Emile
-// - STD optimized for new solenoid valves. User Interaction dialog added
-// - Calibration & Temp. correction added for flowsensors
-//
-// Revision 1.24  2015/03/21 09:27:22  Emile
-// - Vboil_simulated removed, VHLT_START added
-// - task_read_vmlt_boil() with command A6 added (works with ebrew HW R1.12)
-// - task_read_vhlt_vmlt() with command A5 added
-// - Flow1_hlt_mlt and Flow2_mlt_boil objects added to main-screen
-// - New Registry var USE_FLOWSENSORS. Switches between tasks 03/04 and 03F/04F
-//
-// Revision 1.23  2013/07/23 09:42:46  Emile
-// - Fourth intermediate version: several Registry Settings added / removed.
-// - Dialog Screens updated: better lay-out and matches new Registry Settings
-// - Source-code improved for readability
-//
-// Revision 1.22  2013/07/21 22:32:47  Emile
-// - 3rd intermediate version to support ebrew 2.0 rev.1.5 hardware
-// - Changes to Measurement Dialog Screen: VHLT, VMLT, THLT, TMLT
-// - Registry: several parameters removed + parameters renamed
-// - Ttriac & DAC code & parameters removed
-//
-// Revision 1.21  2013/06/22 23:04:19  Emile
-// - Second intermediate version: scheduler added and timer interrupt divided
-//   over a number of tasks.
-// - Version works with Ebrew hardware, task duration needs to be optimised!
-//
-// Revision 1.20  2013/06/16 14:39:19  Emile
-// Intermediate version for new Ebrew 2.0 USB hardware:
-// - Hardware settings Dialog: COM Port + Settings added + LEDx removed
-// - PortTalk + i2c_dll + Start_i2c_communication + Reset_I2C_Bus removed
-// - New routines for COM-Port added
-// - Generate_IO_Signals() now uses COM_port_write to address all hardware
-// - This version works with new hardware: PUMP on/off + LEDs are working
-// - HEATER led and PWM output do not work yet + TODO: add scheduler.
-//
-// Revision 1.19  2011/05/29 20:56:26  Emile
-// - New Registry variables added: STC_N, STC_TD and STC_ADF
-// - PID Settings Dialog screen extended with new parameters for self-tuning
-//   controller: possibility to set the system order N, an estimate for the
-//   time-delay and a boolean whether or not to use adaptive dir. forgetting.
-// - PID Settings Dialog screen: parameters enabled/disabled when a
-//   specific PID controller is chosen.
-// - New functions time_delay() and init_time_delay() added
-// - Changes made in init_pid2() function header.
-// - Unit-test cases updated and extended with tests for new functions.
-//
-// Revision 1.18  2007/08/26 22:23:21  Emile
-// - Slope Limiter function added for Thlt, Tmlt, Vhlt, Vmlt and tset_hlt
-// - Five Registry variables added: THLT_SLOPE, TMLT_SLOPE, VHLT_SLOPE,
-//   VMLT_SLOPE and TSET_HLT_SLOPE
-// - Bug-fix setting MA order for HLT Volume: this was coupled to MA order of
-//   HLT temperature. Corrected
-// - Measurements... and PID controller settings... dialog screen updated.
-//
-// Revision 1.17  2007/07/06 22:23:02  Emile
-// - The real time between two lines from a log-file is now used instead of a
-//   fixed 5 sec. time when reading a log-file.
-// - Leading-zero bug solved in Mash Progress screen
-// - i2c_stop() only called with PT_CLOSE in case of exit of program
-// - System Identification library functions added (but not used yet).
-//
-// Revision 1.16  2006/11/18 23:06:37  Emile
-// - View Mash/Sparging screen is improved: time-stamps are placed when a
-//   mashing or sparging phase has started.
-// - Read_log_file is improved: time-stamps are generated, so that old log-files
-//   can be read and time-stamp information can be seen in the Mash/Sparging screen.
-// - Datagraps are set to a step-size of 1 instead of 2 (1 div = 100 seconds now).
-// - Main screen updated: Heating power is now in % and correct volumes are added.
-//
-// Revision 1.15  2006/02/19 13:14:35  Emile
-// - Bug-fix reading logfile(). If the latest mash timer was not started yet,
-//   it was set to a high value (which was the linenumber in the logfile).
-//   Setting the mash-timers should be oke now.
-// - Max. linenumber changed from 32767 to 65535, meaning that 91 hours in 1
-//   log-entry is possible now.
-//
-// Revision 1.14  2005/08/30 09:17:42  Emile
-// - Bug-fix reading log-file. Only entries > 1 minute can be imported.
-// - sp_idx added to log-file, instead of PID_ON.
-// - Stay 10 seconds in state 5 at start of sparging for logging purposes
-// - Reorganisation of routines of reading log file, added print_p_struct().
-//
-// Revision 1.13  2005/03/26 13:53:21  Emile
-// - During State "Mash Preheat" pump is set to ON (again)
-// - Added a burner_on option (bit 4 on LSB_IO). For this two new registry
-//   variables are introduced (BURNER_HHYST and BURNER_LHYST)
-// - Various screens a little enlarged (no scrollbars visible anymore)
-//
-// Revision 1.12  2004/05/13 20:51:00  emile
-// - Main loop timing improved. Only 99 (of 100) cycles were executed. Loop
-//   timing is now reset after 100 loops (5 seconds)
-// - TS parameter now only works on PID-controller time-slice. Max. is 20 sec.
-// - Bug-fix in init_ma() filter when init. to a value (should be /N).
-// - LPF for D-term of PID controller added. New reg. var. K_LPF
-// - PID Debug label added + checkbox in PID screen. Default off (NO reg var).
-// - Statusbar object added
-// - Start made with network functionality. Not operational yet.
-//
-// Revision 1.11  2004/05/08 14:52:52  emile
-// - Mash pre-heat functionality added to STD. New registry variable PREHEAT_TIME.
-//   tset_hlt is set to next mash temp. if mash timer >= time - PREHEAT_TIME
-// - View mash progress screen: reorganised, pre-heat timers added, timers are now
-//   in seconds instead of minutes.
-// - update_tset() function removed. Now incorporated in STD, states 3-5 + (new state) 13.
-// - THLT_HLIMIT and THLT_LLIMIT and state 4 'Bypass Heat Exchanger' removed
-// - Reorganisation of several variables (e.g. ms_idx, ms_tot) into (other) structs.
-// - 'Apply' Button added to Fix parameters dialog screen.
-// - 'Edit mash scheme' no longer resets the (running) mash timers
-// - 'Mash progress controlled by' function removed. Registry var 'mash_control' now
-//   also removed.
-// - Changing init. volume of HLT did not result in an update on screen. Corrected.
-//
-// Revision 1.10  2004/05/05 15:44:16  emile
-// - Main Screen picture update
-// - Init_ma() now initialises with a value instead of 0. Avoids reset of signal.
-// - STD update: calculation of volumes should be correct now
-// - Parameter added for early start of mash timer. Registry var. TOffset2
-// - Registry variables Kc, Ti, Td, TOffset and TS are now floats instead of integers.
-// - Some screens updated with hints (also of labels)
-// - Bug-fix: unnecessary delay after change in gamma. Is corrected now
-// - Help via menu now also works
-//
-// Revision 1.9  2004/01/31 16:01:05  emile
-// - Init. HW High/Low limit temp. changed to 70/50 C respectively.
-// - Added code for calculation/simulation of Vhlt and Vboil
-// - Hardware dialog updated: 3 new controls added for Vhlt and Vboil simulation
-// - Registry key no longer in ebrew but in Software\\ebrew
-// - First attempt to catch CVS version ID in source code
-//
-// Revision 1.8  2003/09/15 20:37:22  emile
-// - LM76 constants renamed in LM92 constants
-// - Pump Popupmenu added (same as already done for the valves)
-// - Added support for LED3 and LED4 displays
-// - 'I2C settings' renamed into 'Hardware Settings'
-// - Added more variables to LED1..LED4 selection. Now 6 variables to select
-// - Added SET_LED macro
-// - Added Triac Temperature protection functionality
-//
-// Revision 1.7  2003/07/11 18:34:46  emile
-// - tset_mlt added. Also added to log-file (tset_mlt now replaces gamma).
-// - Bug solved: transition to 'EMPTY_MLT' was 1 sparging cycle too early.
-// - Log-file header updated
-// - init_adc(): all vref initialisations are now the same (/ 2560).
-//               Removed the / 10 division of AD4 in the main loop, this is
-//               now done in init_adc().
-// - Multiply and division changed into <<= and >>= (in lm92_read())
-//
-// Revision 1.6  2003/06/01 13:40:45  emile
-// - Bugfix: switch/fix for Tmlt and Thlt were in wrong time-slice. Corrected.
-// - Switch/fix for std state added for easier testing
-// - Vmash value added to 'Options|Sparge & STD Settings' dialog screen.
-//
-// Revision 1.5  2003/06/01 11:53:48  emile
-// - tset has been renamed in tset_hlt for more clearance
-// - STD: state 1 -> 2 has been changed. This was 'ms[0].timer != NOT_STARTED'.
-//        This is now 'thlt >= tset_hlt', because timer0 only starts with water
-//        in the MLT => this caused a dead-lock.
-// - 6 defines have been made adjustable via 'Options|Sparge & STD Settings'.
-//   These defines were TMLT_HLIMIT, TMLT_LLIMIT, TIMEOUT_1SEC, VMLT_EMPTY,
-//   TIMEOUT3 and TIMEOUT4.
-//
-// Revision 1.4  2003/01/04 22:35:50  emile
-// - Restore Settings function now restores all relevant variables (not just
-//   the mashing variables). Several separate functions are created to
-//   support this.
-//
-// Revision 1.3  2002/12/30 20:21:59  emile
-// - Bug 2 29-12-02 solved: start mash timers if temp >= tref instead of >.
-// - Bug 3 29-12-02 solved: deadlock in std_state 4 when mashing is finished.
-// - Bug 4 29-12-02 solved: rush through STD. Sparging parameters were not
-//   initialised. New function Init_Sparge_Settings() added.
-// - Sparge variables now added to 'View Mash Progress' screen.
-// - std_struct added for more flexibility of fixing STD values.
-//
-// Revision 1.2  2002/12/30 13:33:45  emile
-// - Headers with CVS tags added to every source file
-// - Restore Settings function is added
-// - "ebrew" registry key now in a define REGKEY
-//
-// 27-07-02 LGT    moving_average() function added
-// 13-03-02 LGT    Initial version, derived from brew.c
 // ==================================================================
 #ifndef MISC_H
 #define MISC_H
@@ -349,10 +102,12 @@ typedef struct _std_struct
    int    timer2;    // Timer for state 'Delay_xSEC'
    int    timer3;    // Timer for state 'Pump Pre-Fill'
    int    mrest_tmr; // Timer for state 'Mast Rest 5 Min.'
+   int    brest_tmr; // Timer for state 'Boiling finished, prepare Chiller'
    int    timer5;    // Timer for state 'Boiling'
    int    mash_rest; // 1 = mash rest after malt is added
    int    cip_tmr1;  // Timer for CIP process
    int    cip_circ;  // Counter for CIP circulations
+   int    boil_rest; // 1 = let wort rest after malt is added
 } std_struct;
 
 #define MAX_MA (50)
@@ -468,6 +223,7 @@ typedef struct _flow_rate_low_struct
 #define TMR_PREFILL_PUMP       (60)
 #define TMR_DELAY_xSEC         (10)
 #define TMR_MASH_REST_5_MIN   (300)
+#define TMR_BOIL_REST_5_MIN   (300)
 #define TMR_CIP_CIRC_TIME     (300)
 #define TMR_CIP_REST_TIME     (300)
 #define TMR_CIP_CLEAN_OUTPUTS  (60)
