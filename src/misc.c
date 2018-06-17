@@ -766,16 +766,16 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       //---------------------------------------------------------------------------
       case S00_INITIALISATION:
            std->ms_idx = 0; // init. index in mash schem
-           *tset_mlt   = ms[std->ms_idx].temp;
-           *tset_hlt   = *tset_mlt + sps->temp_offset0;
-           *tset_boil  = 0.0; // Setpoint Temp. for Boil-Kettle
+           *tset_mlt   = ms[std->ms_idx].temp;          // get temp. from mash-scheme
+           *tset_hlt   = *tset_mlt + sps->temp_offset0; // compensate for dough-in losses
+           *tset_boil  = 0.0;                           // Setpoint Temp. for Boil-Kettle
            sps->pid_ctrl_boil_on = 0; // Disable PID-Controller for Boil-Kettle
            if (ui & UI_PID_ON)
-           {
+           {  // start with normal brewing states
               std->ebrew_std = S01_WAIT_FOR_HLT_TEMP;
            } // if
-           else if (ui & UI_CIP_INIT) 
-           {
+           else if (ui & UI_CIP_INIT)
+           {  // Clean-in-Place program
               std->ebrew_std = S20_CIP_INIT;
            } // else if
            break;
@@ -784,9 +784,9 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       // - If Thlt > Tset_hlt, goto S14_PUMP_PREFILL
       //---------------------------------------------------------------------------
       case S01_WAIT_FOR_HLT_TEMP:
-           *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = *tset_mlt + sps->temp_offset0;
-           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
+           *tset_mlt  = ms[std->ms_idx].temp;          // get temp. from mash-scheme
+           *tset_hlt  = *tset_mlt + sps->temp_offset0; // compensate for dough-in losses
+           *tset_boil = 0.0;                           // Setpoint Temp. for Boil-Kettle
            if (thlt >= *tset_hlt) // HLT TEMP is OK
            {
               vol->Vhlt_old  = vol->Vhlt; // remember old value
@@ -799,10 +799,10 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       // the pump with water for a minute, then goto S02_FILL_MLT
       //---------------------------------------------------------------------------
       case S14_PUMP_PREFILL:
-           *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = *tset_mlt + sps->temp_offset0;
-           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
-           if (++std->timer3 >= TMR_PREFILL_PUMP) // Stay-here timer timeout?
+           *tset_mlt  = ms[std->ms_idx].temp;          // get temp. from mash-scheme
+           *tset_hlt  = *tset_mlt + sps->temp_offset0; // compensate for dough-in losses
+           *tset_boil = 0.0;                           // Setpoint Temp. for Boil-Kettle
+           if (++std->timer3 >= TMR_PREFILL_PUMP)      // Stay-here timer timeout?
            {
               std->ebrew_std = S02_FILL_MLT;
            } // if
@@ -813,9 +813,9 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       // - If Vmlt > dough-in volume, goto S03_MASH_IN_PROGRESS
       //---------------------------------------------------------------------------
       case S02_FILL_MLT:
-           *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = *tset_mlt + sps->temp_offset0;
-           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
+           *tset_mlt  = ms[std->ms_idx].temp;          // get temp. from mash-scheme
+           *tset_hlt  = *tset_mlt + sps->temp_offset0; // compensate for dough-in losses
+           *tset_boil = 0.0;                           // Setpoint Temp. for Boil-Kettle
            if (vol->Vmlt >= sps->mash_vol)
            {
               std->ebrew_std = S03_WAIT_FOR_MLT_TEMP;
@@ -825,14 +825,14 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
       //                            M A S H I N G
       //---------------------------------------------------------------------------
       // S03_MASH_IN_PROGRESS: Start of a mash phase, Tmlt < Tset_mlt, PID is active
-      // - Tset_hlt = tset (from mash scheme) + double offset
+      // - Tset_hlt = tset (from mash scheme) + double offset or dough-in offset
       // - Start mash timer, then goto S04_MASH_TIMER_RUNNING
       //---------------------------------------------------------------------------
       case S03_WAIT_FOR_MLT_TEMP:
            // Add double offset as long as Tmlt < Tset_mlt + Offset2
-           *tset_mlt  = ms[std->ms_idx].temp;
-           *tset_hlt  = *tset_mlt + 2 * sps->temp_offset;
-           *tset_boil = 0.0; // Setpoint Temp. for Boil-Kettle
+           *tset_mlt  = ms[std->ms_idx].temp;             // get temp. from mash-scheme
+           // *tset_hlt is NOT set here, but in previous state (FILL_MLT or MASH_PREHEAT_HLT)
+           *tset_boil = 0.0;                              // Setpoint Temp. for Boil-Kettle
            if (tmlt >= ms[std->ms_idx].temp + sps->temp_offset2)
            {  // Tmlt has reached Tset_mlt + Offset2, start mash timer
               if (std->ms_idx == 0)
@@ -1081,6 +1081,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            if (flow_rate_low(vol->Flow_rate_mlt_boil,&frl_empty_mlt))
            {
               std->ebrew_std = S10_WAIT_FOR_BOIL;
+              std->timer5    = 0; // assure a min. stay time, so transition is detected
            } // if
            break;
       //---------------------------------------------------------------------------
@@ -1093,7 +1094,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            *tset_hlt  = 0.0; // disable heating element
            *tset_boil = sps->sp_boil; // Boil Temperature Setpoint
            sps->pid_ctrl_boil_on = 1; // Enable PID-Controller for Boil-Kettle
-           if ((ui & UI_BOILING_STARTED) || (tboil > sps->boil_detect))
+           if ((++std->timer5 >= 10) && ((ui & UI_BOILING_STARTED) || (tboil > sps->boil_detect)))
            {
               std->timer5    = 0; // init. timer for boiling time
               std->ebrew_std = S11_BOILING;

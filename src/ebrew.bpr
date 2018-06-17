@@ -34,14 +34,14 @@
     <USERDEFINES value=""/>
     <SYSDEFINES value="NO_STRICT"/>
     <MAINSOURCE value="ebrew.cpp"/>
-    <INCLUDEPATH value="..;$(BCB)\include;$(BCB)\Lib\AnimTimer;$(BCB)\include\vcl;$(BCB)\Lib\tiw;$(BCB)\Lib\gridpack"/>
+    <INCLUDEPATH value="..;$(BCB)\include;$(BCB)\Lib\AnimTimer\lib;$(BCB)\include\vcl;$(BCB)\Lib\tiw;$(BCB)\Lib\gridpack"/>
     <LIBPATH value="$(BCB)\lib\release;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Lib\AnimTimer;$(BCB)\Lib\tiw;$(BCB)\Projects\Lib;$(BCB)\Lib\gridpack"/>
     <WARNINGS value="-wstv -wstu -w-pch -w-par -wnod -w-8027 -w-8026 -wdef -w-asc"/>
     <WARNOPTSTR value=""/>
     <OTHERFILES value=""/>
   </MACROS>
   <OPTIONS>
-    <IDLCFLAGS value="-I.. -I$(BCB)\include -I$(BCB)\Lib\AnimTimer -I$(BCB)\include\vcl 
+    <IDLCFLAGS value="-I.. -I$(BCB)\include -I$(BCB)\Lib\AnimTimer\lib -I$(BCB)\include\vcl 
       -I$(BCB)\Lib\tiw -I$(BCB)\Lib\gridpack -src_suffix cpp -boa"/>
     <CFLAG1 value="-Od -H=d:\bcb6\lib\vcl60.csm -Hc -Vx -Ve -X- -r- -a8 -4 -b- -k -y -v -vi- 
       -c -tW -tWM"/>
@@ -84,7 +84,7 @@ AutoIncBuild=1
 MajorVer=1
 MinorVer=1
 Release=0
-Build=100
+Build=104
 Debug=0
 PreRelease=0
 Special=0
@@ -96,7 +96,7 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=de Boezem
 FileDescription=ebrew automates the HERMS home-brewery, web-site: www.vandelogt.nl
-FileVersion=1.1.0.100
+FileVersion=1.1.0.104
 InternalName=ebrew
 LegalCopyright=
 LegalTrademarks=
@@ -106,20 +106,22 @@ ProductVersion=V1.0
 Comments=
 
 [HistoryLists\hlIncludePath]
-Count=4
-Item0=..;$(BCB)\include;$(BCB)\Lib\AnimTimer;$(BCB)\include\vcl;$(BCB)\Lib\tiw;$(BCB)\Lib\gridpack
-Item1=i2c_dll;..;$(BCB)\include;D:\BCB6\Projects\AnimTimer\lib;$(BCB)\include\vcl;D:\BCB6\Lib\TIW6
-Item2=i2c_dll;..;$(BCB)\include;D:\BCB6\Lib\AnimTimer\lib;$(BCB)\include\vcl;D:\BCB6\Lib\TIW6
-Item3=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;D:\BCB6\Lib\TIW6;D:\BCB6\Lib\AnimTimer\lib
+Count=5
+Item0=..;$(BCB)\include;$(BCB)\Lib\AnimTimer\lib;$(BCB)\include\vcl;$(BCB)\Lib\tiw;$(BCB)\Lib\gridpack
+Item1=..;$(BCB)\include;$(BCB)\Lib\AnimTimer;$(BCB)\include\vcl;$(BCB)\Lib\tiw;$(BCB)\Lib\gridpack
+Item2=i2c_dll;..;$(BCB)\include;D:\BCB6\Projects\AnimTimer\lib;$(BCB)\include\vcl;D:\BCB6\Lib\TIW6
+Item3=i2c_dll;..;$(BCB)\include;D:\BCB6\Lib\AnimTimer\lib;$(BCB)\include\vcl;D:\BCB6\Lib\TIW6
+Item4=i2c_dll;..;$(BCB)\include;$(BCB)\include\vcl;D:\BCB6\Lib\TIW6;D:\BCB6\Lib\AnimTimer\lib
 
 [HistoryLists\hlLibraryPath]
-Count=6
-Item0=$(BCB)\lib\release;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Lib\AnimTimer;$(BCB)\Lib\tiw;$(BCB)\Projects\Lib;$(BCB)\Lib\gridpack;C:\Program Files (x86)\Borland\CBuilder6\Lib\gridpack
-Item1=$(BCB)\lib\release;i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Projects\AnimTimer\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib
-Item2=$(BCB)\lib\release;i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Lib\AnimTimer\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib
-Item3=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Lib\AnimTimer\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib
-Item4=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib;D:\BCB6\Lib\AnimTimer\lib
-Item5=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib
+Count=7
+Item0=$(BCB)\lib\release;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Lib\AnimTimer;$(BCB)\Lib\tiw;$(BCB)\Projects\Lib;$(BCB)\Lib\gridpack
+Item1=$(BCB)\lib\release;..;$(BCB)\lib\obj;$(BCB)\lib;$(BCB)\Lib\AnimTimer;$(BCB)\Lib\tiw;$(BCB)\Projects\Lib;$(BCB)\Lib\gridpack;C:\Program Files (x86)\Borland\CBuilder6\Lib\gridpack
+Item2=$(BCB)\lib\release;i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Projects\AnimTimer\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib
+Item3=$(BCB)\lib\release;i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Lib\AnimTimer\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib
+Item4=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Lib\AnimTimer\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib
+Item5=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib;D:\BCB6\Lib\AnimTimer\lib
+Item6=i2c_dll;..;$(BCB)\lib\obj;$(BCB)\lib;D:\BCB6\Lib\TIW6;$(BCB)\Projects\Lib
 
 [HistoryLists\hlDebugSourcePath]
 Count=1

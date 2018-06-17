@@ -3,8 +3,12 @@
 // Author      : Emile
 // Purpose     : Main Unit of the ebrew program. Contains Init. functions,
 //               functions for every menu command and it contains the main
-//               program loop (TMainForm::T50msec2Timer()).  
+//               program loop (TMainForm::T50msec2Timer()).
 // --------------------------------------------------------------------------
+// Revision 1.93  2018/06/17
+// - Bug-fix MLT set-point temp. not set to offset0 in state RDY_TO_ADD_MALT
+// - Bug-fix Boiling start-time not shown in Mash progress screen
+//
 // Revision 1.92  2018/05/11
 // - Toffset0 Reg. Var. added to compensate for mash dough-in temperature loss
 // - CB_Boil_Rest Reg. Var. added to select 5 min. rest after boiling
@@ -1538,7 +1542,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.92 $";
+   ebrew_revision   = "$Revision: 1.93 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
