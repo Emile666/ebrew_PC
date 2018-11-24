@@ -5,6 +5,10 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).
 // --------------------------------------------------------------------------
+// Revision 1.94  2018/11/24
+// - Audio alarm added for sensors, new command-line argument (Xx) added
+// - Version works with firmware r1.34.
+//
 // Revision 1.93  2018/06/17
 // - Bug-fix MLT set-point temp. not set to offset0 in state RDY_TO_ADD_MALT
 // - Bug-fix Boiling start-time not shown in Mash progress screen
@@ -685,7 +689,12 @@ void task_read_temps(void)
          MainForm->Val_Thlt->Font->Color = clLime;
          MainForm->thlt = temp2 + MainForm->thlt_offset; // update THLT with new value
     } // if
-    else MainForm->Val_Thlt->Font->Color = clRed; // + do NOT update THLT
+    else
+    {
+         MainForm->Val_Thlt->Font->Color = clRed; // + do NOT update THLT
+         if ((MainForm->no_sound == ALARM_TEMP_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS))
+             MainForm->comm_port_write("X3\n");
+    } // else
     if (MainForm->swfx.thlt_sw)
     {  // Switch & Fix
        MainForm->thlt = (double)(MainForm->swfx.thlt_fx);
@@ -696,7 +705,12 @@ void task_read_temps(void)
          MainForm->Val_Tmlt->Font->Color = clLime;
          MainForm->tmlt = temp3 + MainForm->tmlt_offset; // update TMLT with new value
     }
-    else MainForm->Val_Tmlt->Font->Color = clRed; // + do NOT update TMLT
+    else
+    {
+        MainForm->Val_Tmlt->Font->Color = clRed; // + do NOT update TMLT
+        if ((MainForm->no_sound == ALARM_TEMP_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS))
+            MainForm->comm_port_write("X3\n");
+    } // else
     if (MainForm->swfx.tmlt_sw)
     {  // Switch & Fix
        MainForm->tmlt = (double)(MainForm->swfx.tmlt_fx);
@@ -707,7 +721,12 @@ void task_read_temps(void)
          MainForm->Temp_Boil->Font->Color = clLime;
          MainForm->tboil = temp4 + MainForm->tboil_offset; // update TBOIL with new value
     }
-    else MainForm->Temp_Boil->Font->Color = clRed; // + do NOT update TBOIL
+    else
+    {
+         MainForm->Temp_Boil->Font->Color = clRed; // + do NOT update TBOIL
+         if ((MainForm->no_sound == ALARM_TEMP_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS))
+             MainForm->comm_port_write("X3\n");
+    } // else
     if (MainForm->swfx.tboil_sw)
     {  // Switch & Fix
        MainForm->tboil = (double)(MainForm->swfx.tboil_fx);
@@ -718,7 +737,12 @@ void task_read_temps(void)
          MainForm->Temp_CFC->Font->Color = clLime;
          MainForm->tcfc = temp5 + MainForm->tcfc_offset; // update TCFC with new value
     }
-    else MainForm->Temp_CFC->Font->Color = clRed; // + do NOT update TCFC
+    else
+    {
+         MainForm->Temp_CFC->Font->Color = clRed; // + do NOT update TCFC
+         if ((MainForm->no_sound == ALARM_TEMP_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS))
+             MainForm->comm_port_write("X3\n");
+    } // else
     // No switch/fix needed for TCFC
 } // task_read_temps()
 
@@ -776,6 +800,11 @@ void task_read_flows(void)
     MainForm->volumes.Flow_hlt_mlt *= 1.0 + 0.01 * MainForm->flow1_err;
     // Calculate Flow-rate in L per minute ; this task is called once per 2 seconds
     temp = 30.0 * (MainForm->volumes.Flow_hlt_mlt - MainForm->volumes.Flow_hlt_mlt_old);
+    if ((temp < 0.1) && MainForm->flow1_running &&
+        ((MainForm->no_sound == ALARM_FLOW_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS)))
+    {
+        MainForm->comm_port_write("X2\n"); // sound alarm
+    } // if
     MainForm->volumes.Flow_rate_hlt_mlt = moving_average(&MainForm->flow1_ma,temp);
     // Calculate VHLT volume here
     MainForm->volumes.Vhlt = MainForm->vhlt_max - MainForm->volumes.Flow_hlt_mlt;
@@ -793,6 +822,11 @@ void task_read_flows(void)
     MainForm->volumes.Flow_mlt_boil *= 1.0 + 0.01 * MainForm->flow2_err;
     // Calculate Flow-rate in L per minute ; this task is called once per 2 seconds
     temp = 30.0 * (MainForm->volumes.Flow_mlt_boil - MainForm->volumes.Flow_mlt_boil_old);
+    if ((temp < 0.1) && MainForm->flow2_running &&
+        ((MainForm->no_sound == ALARM_FLOW_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS)))
+    {
+        MainForm->comm_port_write("X2\n"); // sound alarm
+    } // if
     MainForm->volumes.Flow_rate_mlt_boil = moving_average(&MainForm->flow2_ma,temp);
     // Calculate VMLT volume here
     MainForm->volumes.Vmlt = MainForm->volumes.Flow_hlt_mlt  -
@@ -813,6 +847,11 @@ void task_read_flows(void)
     MainForm->volumes.Flow_cfc_out -= MainForm->volumes.Flow_cfc_out_reset_value;
     // Calculate Flow-rate in L per minute ; this task is called once per 2 seconds
     temp = 30.0 * (MainForm->volumes.Flow_cfc_out - MainForm->volumes.Flow_cfc_out_old);
+    if ((temp < 0.1) && MainForm->flow3_running &&
+        ((MainForm->no_sound == ALARM_FLOW_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS)))
+    {
+        MainForm->comm_port_write("X2\n"); // sound alarm
+    } // if
     MainForm->volumes.Flow_rate_cfc_out = moving_average(&MainForm->flow3_ma,temp);
     // Calculate VBOIL volume here
     MainForm->volumes.Vboil = MainForm->volumes.Flow_mlt_boil -
@@ -1542,7 +1581,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.93 $";
+   ebrew_revision   = "$Revision: 1.94 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -1882,6 +1921,8 @@ void __fastcall TMainForm::Main_Initialisation(void)
    Tank_MLT->Max = vmlt_max;
 
    MainForm->volumes.Flow_cfc_out_reset_value = 0.0; // Init. reset value for Flow_cfc_out
+   comm_port_write("R0\n"); // Reset all Flows to 0.0 L in ebrew hardware
+   no_sound = ALARM_TEMP_FLOW_SENSORS; // sound alarm in case of Temp. and Flow sensor error
 
    // Init logfile
    if ((fd = fopen(LOGFILE,"a")) == NULL)
@@ -3395,11 +3436,13 @@ void __fastcall TMainForm::Update_GUI(void)
    {  // From CFC -> Boil kettle
       VrGradient7->StartColor = clAqua; VrGradient7->EndColor = clAqua;
       VrGradient8->StartColor = clAqua; VrGradient8->EndColor = clAqua;
+      flow2_running = true;
    }
    else
    {
       VrGradient7->StartColor = clNavy; VrGradient7->EndColor = clNavy;
       VrGradient8->StartColor = clNavy; VrGradient8->EndColor = clNavy;
+      flow2_running = false;
    } // else
    //-------------------------------------------------------------
    // INPUT LINES: clMaroon (OFF) - clRed (ON)
@@ -3417,10 +3460,12 @@ void __fastcall TMainForm::Update_GUI(void)
         (std_out & (P0b | V3b)) == (P0b | V3b)) && any_output_on)
    {  // From MLT -> Pump input
       VrGradient10->StartColor = clRed; VrGradient10->EndColor = clRed;
+      flow1_running = true;
    }
    else
    {
       VrGradient10->StartColor = clMaroon; VrGradient10->EndColor = clMaroon;
+      flow1_running = false;
    } // else
    //-------------------------------------------------------------
    if (((std_out & (P0b | V3b)) == (P0b | V3b)) && any_output_on)
@@ -3447,26 +3492,27 @@ void __fastcall TMainForm::Update_GUI(void)
    {  // CFC
       VrGradient14->StartColor = clAqua; VrGradient14->EndColor = clAqua;
       VrGradient15->StartColor = clAqua; VrGradient15->EndColor = clAqua;
+      flow3_running = true;
    }
    else
    {
       VrGradient14->StartColor = clNavy; VrGradient14->EndColor = clNavy;
       VrGradient15->StartColor = clNavy; VrGradient15->EndColor = clNavy;
+      flow3_running = false;
    } // else
    //-------------------------------------------------------------
 
    //-------------------------------------------
    // Update the various panels of the Statusbar
    //-------------------------------------------
-   switch (system_mode)
+   strcpy(tmp_str,"Sensor Alarm: ");
+   switch (no_sound)
    {
-        case 0: strcpy(tmp_str,"Modulating Gas-Burner");
-                break;
-        case 1: strcpy(tmp_str,"Non-Modulating Gas-Burner");
-                break;
-        case 2: strcpy(tmp_str,"Electrical Heating");
-                break;
-   } // switch
+        case ALARM_OFF:               strcat(tmp_str,"OFF"); break;
+        case ALARM_TEMP_SENSORS:      strcat(tmp_str,"TEMP"); break;
+        case ALARM_FLOW_SENSORS:      strcat(tmp_str,"FLOW"); break;
+        case ALARM_TEMP_FLOW_SENSORS: strcat(tmp_str,"TEMP+FLOW"); break;
+   } // if
    StatusBar->Panels->Items[PANEL_SYS_MODE]->Text = AnsiString(tmp_str);
    sprintf(tmp_str,"ms_idx = %d",std.ms_idx);
    StatusBar->Panels->Items[PANEL_MSIDX]->Text = AnsiString(tmp_str);
@@ -3516,6 +3562,14 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
    {
       std_out |= P1M; // Set Pump 2 Manual bit
       std_out ^= P1b; // Toggle Pump 2 On/Off
+   } // else if
+   else if (UpCase(Key) == 'R')
+   {
+      comm_port_write("R0\n"); // Reset all Flows to 0.0 L in ebrew hardware
+   } // else if
+   else if (UpCase(Key) == 'S')
+   {  // toggle between various alarms or no alarm
+      if (++no_sound > ALARM_TEMP_FLOW_SENSORS) no_sound = ALARM_OFF;
    } // else if
    else if (UpCase(Key) == 'H')
    {

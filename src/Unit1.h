@@ -41,6 +41,14 @@
 #define ONE_MINUTE (6.94444E-04)
 
 //------------------------------
+// Defines for Audio Alarm
+//------------------------------
+#define ALARM_OFF               (0)
+#define ALARM_TEMP_SENSORS      (1)
+#define ALARM_FLOW_SENSORS      (2)
+#define ALARM_TEMP_FLOW_SENSORS (3)
+
+//------------------------------
 // Defines for StatusBar object
 //------------------------------
 #define PANEL_SYS_MODE (0)
@@ -293,8 +301,12 @@ public:		// User declarations
         int    flow2_err;             // Flowsensor 2 error compensation (-5% ... +5%)
         int    flow3_err;             // Flowsensor 3 error compensation (-5% ... +5%)
         int    flow4_err;             // Flowsensor 4 error compensation (-5% ... +5%)
+        bool   flow1_running;         // True = flowsensor 1 should see a flow
+        bool   flow2_running;         // True = flowsensor 2 should see a flow
+        bool   flow3_running;         // True = flowsensor 3 should see a flow
         bool   flow_temp_corr;        // true = compensate flowsensor readings for higher temperatures
-        
+        int    no_sound;              // 0: disable audible alarm, 1: alarm on T-sensors, 2: alarm on F-sensors
+
         volume_struct   volumes;       // Struct for Volumes
         swfx_struct     swfx;          // Switch & Fix settings for tset and gamma
         pid_params      pid_pars_hlt;  // struct containing PID parameters for HLT
