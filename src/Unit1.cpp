@@ -5,6 +5,10 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).
 // --------------------------------------------------------------------------
+// Revision 1.95  2019/01/02
+// - Bug-fix Audio alarm on FLOW1, should be on VrGradient9, not VrGradient10
+// - Sens_Dbg label added, new Reg parameter CB_SHOW_SENSOR_INFO
+//
 // Revision 1.94  2018/11/24
 // - Audio alarm added for sensors, new command-line argument (Xx) added
 // - Version works with firmware r1.34.
@@ -688,12 +692,16 @@ void task_read_temps(void)
     {
          MainForm->Val_Thlt->Font->Color = clLime;
          MainForm->thlt = temp2 + MainForm->thlt_offset; // update THLT with new value
+         MainForm->sensor_alarm_info &= ~SENS_THLT;      // reset bit in sensor_alarm
     } // if
     else
     {
          MainForm->Val_Thlt->Font->Color = clRed; // + do NOT update THLT
          if ((MainForm->no_sound == ALARM_TEMP_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS))
-             MainForm->comm_port_write("X3\n");
+         {
+              MainForm->comm_port_write("X3\n");
+              MainForm->sensor_alarm_info |= SENS_THLT;
+         } // if
     } // else
     if (MainForm->swfx.thlt_sw)
     {  // Switch & Fix
@@ -704,12 +712,16 @@ void task_read_temps(void)
     {
          MainForm->Val_Tmlt->Font->Color = clLime;
          MainForm->tmlt = temp3 + MainForm->tmlt_offset; // update TMLT with new value
-    }
+         MainForm->sensor_alarm_info &= ~SENS_TMLT;      // reset bit in sensor_alarm
+    } // if
     else
     {
         MainForm->Val_Tmlt->Font->Color = clRed; // + do NOT update TMLT
         if ((MainForm->no_sound == ALARM_TEMP_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS))
-            MainForm->comm_port_write("X3\n");
+        {
+             MainForm->comm_port_write("X3\n");
+             MainForm->sensor_alarm_info |= SENS_TMLT;
+        } // if
     } // else
     if (MainForm->swfx.tmlt_sw)
     {  // Switch & Fix
@@ -720,12 +732,16 @@ void task_read_temps(void)
     {
          MainForm->Temp_Boil->Font->Color = clLime;
          MainForm->tboil = temp4 + MainForm->tboil_offset; // update TBOIL with new value
-    }
+         MainForm->sensor_alarm_info &= ~SENS_TBOIL;       // reset bit in sensor_alarm
+    } // if
     else
     {
          MainForm->Temp_Boil->Font->Color = clRed; // + do NOT update TBOIL
          if ((MainForm->no_sound == ALARM_TEMP_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS))
-             MainForm->comm_port_write("X3\n");
+         {
+              MainForm->comm_port_write("X3\n");
+              MainForm->sensor_alarm_info |= SENS_TBOIL;
+         } // if
     } // else
     if (MainForm->swfx.tboil_sw)
     {  // Switch & Fix
@@ -736,12 +752,16 @@ void task_read_temps(void)
     {
          MainForm->Temp_CFC->Font->Color = clLime;
          MainForm->tcfc = temp5 + MainForm->tcfc_offset; // update TCFC with new value
-    }
+         MainForm->sensor_alarm_info &= ~SENS_TCFC;      // reset bit in sensor_alarm
+    } // if
     else
     {
          MainForm->Temp_CFC->Font->Color = clRed; // + do NOT update TCFC
          if ((MainForm->no_sound == ALARM_TEMP_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS))
-             MainForm->comm_port_write("X3\n");
+         {
+              MainForm->comm_port_write("X3\n");
+              MainForm->sensor_alarm_info |= SENS_TCFC;
+         } // if
     } // else
     // No switch/fix needed for TCFC
 } // task_read_temps()
@@ -790,6 +810,7 @@ void task_read_flows(void)
         MainForm->Flow3_cfc->Font->Color      = clRed;
         MainForm->Flow4->Font->Color          = clRed;
     } // else
+
     //------------------ FLOW1 ------------------------------------------------
     if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
@@ -803,8 +824,10 @@ void task_read_flows(void)
     if ((temp < 0.1) && MainForm->flow1_running &&
         ((MainForm->no_sound == ALARM_FLOW_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS)))
     {
-        MainForm->comm_port_write("X2\n"); // sound alarm
+         MainForm->comm_port_write("X2\n"); // sound alarm
+         MainForm->sensor_alarm_info |=  SENS_FLOW1;
     } // if
+    else MainForm->sensor_alarm_info &= ~SENS_FLOW1;
     MainForm->volumes.Flow_rate_hlt_mlt = moving_average(&MainForm->flow1_ma,temp);
     // Calculate VHLT volume here
     MainForm->volumes.Vhlt = MainForm->vhlt_max - MainForm->volumes.Flow_hlt_mlt;
@@ -812,6 +835,7 @@ void task_read_flows(void)
     {  // Switch & Fix
        MainForm->volumes.Vhlt = MainForm->swfx.vhlt_fx;
     } // if
+
     //------------------ FLOW2 ------------------------------------------------
     if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
@@ -825,16 +849,18 @@ void task_read_flows(void)
     if ((temp < 0.1) && MainForm->flow2_running &&
         ((MainForm->no_sound == ALARM_FLOW_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS)))
     {
-        MainForm->comm_port_write("X2\n"); // sound alarm
+         MainForm->comm_port_write("X2\n"); // sound alarm
+         MainForm->sensor_alarm_info |=  SENS_FLOW2;
     } // if
+    else MainForm->sensor_alarm_info &= ~SENS_FLOW2;
     MainForm->volumes.Flow_rate_mlt_boil = moving_average(&MainForm->flow2_ma,temp);
     // Calculate VMLT volume here
-    MainForm->volumes.Vmlt = MainForm->volumes.Flow_hlt_mlt  -
-                             MainForm->volumes.Flow_mlt_boil;
+    MainForm->volumes.Vmlt = MainForm->volumes.Flow_hlt_mlt  - MainForm->volumes.Flow_mlt_boil;
     if (MainForm->swfx.vmlt_sw)
     {  // Switch & Fix
        MainForm->volumes.Vmlt = MainForm->swfx.vmlt_fx;
     } // if
+
     //------------------ FLOW3 ------------------------------------------------
     if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
@@ -850,16 +876,18 @@ void task_read_flows(void)
     if ((temp < 0.1) && MainForm->flow3_running &&
         ((MainForm->no_sound == ALARM_FLOW_SENSORS) || (MainForm->no_sound == ALARM_TEMP_FLOW_SENSORS)))
     {
-        MainForm->comm_port_write("X2\n"); // sound alarm
+         MainForm->comm_port_write("X2\n"); // sound alarm
+         MainForm->sensor_alarm_info |=  SENS_FLOW3;
     } // if
+    else MainForm->sensor_alarm_info &= ~SENS_FLOW3;
     MainForm->volumes.Flow_rate_cfc_out = moving_average(&MainForm->flow3_ma,temp);
     // Calculate VBOIL volume here
-    MainForm->volumes.Vboil = MainForm->volumes.Flow_mlt_boil -
-                              MainForm->volumes.Flow_cfc_out;
+    MainForm->volumes.Vboil = MainForm->volumes.Flow_mlt_boil - MainForm->volumes.Flow_cfc_out;
     if (MainForm->swfx.vboil_sw)
     {  // Switch & Fix
        MainForm->volumes.Vboil = MainForm->swfx.vboil_fx;
     } // if
+
     //------------------ FLOW4 ------------------------------------------------
     if (MainForm->flow_temp_corr)
     {   // Apply correction for increased volume at higher temperatures
@@ -1581,7 +1609,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.94 $";
+   ebrew_revision   = "$Revision: 1.95 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -1603,6 +1631,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteString("COM_PORT_SETTINGS","38400,N,8,1"); // COM port settings
           Reg->WriteString("UDP_IP_PORT","192.168.1.177:8888"); // IP & Port number
           Reg->WriteBool("CB_DEBUG_COM_PORT",true);
+          Reg->WriteBool("CB_SHOW_SENSOR_INFO",true);
 
           Reg->WriteInteger("GAS_NON_MOD_LLIMIT",30);
           Reg->WriteInteger("GAS_NON_MOD_HLIMIT",35);
@@ -1723,6 +1752,7 @@ void __fastcall TMainForm::Main_Initialisation(void)
          strcpy(com_port_settings,Reg->ReadString("COM_PORT_SETTINGS").c_str()); // COM port settings
          strcpy(udp_ip_port,Reg->ReadString("UDP_IP_PORT").c_str()); // UDP IP & Port number settings
          cb_debug_com_port = Reg->ReadBool("CB_DEBUG_COM_PORT"); // display message
+         cb_show_sensor_info = Reg->ReadBool("CB_SHOW_SENSOR_INFO");
 
          comm_port_open();  // Start Communication with Ebrew Hardware
 
@@ -2384,6 +2414,7 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
          ptmp->COM_Port_Settings_Edit->Text = Reg->ReadString("COM_PORT_SETTINGS");
          ptmp->UDP_Settings->Text           = Reg->ReadString("UDP_IP_PORT");
          ptmp->cb_debug_com_port->Checked   = Reg->ReadBool("CB_DEBUG_COM_PORT");
+         ptmp->cb_show_sensor_info->Checked = Reg->ReadBool("CB_SHOW_SENSOR_INFO");
 
          ptmp->S0L_Edit->Text = AnsiString(Reg->ReadInteger("GAS_MOD_PWM_LLIMIT"));
          ptmp->S0U_Edit->Text = AnsiString(Reg->ReadInteger("GAS_MOD_PWM_HLIMIT"));
@@ -2418,6 +2449,8 @@ void __fastcall TMainForm::MenuOptionsI2CSettingsClick(TObject *Sender)
 
             cb_debug_com_port = ptmp->cb_debug_com_port->Checked;
             Reg->WriteBool("CB_DEBUG_COM_PORT",cb_debug_com_port);
+            cb_show_sensor_info = ptmp->cb_show_sensor_info->Checked;
+            Reg->WriteBool("CB_SHOW_SENSOR_INFO",cb_show_sensor_info);
 
             CH_I_PAR( 0,system_mode       ,ptmp->System_Mode->ItemIndex,"SYSTEM_MODE");
             CH_I_PAR( 3,gas_mod_pwm_llimit,ptmp->S0L_Edit->Text.ToInt(),"GAS_MOD_PWM_LLIMIT");
@@ -3400,6 +3433,24 @@ void __fastcall TMainForm::Update_GUI(void)
       PID_dbg2->Caption = tmp_str;
    } // if
 
+   //-------------------------------------------
+   // Debug Sensor Alarms
+   //-------------------------------------------
+   if (cb_show_sensor_info)
+   {
+        Sens_Dbg->Visible = true;
+        sprintf(tmp_str,"T:%d,%d,%d,%d F:%d,%d,%d",
+                        (sensor_alarm_info & SENS_THLT) ? 1 : 0,
+                        (sensor_alarm_info & SENS_TMLT) ? 1 : 0,
+                        (sensor_alarm_info & SENS_TBOIL)? 1 : 0,
+                        (sensor_alarm_info & SENS_TCFC) ? 1 : 0,
+                        (sensor_alarm_info & SENS_FLOW1)? 1 : 0,
+                        (sensor_alarm_info & SENS_FLOW2)? 1 : 0,
+                        (sensor_alarm_info & SENS_FLOW3)? 1 : 0);
+        Sens_Dbg->Caption = tmp_str;
+   } // if
+   else Sens_Dbg->Visible = false;
+
    bool any_input_on  = std_out & (V1b | V2b | V3b);
    bool any_output_on = std_out & (V4b | V6b | V7b);
    //-------------------------------------------------------------
@@ -3436,7 +3487,7 @@ void __fastcall TMainForm::Update_GUI(void)
    {  // From CFC -> Boil kettle
       VrGradient7->StartColor = clAqua; VrGradient7->EndColor = clAqua;
       VrGradient8->StartColor = clAqua; VrGradient8->EndColor = clAqua;
-      flow2_running = true;
+      flow2_running = true; // FLOW2 MLT->Boil should be running
    }
    else
    {
@@ -3450,22 +3501,22 @@ void __fastcall TMainForm::Update_GUI(void)
    if (((std_out & (P0b | V2b)) == (P0b | V2b)) && any_output_on)
    {  // From HLT -> Pump input
       VrGradient9->StartColor = clRed; VrGradient9->EndColor = clRed;
+      flow1_running = true; // FLOW1 HLT->MLT should be running
    }
    else
    {
       VrGradient9->StartColor = clMaroon; VrGradient9->EndColor = clMaroon;
+      flow1_running = false;
    } // else
    //-------------------------------------------------------------
    if (((std_out & (P0b | V1b)) == (P0b | V1b) ||
         (std_out & (P0b | V3b)) == (P0b | V3b)) && any_output_on)
    {  // From MLT -> Pump input
       VrGradient10->StartColor = clRed; VrGradient10->EndColor = clRed;
-      flow1_running = true;
    }
    else
    {
       VrGradient10->StartColor = clMaroon; VrGradient10->EndColor = clMaroon;
-      flow1_running = false;
    } // else
    //-------------------------------------------------------------
    if (((std_out & (P0b | V3b)) == (P0b | V3b)) && any_output_on)
@@ -3492,7 +3543,7 @@ void __fastcall TMainForm::Update_GUI(void)
    {  // CFC
       VrGradient14->StartColor = clAqua; VrGradient14->EndColor = clAqua;
       VrGradient15->StartColor = clAqua; VrGradient15->EndColor = clAqua;
-      flow3_running = true;
+      flow3_running = true; // FLOW3 CFC_out should be running
    }
    else
    {

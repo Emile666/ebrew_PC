@@ -49,7 +49,7 @@ typedef unsigned char uint8_t;
 
 typedef struct _task_struct
 {
-	void     (* pFunction)(); // Function pointer
+	void     (* pFunction)(void); // Function pointer
 	char     Name[NAME_LEN];  // Task name
 	uint16_t Period;          // Period between 2 calls in msec.
 	uint16_t Delay;           // Initial delay before Counter starts in msec.

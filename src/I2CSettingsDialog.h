@@ -53,6 +53,7 @@ __published:	// IDE-managed Components
         TLabel *UDP_Settings_lbl;
         TComboBox *Comm_Setting;
         TLabel *Comm_Setting_lbl;
+        TCheckBox *cb_show_sensor_info;
         void __fastcall Help_ButtonClick(TObject *Sender);
         void __fastcall System_ModeExit(TObject *Sender);
         void __fastcall Comm_SettingChange(TObject *Sender);

@@ -65,6 +65,18 @@
 #define GAS_NON_MODULATING (1)
 #define ELECTRICAL_HEATING (2)
 
+//-------------------------------
+// Defines for sensor_alarm_info
+//-------------------------------
+#define SENS_THLT   (0x01)
+#define SENS_TMLT   (0x02)
+#define SENS_TBOIL  (0x04)
+#define SENS_TCFC   (0x08)
+#define SENS_FLOW1  (0x10) /* HLT -> MLT */
+#define SENS_FLOW2  (0x20) /* MLT -> Boil */
+#define SENS_FLOW3  (0x40) /* CFC out */
+#define SENS_FLOW4  (0x80) /* Reserved */
+
 #define IDLE        (0)
 #define EL_HTR_OFF  (1)
 #define EL_HTR_ON   (2)
@@ -219,6 +231,7 @@ __published:	// IDE-managed Components
         TMenuItem *CIP_Start;
         TMenuItem *N1;
         TMenuItem *AddingMalt1;
+        TLabel *Sens_Dbg;
         void __fastcall MenuOptionsPIDSettingsClick(TObject *Sender);
         void __fastcall MenuFileExitClick(TObject *Sender);
         void __fastcall MenuEditFixParametersClick(TObject *Sender);
@@ -292,6 +305,8 @@ public:		// User declarations
         bool   com_port_is_open;      // true = COM-port is open for Read/Write
         int    com_port_opened;       // remember communication channel
         bool   cb_debug_com_port;     // true = file-logging for COM port communication
+        bool   cb_show_sensor_info;   // true = file-logging for COM port communication
+        int    sensor_alarm_info;     // Alarm info for sensors
         bool   cb_pid_dbg;            // true = Show PID Debug label
         bool   cb_vsp2;               // true = Double the initial Sparge volume to Boil-kettle
         bool   toggle_led;            // Status of Alive LED
