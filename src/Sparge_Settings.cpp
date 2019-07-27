@@ -59,3 +59,23 @@ void __fastcall TSpargeSettings::CB_dphtClick(TObject *Sender)
 } // TSpargeSettings::CheckBox1Click()
 //---------------------------------------------------------------------------
 
+void __fastcall TSpargeSettings::CB_malt_firstClick(
+      TObject *Sender)
+{
+   if (CB_malt_first->Checked)
+   {
+      CB_mash_rest->Enabled = false;
+      Label4->Enabled = false;
+      CB_pumps_on->Enabled = false;
+      Label30->Enabled = false;
+   } // if
+   else
+   {
+      CB_mash_rest->Enabled = true;
+      Label4->Enabled = true;
+      CB_pumps_on->Enabled = true;
+      Label30->Enabled = true;
+   } // else
+} // TSpargeSettings::first_malt_then_waterClick()
+//---------------------------------------------------------------------------
+

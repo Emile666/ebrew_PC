@@ -787,7 +787,8 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            *tset_mlt  = ms[std->ms_idx].temp;          // get temp. from mash-scheme
            *tset_hlt  = *tset_mlt + sps->temp_offset0; // compensate for dough-in losses
            *tset_boil = 0.0;                           // Setpoint Temp. for Boil-Kettle
-           if (thlt >= *tset_hlt) // HLT TEMP is OK
+           if ((thlt >= *tset_hlt) &&                  // HLT TEMP is OK
+               (!std->malt_first || ui & UI_MALT_ADDED_TO_MLT))
            {
               vol->Vhlt_old  = vol->Vhlt; // remember old value
               std->timer3    = 0;         // init. '1 minute' timer
@@ -835,7 +836,7 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            *tset_boil = 0.0;                              // Setpoint Temp. for Boil-Kettle
            if (tmlt >= ms[std->ms_idx].temp + sps->temp_offset2)
            {  // Tmlt has reached Tset_mlt + Offset2, start mash timer
-              if (std->ms_idx == 0)
+              if ((std->ms_idx == 0) && !std->malt_first)
               {  // We need to add malt to the MLT first
                  // Depending on the state of the checkbox 'Leave pumps running',
                  // we go directly to state 15 or only after the user selects the

@@ -108,6 +108,7 @@ typedef struct _std_struct
    int    cip_tmr1;  // Timer for CIP process
    int    cip_circ;  // Counter for CIP circulations
    int    boil_rest; // 1 = let wort rest after malt is added
+   int    malt_first;// 1 = malt is added to MLT first, then water
 } std_struct;
 
 #define MAX_MA (50)

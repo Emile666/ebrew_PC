@@ -68,8 +68,11 @@ __published:	// IDE-managed Components
         TCheckBox *CB_pumps_on;
         TLabel *Label31;
         TCheckBox *CB_boil_rest;
+        TLabel *Label32;
+        TCheckBox *CB_malt_first;
         void __fastcall Help_ButtonClick(TObject *Sender);
         void __fastcall CB_dphtClick(TObject *Sender);
+        void __fastcall CB_malt_firstClick(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TSpargeSettings(TComponent* Owner);

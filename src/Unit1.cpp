@@ -5,9 +5,14 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).
 // --------------------------------------------------------------------------
+// Revision 1.96  2019/07/27
+// - Malt_First option added: instead of adding water first and then add malt
+//   to the MLT, it is now also possible to first add malt to the MLT and then
+//   to add water. New Reg parameter CB_Malt_First.
+//
 // Revision 1.95  2019/01/02
 // - Bug-fix Audio alarm on FLOW1, should be on VrGradient9, not VrGradient10
-// - Sens_Dbg label added, new Reg parameter CB_SHOW_SENSOR_INFO
+// - Sens_Dbg label added, new Reg parameter CB_SHOW_SENSOR_INFO.
 //
 // Revision 1.94  2018/11/24
 // - Audio alarm added for sensors, new command-line argument (Xx) added
@@ -1609,7 +1614,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.95 $";
+   ebrew_revision   = "$Revision: 1.96 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -1671,6 +1676,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteFloat("TOffset",1.0);      // Compensation HLT-MLT heat-loss
           Reg->WriteFloat("TOffset2",-0.5);    // Early start of mash-timer
           Reg->WriteInteger("PREHEAT_TIME",15);// PREHEAT_TIME [min.]
+          Reg->WriteBool("CB_Malt_First",0);   // 1= Add malt first to MLT, then add water
           Reg->WriteBool("CB_Mash_Rest",1);    // Mash Rest for 5 minutes after Malt is added
           Reg->WriteBool("CB_dpht",1);         // 1= use dynamic preheat timing
           Reg->WriteInteger("HLT_Bcap",90);    // HLT burner capacity in sec./°C
@@ -2027,6 +2033,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.use_dpht       = Reg->ReadBool("CB_dpht");              // 1= use dynamic preheat timing
         sp.hlt_bcap       = Reg->ReadInteger("HLT_Bcap");          // HLT Burner capacity
         sp.leave_pumps_on = Reg->ReadBool("CB_pumps_on");          // 1= leave pumps on when MLT temp. is reached
+        std.malt_first    = Reg->ReadBool("CB_Malt_First");        // 1= Add malt first to MLT, then add water
         std.mash_rest     = Reg->ReadBool("CB_Mash_Rest");         // Mash rest 5 minutes after malt is added
         std.boil_rest     = Reg->ReadBool("CB_Boil_Rest");         // Let wort rest for 5 minutes after boiling
         for (i = 0; i < std.ms_tot; i++)
@@ -2522,6 +2529,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->Offs_Edit->Text   = AnsiString(sp.temp_offset);
         ptmp->Offs2_Edit->Text  = AnsiString(sp.temp_offset2);
         ptmp->Eph_time->Text    = AnsiString(sp.ph_time/60);  // PREHEAT_TIME [minutes]
+        ptmp->CB_malt_first->Checked = std.malt_first;        // 1= Add malt first to MLT, then add water
         ptmp->CB_mash_rest->Checked = std.mash_rest;          // Mash rest for 5 min after malt is added
         ptmp->CB_dpht->Checked  = sp.use_dpht;                // 1= Use Dynamic preheat Timing
         ptmp->HLT_Bcap->Text    = sp.hlt_bcap;                // HLT burner capacity in sec./°C
@@ -2547,6 +2555,8 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteFloat("TOffset",       ptmp->Offs_Edit->Text.ToDouble());
            Reg->WriteFloat("TOffset2",      ptmp->Offs2_Edit->Text.ToDouble());
            Reg->WriteInteger("PREHEAT_TIME",ptmp->Eph_time->Text.ToInt());
+           Reg->WriteBool("CB_Malt_First",  ptmp->CB_malt_first->Checked);
+           std.malt_first = ptmp->CB_malt_first->Checked;
            Reg->WriteBool("CB_Mash_Rest",   ptmp->CB_mash_rest->Checked);
            std.mash_rest = ptmp->CB_mash_rest->Checked;
            Reg->WriteBool("CB_dpht",        ptmp->CB_dpht->Checked);
@@ -3203,7 +3213,11 @@ void __fastcall TMainForm::Update_GUI(void)
           Std_State->Caption = "00. Initialisation";
           break;
      case S01_WAIT_FOR_HLT_TEMP:
-          sprintf(tmp_str,"01. Wait for HLT Temperature (%2.1f °C)",MainForm->tset_hlt);
+          sprintf(tmp_str,"01. Wait for HLT Temp. (%2.1f °C)",MainForm->tset_hlt);
+          if (std.malt_first && !MainForm->MaltaddedtoMLT1->Checked)
+          {
+                strcat(tmp_str," + Add Malt to MLT (M)");
+          } // if
           Std_State->Caption = tmp_str;
           break;
      case S02_FILL_MLT:
@@ -3247,9 +3261,11 @@ void __fastcall TMainForm::Update_GUI(void)
      case S12_BOILING_FINISHED:
           if (std.boil_rest)
           {
-             sprintf(tmp_str,"12. Boiling Finished, wait %d/%d min., prepare Chiller (M)",std.brest_tmr/60,TMR_BOIL_REST_5_MIN/60);
+             if (std.brest_tmr > TMR_BOIL_REST_5_MIN)
+                  sprintf(tmp_str,"12. Boiling Finished, prepare Chiller (M)");
+             else sprintf(tmp_str,"12. Boiling Finished, wait %d/%d min., prepare Chiller (M)",std.brest_tmr/60,TMR_BOIL_REST_5_MIN/60);
              Std_State->Caption = tmp_str;
-          }
+          } // if
           else Std_State->Caption = "12. Boiling Finished, prepare Chiller (M)";
           break;
      case S13_MASH_PREHEAT_HLT:
@@ -3651,25 +3667,25 @@ void __fastcall TMainForm::FormKeyPress(TObject *Sender, char &Key)
 
 void __fastcall TMainForm::MaltaddedtoMLT1Click(TObject *Sender)
 {
-    MaltaddedtoMLT1->Checked = True;
+    MaltaddedtoMLT1->Checked = !MaltaddedtoMLT1->Checked;
 }
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::Boilingstarted1Click(TObject *Sender)
 {
-  Boilingstarted1->Checked = True;
+  Boilingstarted1->Checked = !Boilingstarted1->Checked;
 }
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::StartChilling1Click(TObject *Sender)
 {
-  StartChilling1->Checked = True;
+  StartChilling1->Checked = !StartChilling1->Checked;
 }
 //---------------------------------------------------------------------------
 
 void __fastcall TMainForm::ChillingFinished1Click(TObject *Sender)
 {
-  ChillingFinished1->Checked = True;
+  ChillingFinished1->Checked = !ChillingFinished1->Checked;
 }
 
 void __fastcall TMainForm::CIP_StartClick(TObject *Sender)
@@ -3680,7 +3696,7 @@ void __fastcall TMainForm::CIP_StartClick(TObject *Sender)
 
 void __fastcall TMainForm::AddingMalt1Click(TObject *Sender)
 {
-   AddingMalt1->Checked = True;
+   AddingMalt1->Checked = !AddingMalt1->Checked;
 }
 //---------------------------------------------------------------------------
 
