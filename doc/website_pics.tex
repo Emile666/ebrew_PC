@@ -1,0 +1,450 @@
+%% Copyright 2009 Ivan Griffin
+%
+% Pictures from the brewing-system for the web-site
+%-------------------------------------------------------------
+
+%\documentclass{article}
+\documentclass[border=5mm,tikz,preview,a3paper]{standalone}
+
+\usepackage{tikz}
+\usetikzlibrary{calc,backgrounds,shapes}
+\usepackage[siunitx,americanvoltages,europeanresistors]{circuitikz}
+%\usepackage[active,tightpage]{preview}
+
+\begin{document}
+  \tikzstyle{kettle} = [draw, very thick, fill=white, rectangle, minimum height=24em, minimum width=16em, node distance=8em]
+  \tikzstyle{pump}   = [draw, very thick, fill=white, rectangle, minimum height=4em, minimum width=8em]
+  \tikzstyle{cfc1}   = [draw, very thick, fill=none, ellipse, minimum height=1em, minimum width=10em, red, font={\sffamily\bfseries}]
+  \tikzstyle{tekst}  = [above, font={\sffamily\Large}]
+  \tikzstyle{lineI}  = [blue , line width=4.0pt]
+  \tikzstyle{lineO}  = [red  , line width=4.0pt]
+  \tikzstyle{arrow}  = [black, line width=1.0pt,->]
+  \tikzstyle{line}   = [black, line width=1.0pt]
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+% Picture of RIMS setup
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+\begin{tikzpicture}[>=latex,triangle/.style = {fill=black, regular polygon, regular polygon sides=3 }]
+
+  \node[kettle, name=mlt  ,              xshift=20em] {};
+  \node[pump  , name=pump1,below of=mlt, yshift=-24em]{}; 
+  \node[pump  , name=heater,left of=mlt, xshift=-10em]{}; 
+  
+  \draw % MLT, Mash-Lauter Tun
+        (mlt.north)  node[tekst,font=\sffamily\Huge] {MLT 110L} 
+
+        % Return manifold in top of MLT
+		($(mlt.north) + (0,-3.5em)$)      node[cfc1,line width=4.0pt,name=mlt1]{}
+                                          node[tekst,xshift=1em,yshift=1em]{\emph{Return Manifold}}
+        ($(mlt1.west) + (0.2em,0)$)       edge[lineO]           	   ($(mlt1.west) + (0.2em,2em)$)
+        
+        % Manifold in bottom of MLT
+		($(mlt.south) + (0,1.5em)$)       node[cfc1,blue,line width=4.0pt,name=mlt2]{}
+                                          node[tekst,yshift=1em]{\emph{False Bottom}}
+        ($(mlt2.south) + (0,0.2em)$)      node[fill=blue,circle,inner sep=4pt]{} % blue dot
+		
+		% Arrows
+		($(mlt.center) + (0,4em)$)        edge[arrow,line width=4.0pt] ($(mlt.center) + (0,-4em)$)
+		($(mlt.south) + (0.5em,-1.0em)$)  edge[arrow]                  ($(mlt.south) + (0.5em,-3.0em)$)
+        ;
+        
+  \draw % Pump1
+        (pump1.south) node[tekst,yshift=-0.2em,font=\sffamily\Huge] {Pump} 
+		($(pump1.north) + (-3em,0.5em)$)             node[fill=blue,circle,inner sep=4pt]{} % blue dot
+		                                             node[tekst,below,yshift=-0.5em]{\emph{IN}} 
+		($(pump1.north) + (+2.5em,0.5em)$)           node[fill=red,circle,inner sep=4pt]{}  % red dot
+										             node[tekst,below,xshift=-0.3em,yshift=-0.5em]{\emph{OUT}}
+        ($(pump1.south) + (0,-3.5em)$)			     node[tekst,text width=10em,align=center]{\emph{Iwaki\\MD-30R-220N}}
+         
+        % From MLT manifold to Pump in
+        ($(mlt2.south) + (0,0.4em)$)                  edge[lineI] ($(mlt2.south) + (0,-4.2em)$)
+		($(mlt2.south) + (0,-4em)$)            		  edge[lineI] ($(mlt2.south -| pump1.north) + (-3.2em,-4em)$)
+		($(mlt2.south -| pump1.north) + (-3em,-4em)$) edge[lineI] ($(pump1.north) + (-3em,0.5em)$)
+		
+		% From Pump Out to Heater
+		($(pump1.north) + (+2.5em,0.5em)$)			  edge[lineO] ($(pump1.north) + (+2.5em,4.7em)$)
+		($(pump1.north) + (+2.5em,4.5em)$)            edge[lineO] ($(pump1.north -| heater.south) + (-0.2em,4.5em)$)
+		($(pump1.north -| heater.south) + (0,4.5em)$) edge[lineO] (heater.south)
+		
+		% From Heater to MLT manifold
+		(heater.north)                                edge[lineO] ($(heater.north |- mlt1.west) + (0,2.2em)$)
+		($(heater.north |- mlt1.west) + (0,2em)$) 	  edge[lineO] ($(mlt1.west) + (0.4em,2em)$)
+
+		% Heater
+		(heater)  node[tekst,yshift=-1em,font=\sffamily\Huge] {Heater} 
+
+		% Arrows
+		($(pump1.north) + (-2.5em,3.5em)$)                edge[arrow] ($(pump1.north) + (-2.5em,1.5em)$)
+		($(pump1.north) + (3.0em,1.5em)$)                 edge[arrow] ($(pump1.north) + (3.0em,3.5em)$)
+		($(pump1.north -| heater.south) + (4.5em,5.2em)$) edge[arrow] ($(pump1.north -| heater.south) + (2.5em,5.2em)$)
+		($(heater.south) + (0.7em,-10.0em)$)              edge[arrow] ($(heater.south) + (0.7em,-8.0em)$)
+		($(heater.north) + (0.7em,4.0em)$)                edge[arrow] ($(heater.north) + (0.7em,6.0em)$)
+
+		;
+\end{tikzpicture}
+
+\clearpage
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+% Picture of HERMS setup
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+\begin{tikzpicture}[>=latex,triangle/.style = {fill=black, regular polygon, regular polygon sides=3 }]
+
+\node[kettle, name=mlt   ,              xshift=20em] {};
+\node[pump  , name=pump1 ,below of=mlt, yshift=-24em]{}; 
+\node[kettle, name=hlt   , left of=mlt,xshift=-20em]{};                             
+\node[kettle, name=burner,below of=hlt, yshift=-6em,minimum height=3em]{}; 
+
+\draw % MLT, Mash-Lauter Tun
+	(mlt.north)  node[tekst,font=\sffamily\Huge] {MLT 110L} 
+	
+	% Return manifold in top of MLT
+	($(mlt.north) + (0,-3.5em)$)      node[cfc1,line width=4.0pt,name=mlt1]{}
+									  node[tekst,xshift=1em,yshift=1em]{\emph{Return Manifold}}
+	($(mlt1.west) + (0.2em,0)$)       edge[lineO]           ($(mlt1.west) + (0.2em,2.2em)$)
+	
+	% Manifold in bottom of MLT
+	($(mlt.south) + (0,1.5em)$)       node[cfc1,blue,line width=4.0pt,name=mlt2]{}
+									  node[tekst,yshift=1em]{\emph{False Bottom}}
+	($(mlt2.south) + (0,0.2em)$)      node[fill=blue,circle,inner sep=4pt]{} % blue dot
+	
+	% Large arrow in center
+	($(mlt.center) + (0,5em)$)        edge[black,->,line width=4.0pt] ($(mlt.center) + (0,-5em)$)
+	
+	% Arrow
+	($(mlt.south) + (0.5em,-1.0em)$)  edge[black,->,line width=1.0pt] ($(mlt.south) + (0.5em,-3.0em)$)
+	;
+
+\draw % Gas-burner
+	(burner.south) node[tekst,yshift=0.2em,font=\sffamily\Huge] {Gas Burner} 
+	;
+	
+\draw % Pump1
+	(pump1.south) node[tekst,yshift=-0.2em,font=\sffamily\Huge] {Pump} 
+	($(pump1.north) + (-3em,0.5em)$)             node[fill=blue,circle,inner sep=4pt]{} % blue dot
+												 node[tekst,below,yshift=-0.5em]{\emph{IN}} 
+	($(pump1.north) + (+2.5em,0.5em)$)           node[fill=red,circle,inner sep=4pt]{}  % red dot
+												 node[tekst,below,xshift=-0.3em,yshift=-0.5em]{\emph{OUT}}
+	($(pump1.south) + (0,-3.5em)$)			     node[tekst,text width=10em,align=center]{\emph{Iwaki\\MD-30R-220N}}
+	
+	% From MLT manifold to Pump in
+	($(mlt2.south) + (0,0.4em)$)                  edge[lineI] ($(mlt2.south) + (0,-4.2em)$)
+	($(mlt2.south) + (0,-4em)$)            		  edge[lineI] ($(mlt2.south -| pump1.north) + (-3.2em,-4em)$)
+	($(mlt2.south -| pump1.north) + (-3em,-4em)$) edge[lineI] ($(pump1.north) + (-3em,0.5em)$)
+
+	% Arrow
+	($(pump1.north) + (-2.5em,3.5em)$)            edge[arrow] ($(pump1.north) + (-2.5em,1.5em)$)
+	;
+
+\coordinate (A1) at ($(pump1.north -| mlt.west) + (-4em,4.5em)$) ;
+\draw % HLT, Mash-Lauter Tun
+	(hlt.north)  node[tekst,font=\sffamily\Huge] {HLT 200L} 
+	
+	% Heat-exchanger in HLT
+	($(hlt) + (0,-6.5em)$)            node[cfc1,line width=4.0pt,name=hltcfc1]{}
+	($(hlt) + (0,-7.4em)$)            node[cfc1,line width=4.0pt]{}
+	($(hlt) + (0,-8.3em)$)            node[cfc1,line width=4.0pt]{}
+	($(hlt) + (0,-9.2em)$)            node[cfc1,line width=4.0pt,name=hltcfc2]{}
+	($(hltcfc1.north) + (0,-0.2em)$)  edge[red,line width=4.0pt] ($(hltcfc1.north -| A1) + (0,-0.2em)$)
+	
+	% From Pump Out to HLT-CFC
+	($(pump1.north) + (+2.5em,0.5em)$)			 edge[lineO] ($(pump1.north) + (+2.5em,4.7em)$)
+	($(pump1.north) + (+2.5em,4.5em)$)           edge[lineO] ($(A1) + (-0.2em,0)$)
+	(A1)                                         edge[lineO] ($(A1 |- hltcfc2.south) + (0,0.4em)$)
+	($(A1 |- hltcfc2.south) + (0,0.2em)$) 	  	 edge[lineO] ($(hltcfc2.south) + (0,0.2em)$)
+	
+	% From MLT return manifold to HLT-CFC
+	($(mlt1.west) + (0.0em,2em)$)                edge[lineO] ($(mlt1.west -| A1) + (-0.2em,2em)$)
+	($(mlt1.west -| A1) + (0,2em)$)              edge[lineO] ($(hltcfc1.north -| A1) + (0,-0.4em)$)
+
+	% Arrows
+	($(pump1.north) + (3.0em,1.5em)$)            edge[arrow] ($(pump1.north) + (3.0em,3.5em)$)
+	($(A1) + (+3.0em,0.7em)$)                    edge[arrow] ($(A1) + (+1.0em,0.7em)$)
+	($(A1) + (+0.5em,5.0em)$)                    edge[arrow] ($(A1) + (+0.5em,7.0em)$)
+	($(hltcfc2.south) + (15.0em,0.7em)$)         edge[arrow] ($(hltcfc2.south) + (13.0em,0.7em)$)
+	($(hltcfc1.north) + (13.0em,0.7em)$)         edge[arrow] ($(hltcfc1.north) + (15.0em,0.7em)$)
+	($(hltcfc1.north -| A1) + (0.5em,8.0em)$)    edge[arrow] ($(hltcfc1.north -| A1) + (0.5em,10.0em)$)
+	;
+\end{tikzpicture}
+
+\tikzstyle{block}    = [draw, rectangle, minimum height=3em, minimum width=3em]
+\tikzstyle{input}    = [coordinate]
+\tikzstyle{output}   = [coordinate]
+\tikzstyle{pinstyle} = [pin edge={to-,thin,black}]
+\tikzstyle{tekst}    = [above, font={\sffamily\normalsize}]
+
+\clearpage
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+% Picture of PID-control loop with ADC, DAC and HLT
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+\begin{tikzpicture}[auto, node distance=2cm,>=latex]
+	% We start by placing the blocks
+	\node [input, name=input] {};
+	\node [adder, right of=input] (sum) {};
+	\node [block, right of=sum,xshift=5em] (PID_I) {I};
+	\node [block, above of=PID_I] (PID_P) {P};
+	\node [block, below of=PID_I] (PID_D) {D};
+	\node [adder, right of=PID_I,xshift=5em] (sum2) {};
+	\node [rectangle, draw,right of=sum2,xshift=5em, minimum height=3em, minimum width=3em] (dac) {}; % DAC
+	\node [rectangle, draw,below of=dac ,yshift=-5em, minimum height=3em, minimum width=3em] (adc) {}; % ADC
+	\node [block, right of=dac, text width=5em,xshift=7em,align=center] (hlt) {HLT with Gas Burner};
+
+	% DAC
+	\draw (dac.south west) -- (dac.north east)
+	      ($(dac.west)  + (+0.7em,-0.2em)$) node[tekst]{\emph{D}}
+	      ($(dac.east)  + (-0.8em,-1.5em)$) node[tekst]{\emph{A}}
+	      ;
+	% ADC
+	\draw (adc.south west) -- (adc.north east)
+		  ($(adc.west)  + (+0.7em,-0.2em)$) node[tekst]{\emph{A}}
+		  ($(adc.east)  + (-0.8em,-1.5em)$) node[tekst]{\emph{D}}
+		  ($(adc.south) + (0,-2.7em)$)  node[tekst,align=center,text width=10em]{Digital\\Temperature sensor}
+		  ;
+
+	% Connecting lines
+	\draw (input.east) edge[arrow] (sum.west)
+	      (sum.east)   edge[arrow] (PID_I.west)
+	      ($(sum.east) + (2.0em,-0.3em)$)           edge[line,*-] ($(sum.east |- PID_P.west) + (2.0em,0)$)
+		  ($(sum.east |- PID_P.west) + (1.95em,0)$) edge[arrow]   (PID_P.west)
+	      ($(sum.east) + (2.0em,-0.3em)$)           edge[line]    ($(sum.east |- PID_D.west) + (2.0em,0)$)
+		  ($(sum.east |- PID_D.west) + (1.95em,0)$) edge[arrow]   (PID_D.west)
+		  
+		  (PID_I.east) 				   edge[arrow] (sum2.west)
+		  (PID_P.east) 				   edge[line]  ($(PID_P.east) + (3.0em,0)$)
+		  ($(PID_P.east) + (3.0em,0)$) edge[arrow] ($(sum2.north west) + (0.4em,-0.4em)$)
+		  (PID_D.east) 				   edge[line]  ($(PID_D.east) + (3.0em,0)$)
+		  ($(PID_D.east) + (3.0em,0)$) edge[arrow] ($(sum2.south west) + (0.4em,0.4em)$)
+		  
+		  (sum2.east)                  edge[arrow] (dac.west)
+		  (dac.east)                   edge[arrow] (hlt.west)
+		  (hlt.south)                  edge[line]  (hlt.south |- adc.east)
+		  (hlt.south |- adc.east)      edge[arrow] (adc.east)
+		  (adc.west)                   edge[line]  (adc.west -| sum.south)
+		  (adc.west -| sum.south)      edge[arrow] (sum.south)		  
+	      ;
+	
+	\begin{pgfonlayer}{background}
+	\draw [join=round,black,dotted,fill=blue!20] 
+	      ($(adc.west -| sum.south) + (-2.5em,+2.5em)$) 
+		  rectangle ($(sum2.north east) + (0.3em,8em)$) ;
+	\end{pgfonlayer}
+		
+	% The + and - signs
+	\draw ($(sum.west)  + (-0.5em, 0.3em)$)    node[tekst]{+}    
+	      ($(sum.south) + (-0.5em,-1.5em)$)    node[tekst]{-}    
+	      ($(sum2.north west) + (0.3em,-0.0em)$)    node[tekst]{+}   
+	      ($(sum2.west)  + (-0.6em, 0.0em)$)    node[tekst]{+}   
+	      ($(sum2.south west) + (-0.5em,-0.5em)$)    node[tekst]{+}   
+	      ;
+	    
+	% Labels
+	\draw ($(input.north) + (0.5em,0em)$)             node[tekst,text width=5em,align=center]{Setpoint\\Value SP}
+	      ($(adc.west -| sum.south) + (10em,-2.8em)$) node[tekst,text width=10em,align=center]{Process Variable PV\\Actual Temperature}
+	      ($(sum2.east) + (4.0em,0em)$)               node[tekst,]{PID-output (\%)}
+	      ($(dac.east) + (4.0em,0em)$)                node[tekst,align=center,text width=10em]{PWM 25 kHz\\0..28 V}
+	      ($(sum2.north east) + (-3.5em,6.5em)$)      node[tekst,blue]{\emph{PID Controller}}
+	      ($(sum.east) + (3.5em,-0.0em)$)             node[tekst,text width=5em,align=center]{Error\\Term}
+	      ;
+\end{tikzpicture}
+
+\clearpage
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+% Picture of PID with Kc, Ti and Td
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+\begin{tikzpicture}[auto, node distance=2cm,>=latex]
+% We start by placing the blocks
+\node [input, name=input] {};
+\node [block, right of=input,xshift=5em] (PID_I) {I};
+\node [block, above of=PID_I] (PID_P) {P};
+\node [block, below of=PID_I] (PID_D) {D};
+\node [adder, right of=PID_I,xshift=5em] (sum2) {};
+
+% Amplifiers
+\coordinate (Ai) at ($(input.east) + (4.0em,-0.0em)$) ;
+\coordinate (Ap) at ($(input.east |- PID_P.west) + (4.0em,0)$) ;
+\coordinate (Ad) at ($(input.east |- PID_D.west) + (4.0em,0)$) ;
+\draw (Ai)                -- ($(Ai) + (0,2em)$)  --
+      ($(Ai) + (2em,0)$)  -- ($(Ai) + (0,-2em)$) --
+      (Ai)                   node[tekst,xshift=0.8em,yshift=-0.7em]{$T_I$}
+
+      (Ap)                -- ($(Ap) + (0,2em)$)  --
+      ($(Ap) + (2em,0)$)  -- ($(Ap) + (0,-2em)$) --
+      (Ap)					 node[tekst,xshift=0.8em,yshift=-0.7em]{$K_C$}
+
+      (Ad)                -- ($(Ad) + (0,2em)$)  --
+	  ($(Ad) + (2em,0)$)  -- ($(Ad) + (0,-2em)$) --
+	  (Ad)					 node[tekst,xshift=0.8em,yshift=-0.7em]{$T_D$}
+      ;
+% Connecting lines
+\draw (input.east)                                edge[arrow]   (Ai)
+	  ($(Ai) + (2em,0)$)                          edge[arrow]   (PID_I.west)
+	  
+	  ($(input.east) + (2.0em,-0.3em)$)           edge[line,*-] ($(input.east |- Ap) + (2.0em,0)$)
+	  ($(input.east |- Ap) + (1.95em,0)$) 		  edge[arrow]   (Ap)
+	  ($(Ap) + (2em,0)$)                          edge[arrow]   (PID_P.west)
+
+	  ($(input.east) + (2.0em,0.0em)$)            edge[line]    ($(input.east |- Ad) + (2.0em,0)$)
+	  ($(input.east |- Ad) + (1.95em,0)$) 		  edge[arrow]   (Ad)
+	  ($(Ad) + (2em,0)$)                          edge[arrow]   (PID_D.west)
+
+	  (PID_I.east) 				   edge[arrow] (sum2.west)
+	  (PID_P.east) 				   edge[line]  ($(PID_P.east) + (3.0em,0)$)
+	  ($(PID_P.east) + (3.0em,0)$) edge[arrow] ($(sum2.north west) + (0.4em,-0.4em)$)
+	  (PID_D.east) 				   edge[line]  ($(PID_D.east) + (3.0em,0)$)
+	  ($(PID_D.east) + (3.0em,0)$) edge[arrow] ($(sum2.south west) + (0.4em,0.4em)$)
+
+	  (sum2.east)                  edge[arrow] ($(sum2.east) + (4em,0)$)
+	  ;
+
+% The + and - signs
+\draw ($(sum2.north west) + (0.3em,-0.0em)$)    node[tekst]{+}   
+	  ($(sum2.west)  + (-0.6em, 0.0em)$)    node[tekst]{+}   
+	  ($(sum2.south west) + (-0.5em,-0.5em)$)    node[tekst]{+}   
+	  ;
+
+% Labels
+\draw ($(sum2.east) + (4.0em,0em)$)               node[tekst,]{PID-output (\%)}
+	  ($(input.west) + (0em,-0.0em)$)             node[tekst,text width=5em,align=center]{Error\\Term}
+	  ;
+\end{tikzpicture}
+
+\clearpage
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+% System block diagram of Type C PID controller
+%-------------------------------------------------------------------------------------------------------------------------------------  	
+\tikzstyle{block}    = [draw, rectangle, minimum height=2em, minimum width=3em]
+\begin{tikzpicture}[auto, node distance=2cm,>=latex]
+	% We start by placing the blocks
+	\node [input, name=input] {};
+	\node [block, right of=input,xshift=3em] (dly1) {T};
+	\node [block, right of=dly1 ,xshift=5em] (dly2) {T};
+	\node [adder, right of=dly2 ,xshift=5em] (sum1) {};
+	\node [adder, above of=dly2 ,xshift=-2em,yshift=2em] (sum2) {};
+	\node [adder, above of=sum2 ,xshift=-8em] (sum3) {};
+	\node [adder, above of=sum1 ,yshift=2em] (sum4) {};
+	\node [block, right of=sum4 ,xshift=-1em,yshift=-2.5em] (dly3) {T};
+
+	% Amplifiers
+	\coordinate (Ad)  at ($(dly2.south) + (0,-2.5em)$) ; % * 2
+	\coordinate (Ad2) at ($(sum1.east) + (2.0em,0)$)   ; % * Kc*Td/Ts
+	\coordinate (Ap)  at ($(sum2.east) + (5.0em,0)$)   ; % * Kc
+	\coordinate (Ai)  at ($(sum3.east) + (12em,0)$)    ; % * Kc*Ts/Ti
+	
+	\draw (Ad)                -- ($(Ad) + (0,2em)$)  --
+	      ($(Ad) + (2em,0)$)  -- ($(Ad) + (0,-2em)$) --
+	      (Ad)					 node[tekst,xshift=0.8em,yshift=-0.7em]{2}
+
+	      (Ad2)               -- ($(Ad2) + (0,2em)$)  --
+	      ($(Ad2) + (2em,0)$) -- ($(Ad2) + (0,-2em)$) --
+	      (Ad2)					 node[tekst,xshift=2.5em,yshift=-2.5em]{$\frac{K_C\cdot T_D}{T_S}$}
+		  
+		  (Ap)                -- ($(Ap) + (0,2em)$)  --
+		  ($(Ap) + (2em,0)$)  -- ($(Ap) + (0,-2em)$) --
+		  (Ap)					 node[tekst,xshift=0.8em,yshift=-0.7em]{$K_C$}
+
+		  (Ai)                -- ($(Ai) + (0,2em)$)  --
+		  ($(Ai) + (2em,0)$)  -- ($(Ai) + (0,-2em)$) --
+		  (Ai)					 node[tekst,xshift=2.5em,yshift=-2.5em]{$\frac{K_C\cdot T_S}{T_I}$}
+	      ;
+
+% Connecting lines
+\draw (input)            		edge[arrow] 	coordinate[pos=0.5] (dly01) (dly1.west)
+	  (dly1.east)        		edge[arrow] 	coordinate[pos=0.5] (dly12) (dly2.west)
+	  (dly2.east) 		 	  	edge[arrow] 	(sum1.west)
+	  
+	  % x[k] to D-adder (sum1)
+	  ($(dly01) + (0,0.3em)$) 				edge[line,*-]	($(dly01) + (0,-7.05em)$)
+	  ($(dly01) + (0,-7em)$)    		   	edge[line]		($(dly01 -| sum1.south) + (0.05em,-7em)$)
+	  ($(dly01 -| sum1.south) + (0,-7em)$) 	edge[arrow]		(sum1.south)
+
+	  % D-action: x[k-1] to *2 multiplier
+	  ($(dly12) + (0,0.3em)$) 				edge[line,*-]	(dly12 |- Ad)
+	  (dly12 |- Ad)  						edge[arrow]     (Ad)
+	  
+	  % D-action: from *2 multiplier to adder (sum1)
+	  ($(Ad) + (2em,0)$)                    edge[line]      ($(Ad) + (8em,0)$)
+	  ($(Ad) + (8em,0)$)                    edge[arrow]     ($(sum1.south west) + (0.4em,0.4em)$)
+	  
+	  (sum1.east)                           edge[arrow]     (Ad2)
+	  
+	  % x[k] to I-adder
+	  (dly01)                               edge[line]  (dly01 |- sum2.west)
+	  (dly01 |- sum2.west)                  edge[arrow] (sum2.west)
+
+	  % x[k-1] to I-adder (sum2)
+	  (dly12) 								edge[line]	($(dly12) + (0,4em)$)
+	  ($(dly12) + (0,4em)$)					edge[line]  ($(dly12 -| sum2.south) + (0,4em)$)
+	  ($(dly12 -| sum2.south) + (0,4em)$)	edge[arrow] (sum2.south)
+
+	  % I-action
+	  (sum2.east)                           edge[arrow] (Ap)
+	  
+	  % Adder for I-part
+	  (input |- sum3.west)                  edge[arrow]   (sum3.west)
+	  ($(sum3.south) + (0,-2em)$)			edge[arrow]   (sum3.south)
+	  ($(sum3.south) + (0,-2em)$)			edge[line]    ($(sum3.south -| dly01) + (-0.05em,-2.0em)$)
+	  ($(sum3.south -| dly01) + (0,-2em)$)  edge[line,-*] ($(dly01 |- sum2.west) + (0,-0.3em)$)
+	  
+	  % I-action
+	  (sum3.east)                           edge[arrow]   (Ai)
+	  
+	  % From P and I to final adder
+	  ($(Ap) + (2em,0)$)                    edge[arrow]   (sum4.west)
+	  ($(Ai) + (2em,0)$)                    edge[line]    (Ai -| sum4.north)
+	  (Ai -| sum4.north)                    edge[arrow]   (sum4.north)
+	  
+	  % From D multiplier to final adder
+	  ($(Ad2) + (2em,0)$)					edge[line]    ($(Ad2) + (5em,0em)$)
+	  ($(Ad2) + (5em,0em)$)					edge[line]	  ($(Ad2) + (5em,3.5em)$)
+	  ($(Ad2) + (5em,3.5em)$)				edge[line]    ($(Ad2 -| sum4.south) + (0,3.5em)$)
+	  ($(Ad2 -| sum4.south) + (0,3.5em)$)   edge[arrow]   (sum4.south)
+	  
+	  % Output
+	  (sum4.east)                           edge[arrow]   coordinate[pos=0.8] (out1) ($(sum4.east) + (8em,0em)$)
+	  ($(out1) + (0,0.3em)$)				edge[line,*-] (out1 |- dly3.east)
+	  (out1 |- dly3.east)                   edge[arrow]   (dly3.east)
+	  (dly3.west)							edge[line]    ($(dly3.west) + (-1.0em,0)$)
+	  ($(dly3.west) + (-1.0em,0)$)			edge[arrow]   ($(sum4.south east) + (-0.4em,0.4em)$)
+	  ;
+
+	  % draw rectangles
+\begin{pgfonlayer}{background}
+\draw [join=round,black,dotted,fill=blue!20] 
+	  ($(sum3.south west) + (-2.0em,-1.5em)$) rectangle ($(Ai) + (5em,2.5em)$) 
+	  ($(sum2.south west) + (-2.0em,-1.5em)$) rectangle ($(Ap) + (3em,2.5em)$) 
+	  ($(dly1 |- Ad)      + (-3.0em,-2.2em)$) rectangle ($(Ad2) + (4em,2.5em)$) 
+	  ;
+\end{pgfonlayer}
+
+% The + and - signs
+\draw ($(sum1.west) + (-0.5em,0.0em)$)        node[tekst]{-}
+	  ($(sum1.south west) + (-0.3em,-0.3em)$) node[tekst]{+}
+	  ($(sum1.south) + (-0.6em,-1.2em)$)      node[tekst]{-}
+	  
+	  ($(sum2.west) + (-0.5em,0.0em)$)        node[tekst]{-}
+	  ($(sum2.south) + (-0.6em,-1.2em)$)      node[tekst]{+}
+	  
+	  ($(sum3.west) + (-0.5em,0.0em)$)        node[tekst]{+}
+	  ($(sum3.south) + (-0.6em,-1.2em)$)      node[tekst]{-}
+
+	  ($(sum4.west) + (-0.5em,0.0em)$)        node[tekst]{+}
+	  ($(sum4.north) + (0.6em,0.0em)$)        node[tekst]{+}
+	  ($(sum4.south) + (-0.7em,-1.2em)$)      node[tekst]{+}
+      ;
+
+% Labels
+\draw ($(dly2.south) + (0,-9em)$)			  node[tekst]{$y_k = y_{k-1} + K_C\cdot\left(x_{k-1}-x_k\right) + \frac{K_C\cdot T_S}{T_I}\cdot e_k + \frac{K_C\cdot T_D}{T_S}\cdot\left(2\cdot x_{k-1}-x_k-x_{k-2}\right)$}
+	  (input.north)                           node[tekst]{$x_k = Thlt$}
+	  ($(input |- sum3.west) + (3em,0em)$)	  node[tekst]{$Tset = SP$}
+	  ($(sum4.east) + (6em,0em)$)             node[tekst]{$y_k = output$}
+	  ($(dly1.east) + (2em,0em)$)             node[tekst]{$x_{k-1}$}
+	  ($(dly2.east) + (2em,0em)$)             node[tekst]{$x_{k-2}$}
+	  ($(sum3.east) + (5em,0em)$)             node[tekst]{$e_{k} = Tset - Thlt$}
+	  ($(sum2.east) + (2.4em,0em)$)           node[tekst]{$x_{k-1} - x_k$}
+	  ($(Ad)        + (4.5em,0em)$)           node[tekst]{$2\cdot x_{k-1}$}
+	  ($(dly01 -| sum1.south) + (-1em,-7em)$) node[tekst]{$x_k$}
+	  
+	  ($(sum2.east) + (2em,-3em)$)            node[tekst,blue]{\emph{P-action}}
+	  ($(sum3.east) + (5em,-3em)$)            node[tekst,blue]{\emph{I-action}}
+	  ($(Ad)        + (4.5em,-2em)$)          node[tekst,blue]{\emph{D-action}}
+      ;
+\end{tikzpicture}
+\end{document}

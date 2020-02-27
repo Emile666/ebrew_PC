@@ -131,8 +131,6 @@ typedef struct _swfx_struct
    double vmlt_fx;      // Fix value for Vmlt
    bool   vboil_sw;     // Switch value for Vboil
    double vboil_fx;     // Fix value for Vboil
-   bool   std_sw;       // Switch value for STD state
-   int    std_fx;       // Fix value for STD state
 } swfx_struct;
 
 //---------------------------------------------------------------------------

@@ -5,6 +5,10 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).
 // --------------------------------------------------------------------------
+// Revision 1.97  2020/02/27
+// - Update Fix Parameters Dialog screen: ms_idx and sp_idx added, switch/fix
+//   for ebrew_std removed. On Apply button, ebrew_std is only set once.
+//
 // Revision 1.96  2019/07/27
 // - Malt_First option added: instead of adding water first and then add malt
 //   to the MLT, it is now also possible to first add malt to the MLT and then
@@ -979,16 +983,11 @@ void task_pid_ctrl(void)
 void task_update_std(void)
 {
     char   s[MAX_BUF_READ];
-    int    std_tmp = -1;
     double old_tset_hlt;  // previous value of tset_hlt
     double old_tset_boil; // previous value of tset_boil
     int    ui;            // various user commands
     int    pump_bits;     // Bits for Pump
 
-    if (MainForm->swfx.std_sw)
-    {
-       std_tmp = MainForm->swfx.std_fx;
-    }
     old_tset_hlt  = MainForm->tset_hlt;  // Previous value of HLT Temp. Ref.
     old_tset_boil = MainForm->tset_boil; // Previous value of Boil-Kettle Temp. Ref.
     ui = (MainForm->PID_Ctrl->Active ? 1 : 0);
@@ -1038,7 +1037,7 @@ void task_update_std(void)
     update_std(&MainForm->volumes , MainForm->thlt, MainForm->tmlt, MainForm->tboil,
                &MainForm->tset_hlt, &MainForm->tset_mlt, &MainForm->tset_boil,
                &MainForm->std_out, MainForm->ms, &MainForm->sp, &MainForm->std,
-               ui, std_tmp);
+               ui);
     if (MainForm->swfx.tset_hlt_sw)
     {  // Set Temperature Setpoint for HLT to a fixed value
        MainForm->tset_hlt = MainForm->swfx.tset_hlt_fx; // fix tset_hlt
@@ -1614,7 +1613,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.96 $";
+   ebrew_revision   = "$Revision: 1.97 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -2836,12 +2835,6 @@ void __fastcall TMainForm::MenuEditFixParametersClick(TObject *Sender)
    if (swfx.vboil_sw)
    {
       ptmp->MaskEdit4->Text = AnsiString(swfx.vboil_fx); // Set fix value
-   } // if
-   //-------------------------------------------------------------------------
-   ptmp->CB_std->Checked = swfx.std_sw; // Set Checkbox for ebrew_std
-   if (swfx.std_sw)
-   {
-      ptmp->STD_MEdit->Text = AnsiString(swfx.std_fx); // Set fix value
    } // if
    //-------------------------------------------------------------------------
 

@@ -42,7 +42,6 @@ __published:	// IDE-managed Components
         TLabel *Label4;
         TCheckBox *CB_vhlt;
         TMaskEdit *Vhlt_MEdit;
-        TLabel *Label5;
         TCheckBox *CB_ttriac;
         TMaskEdit *Ttriac_MEdit;
         TLabel *Label6;
@@ -58,6 +57,10 @@ __published:	// IDE-managed Components
         TLabel *Label10;
         TCheckBox *CheckBox4;
         TMaskEdit *MaskEdit4;
+        TCheckBox *CheckBox5;
+        TMaskEdit *ms_idx_MEdit;
+        TCheckBox *CheckBox6;
+        TMaskEdit *sp_idx_MEdit;
         void __fastcall CB_GammaClick(TObject *Sender);
         void __fastcall CB_TsetClick(TObject *Sender);
         void __fastcall Gamma_MEditClick(TObject *Sender);
@@ -65,7 +68,7 @@ __published:	// IDE-managed Components
         void __fastcall CB_Tad1Click(TObject *Sender);
         void __fastcall Tad1_MEditClick(TObject *Sender);
         void __fastcall CB_Tad2Click(TObject *Sender);
-        void __fastcall Tad2_MEditDblClick(TObject *Sender);
+        void __fastcall Tad2_MEditClick(TObject *Sender);
         void __fastcall CB_stdClick(TObject *Sender);
         void __fastcall STD_MEditClick(TObject *Sender);
         void __fastcall CB_vmltClick(TObject *Sender);
@@ -74,12 +77,20 @@ __published:	// IDE-managed Components
         void __fastcall Apply_ButtonClick(TObject *Sender);
         void __fastcall CB_vhltClick(TObject *Sender);
         void __fastcall Vhlt_MEditClick(TObject *Sender);
-        void __fastcall CB_ttriacClick(TObject *Sender);
+        void __fastcall CB_ttriac_Click(TObject *Sender);
         void __fastcall Ttriac_MEditClick(TObject *Sender);
         void __fastcall CheckBox1Click(TObject *Sender);
         void __fastcall CheckBox2Click(TObject *Sender);
         void __fastcall CheckBox3Click(TObject *Sender);
         void __fastcall CheckBox4Click(TObject *Sender);
+        void __fastcall CheckBox5Click(TObject *Sender);
+        void __fastcall CheckBox6Click(TObject *Sender);
+        void __fastcall ms_idx_MEditClick(TObject *Sender);
+        void __fastcall sp_idx_MEditClick(TObject *Sender);
+        void __fastcall MaskEdit1Click(TObject *Sender);
+        void __fastcall MaskEdit2Click(TObject *Sender);
+        void __fastcall MaskEdit3Click(TObject *Sender);
+        void __fastcall MaskEdit4Click(TObject *Sender);
 private:	// User declarations
 public:		// User declarations
         __fastcall TFix_Params(TComponent* Owner);

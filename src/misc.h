@@ -309,7 +309,7 @@ int read_input_file(char *inf, maisch_schedule ms[], int *count, double ts, int 
 int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
                double *tset_hlt, double *tset_mlt, double *tset_boil,
                unsigned int *kleppen, maisch_schedule ms[],
-               sparge_struct *sps, std_struct *std, int ui, int std_fx);
+               sparge_struct *sps, std_struct *std, int ui);
 void   init_ma(ma *p, int N, double init_val);
 double moving_average(ma *p, double x);
 void   init_sample_delay(ma *p, int TD);

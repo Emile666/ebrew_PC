@@ -669,7 +669,7 @@ int flow_rate_low(double flow_rate, flow_rate_low_struct *p)
 int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
                double *tset_hlt, double *tset_mlt, double *tset_boil,
                unsigned int *kleppen, maisch_schedule ms[],
-               sparge_struct *sps, std_struct *std, int ui, int std_fx)
+               sparge_struct *sps, std_struct *std, int ui)
 /*------------------------------------------------------------------
   Purpose  : This function contains the State Transition Diagram (STD)
              for the ebrew program and is called every second.
@@ -697,7 +697,6 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
              Bit 2: 1 = User selects 'Boiling started'
              Bit 3: 1 = User selects 'Start chilling'
              Bit 4: 1 = User selects 'Chilling finished'
-    std_fx : Fix value for ebrew_std, -1 if no fix
   Returns  : The values of ebrew_std is returned
   ------------------------------------------------------------------*/
 {
@@ -1319,11 +1318,6 @@ int update_std(volume_struct *vol, double thlt, double tmlt, double tboil,
            std->ebrew_std = S00_INITIALISATION;
            break;
    } // switch
-
-   if (std_fx != -1)
-   {
-      std->ebrew_std = std_fx;
-   } // if
 
    //-------------------------------------------------
    // Now calculate the proper settings for the valves
