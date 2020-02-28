@@ -312,14 +312,14 @@
         % To state 06. Pump from MLT to Boil-Kettle
 		(std05.east)                     edge[stateEdgePortion]     (std05.east -| std06.north)  
 		(std05.east -| std06.north)      edge[stateEdge]            
-		                                 node[edgeCondition,right,pos=0.3,text width=15em]{\emph{sp\_idx\textless SP\_BATCHES-1\\and timer1$\ge$SP\_TIME}}       
-		                                 node[edgeAction,right,pos=0.6]{\emph{Vmlt\_old=Vmlt}}
+		                                 node[edgeCondition,right,pos=0.3,text width=15em]{\emph{sp\_idx\textless SP\_BATCHES\\and timer1$\ge$SP\_TIME}}       
+		                                 node[edgeAction,right,pos=0.7,text width=15em]{\emph{Vmlt\_old=Vmlt\\Vboil\_old=Vboil}}
 		                                 coordinate[pos=0.5] (A05N)   (std06.north)  
         ($(A05N) + (10em,0)$)            -- (A05N)
         
         % To state 09. Empty MLT
 		(std05.south)                    edge[stateEdge]     
-										 node[edgeCondition,right,pos=0.49,text width=15em]{\emph{sp\_idx$\ge$SP\_BATCHES-1\\and timer1$\ge$SP\_TIME}}
+										 node[edgeCondition,right,pos=0.49,text width=15em]{\emph{sp\_idx$\ge$SP\_BATCHES\\and timer1$\ge$SP\_TIME}}
 										 node[edgeAction,right,pos=0.65,text width=15em]{\emph{Disable PID for HLT\\tset\_boil=SP\_BOIL\\init. flowrate detection}}
 										 coordinate[pos=0.55] (A05P)   (std09.north)  
 		($(A05P) + (10em,0)$)            -- (A05P)
