@@ -70,6 +70,9 @@ __published:	// IDE-managed Components
         TCheckBox *CB_boil_rest;
         TLabel *Label32;
         TCheckBox *CB_malt_first;
+        TLabel *Label33;
+        TLabel *Label34;
+        TEdit *Boil_Limit;
         void __fastcall Help_ButtonClick(TObject *Sender);
         void __fastcall CB_dphtClick(TObject *Sender);
         void __fastcall CB_malt_firstClick(TObject *Sender);

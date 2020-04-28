@@ -78,12 +78,13 @@ typedef struct _sparge_struct
    int    boil_time_ticks; // boil_time in TS ticks
    double sp_vol_batch;    // Sparge volume of 1 batch = sp_vol / sp_batches
    double sp_vol_batch0;   // Sparge volume of first batch
-   /* Sparge Settings */
+   /* Boil Settings */
    int    boil_min_temp;   // Min. Temp. for Boil-Kettle to enable PID controller
    int    boil_time;       // Total boiling time in minutes
    int    sp_preboil;      // Setpoint Preboil Temperature
    double boil_detect;     // Boiling-Detection minimum Temperature (Celsius)
    int    sp_boil;         // Setpoint Boil Temperature
+   int    limit_boil;      // Limit output during boil
    int    pid_ctrl_boil_on;// 1= enable PID-controller for Boil-Kettle 
    /* Time-stamps for Sparge, Boil and Chilling*/
    char   mlt2boil[MAX_SP][40]; // MAX_SP strings for time-stamp moment of MLT -> BOIL

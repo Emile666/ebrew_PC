@@ -5,6 +5,11 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).
 // --------------------------------------------------------------------------
+// Revision 1.98  2020/04/22
+// - Flow4 and Flow4_Rate made visible.
+// - New option 'Boil_Limit' added to limit power-output of boil-kettle
+//   during boil. New registry variable BOIL_LIMIT.
+//
 // Revision 1.97  2020/02/27
 // - Update Fix Parameters Dialog screen: ms_idx and sp_idx added, switch/fix
 //   for ebrew_std removed. On Apply button, ebrew_std is only set once.
@@ -965,6 +970,10 @@ void task_pid_ctrl(void)
         // Only used in CIP-program
         MainForm->gamma_boil = 100.0; // Boil-kettle Burner at full-power
     } // if
+    else if ((MainForm->std.ebrew_std == S11_BOILING) && (MainForm->gamma_boil > MainForm->sp.limit_boil))
+    {
+       MainForm->gamma_boil = MainForm->sp.limit_boil; // limit output during boil
+    } // else if
     if (MainForm->swfx.gamma_boil_sw)
     {
        MainForm->gamma_boil = MainForm->swfx.gamma_boil_fx; // fix gamma for Boil-Kettle
@@ -1613,7 +1622,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.97 $";
+   ebrew_revision   = "$Revision: 1.98 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -1686,6 +1695,7 @@ __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
           Reg->WriteInteger("SP_PREBOIL",95);  // Pre-Boil Temperature (Celsius)
           Reg->WriteFloat("BOIL_DETECT",99.3); // Boiling-Detection minimum Temperature (Celsius)
           Reg->WriteInteger("SP_BOIL",105);    // Boil Temperature (Celsius)
+          Reg->WriteInteger("LIMIT_BOIL",100); // Limit output during boil (%)
           Reg->WriteBool("CB_Boil_Rest",1);    // Let wort rest for 5 minutes after boiling
 
           //------------------------------------
@@ -2056,6 +2066,7 @@ void __fastcall TMainForm::Init_Sparge_Settings(void)
         sp.sp_preboil   = Reg->ReadInteger("SP_PREBOIL"); // Setpoint Pre-Boil Temperature
         sp.boil_detect  = Reg->ReadFloat("BOIL_DETECT");  // Boiling-Detection minimum Temperature (Celsius)
         sp.sp_boil      = Reg->ReadInteger("SP_BOIL");    // Setpoint Boil Temperature
+        sp.limit_boil   = Reg->ReadInteger("LIMIT_BOIL"); // Limit output during boil
         sp.pid_ctrl_boil_on = 0;                          // Disable PID-Controller for Boil-Kettle
 
         // STD Settings
@@ -2539,6 +2550,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
         ptmp->SP_PreBoil->Text  = AnsiString(sp.sp_preboil);  // Setpoint Temperature for pre-boil
         ptmp->Boil_Det->Text    = AnsiString(sp.boil_detect); // Boiling-Detection minimum Temperature (Celsius)
         ptmp->SP_Boil->Text     = AnsiString(sp.sp_boil);     // Setpoint Temperature during boiling
+        ptmp->Boil_Limit->Text  = AnsiString(sp.limit_boil);  // Limit output during boil
         ptmp->CB_boil_rest->Checked = std.boil_rest;          // Let wort rest for 5 minutes after boiling
 
         if (ptmp->ShowModal() == 0x1) // mrOK
@@ -2568,6 +2580,7 @@ void __fastcall TMainForm::SpargeSettings1Click(TObject *Sender)
            Reg->WriteInteger("SP_PREBOIL",  ptmp->SP_PreBoil->Text.ToInt());
            Reg->WriteFloat("BOIL_DETECT",   ptmp->Boil_Det->Text.ToDouble());
            Reg->WriteInteger("SP_BOIL",     ptmp->SP_Boil->Text.ToInt());
+           Reg->WriteInteger("LIMIT_BOIL",  ptmp->Boil_Limit->Text.ToInt());
            Reg->WriteBool("CB_Boil_Rest",   ptmp->CB_boil_rest->Checked);
            std.boil_rest = ptmp->CB_boil_rest->Checked;
 
@@ -3692,4 +3705,5 @@ void __fastcall TMainForm::AddingMalt1Click(TObject *Sender)
    AddingMalt1->Checked = !AddingMalt1->Checked;
 }
 //---------------------------------------------------------------------------
+
 
