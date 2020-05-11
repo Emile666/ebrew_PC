@@ -5,8 +5,10 @@
 //               functions for every menu command and it contains the main
 //               program loop (TMainForm::T50msec2Timer()).
 // --------------------------------------------------------------------------
-// Revision 1.98  2020/04/22
-// - Flow4 and Flow4_Rate made visible.
+// Revision 1.99  2020/05/11
+// - Delayed-start function now in ebrew hardware (r1.35),
+//   activated with D1 command.
+//
 // - New option 'Boil_Limit' added to limit power-output of boil-kettle
 //   during boil. New registry variable BOIL_LIMIT.
 //
@@ -923,19 +925,7 @@ void task_read_flows(void)
   ---------------------------------------------------------------------------*/
 void task_pid_ctrl(void)
 {
-    char      s[MAX_BUF_READ];
-    TDateTime td_now; // holds current date and time
-
-    // Only useful if PID controller is disabled AND time_switch is enabled
-    if (!MainForm->PID_Ctrl->Active && (MainForm->time_switch == 1))
-    {
-       td_now = Now(); // Get Current Date and Time
-       if ((td_now >= MainForm->dt_time_switch) &&
-           (td_now <  MainForm->dt_time_switch + ONE_MINUTE))
-       {
-            MainForm->PID_Ctrl->Active = true;
-       } // if
-    } // if
+    char s[MAX_BUF_READ];
 
     // PID_Ctrl->Active = true => PID Controller On
     switch (MainForm->pid_pars_hlt.pid_model)
@@ -1622,7 +1612,7 @@ void __fastcall TMainForm::comm_port_write(const char *s)
   ------------------------------------------------------------------*/
 __fastcall TMainForm::TMainForm(TComponent* Owner) : TForm(Owner)
 {
-   ebrew_revision   = "$Revision: 1.98 $";
+   ebrew_revision   = "$Revision: 1.99 $";
    ViewMashProgress = new TViewMashProgress(this); // create modeless Dialog
    TRegistry *Reg   = new TRegistry();
    power_up_flag    = true;  // indicate that program power-up is active
@@ -2293,6 +2283,7 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
    TRegistry *Reg = new TRegistry();
    TPID_Settings *ptmp;
    char tmp[255]; // temp. array
+   int  minutes;
 
    ptmp = new TPID_Settings(this);
    // Get PID Controller setting from the Registry
@@ -2377,7 +2368,14 @@ void __fastcall TMainForm::MenuOptionsPIDSettingsClick(TObject *Sender)
                strcpy(tmp,ptmp->Date_Edit->Text.c_str());
                strcat(tmp," ");
                strcat(tmp,ptmp->Time_Edit->Text.c_str());
-               dt_time_switch = StrToDateTime(tmp);
+               dt_time_switch = StrToDateTime(tmp) - Now(); // time difference
+               minutes = (int)(dt_time_switch.operator double() * 1440); // convert to minutes
+               if ((minutes > 0) && (minutes < 1800))
+               {   // Max. delayed-start of 30 hours
+                   sprintf(tmp,"D1 %d\n",minutes); // D1 = Set delayed-start
+                   MainForm->comm_port_write(tmp); // send to ebrew hardware
+               } // if
+               else MessageBox(NULL,"Delayed-start should be between 0 and 30 hours.","ERROR",MB_OK);
             } // if
          } // if
          delete ptmp;
